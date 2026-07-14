@@ -1,0 +1,61 @@
+## Interface: 120007
+## Title: Twisteds Addon Platform
+## Notes: Parent hub for the Twisteds Addon Platform - shared UI library (UIFoundry) plus the module registry and Suite Manager (/tap) that loads optional sidecar plugins. Exposed as _G.UIFoundry and _G.TAP.
+## Author: Twistedfury-Zul'jin
+## Version: 1.1.0
+## Category: Libraries
+## X-Website: shared UI foundation + plugin hub for the tool suite
+## X-Curse-Project-ID: 000000
+## DefaultState: enabled
+## LoadOnDemand: 0
+## SavedVariables: TAPDB
+
+# Core namespace + palette-independent helpers (must load first).
+Core.lua
+
+# Modular plugin backbone: registry that sidecar addons plug into (load early - sidecars
+# register against _G.TAP as they load).
+Suite.lua
+Theme.lua
+Style.lua
+Fonts.lua
+Sounds.lua
+Skins.lua
+
+# Bundled icon set: generated manifest + registry / colorable Glyph (overrides ResolveIcon).
+IconManifest.lua
+Icons.lua
+
+# Popups & widgets (add methods onto the shared ThemeMixin).
+Menu.lua
+Widgets.lua
+
+# Typography + richer components.
+Headings.lua
+Progress.lua
+Forms.lua
+Selectors.lua
+ClassSpec.lua
+Display.lua
+Tabs.lua
+Social.lua
+Tooltip.lua
+Game.lua
+
+# Pickers & dialogs.
+ColorPicker.lua
+IconPicker.lua
+TextDialog.lua
+KeyCapture.lua
+Toast.lua
+Modal.lua
+
+# Layout builder + application window shell.
+Builder.lua
+Window.lua
+
+# Suite Manager window (/tap): browse, enable/disable, and configure sidecar plugins.
+SuiteManager.lua
+
+# Optional self-test / component gallery (no slash command). Remove this line to ship lib-only.
+Showcase.lua

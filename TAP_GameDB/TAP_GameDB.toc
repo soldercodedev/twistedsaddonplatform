@@ -1,0 +1,12 @@
+## Interface: 120007
+## Title: |cffa06cf0Twisteds Addon Platform|r Game Data
+## Notes: Load-on-demand spell & item name databases, shared by any Twisteds Addon Platform module (loaded centrally by the suite when a search needs it).
+## Author: Twistedfury-Zul'jin
+## Version: 1.0.0
+## Category: Twisteds Addon Platform
+## Dependencies: TAP
+## LoadOnDemand: 1
+## X-Curse-Project-Name: TAP_GameDB
+
+SpellDB.lua
+ItemDB.lua

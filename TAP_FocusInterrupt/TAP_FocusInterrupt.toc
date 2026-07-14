@@ -1,0 +1,18 @@
+## Interface: 120007
+## Title: Twisteds Focus Target Interrupt
+## Notes: Focus + mark macros, an on-screen raid-marker palette, focus call-outs, and auto-detected interrupt / stun macros for your spec. A module of the Twisteds Addon Platform - configure with /tap.
+## Author: Twistedfury-Zul'jin
+## Version: 1.0.0
+## Category: Twisteds Focus Target Interrupt
+## X-Curse-Project-Name: TAP_FocusInterrupt
+## Dependencies: TAP
+
+# --- Suite bridge: db + spell resolver + manager hooks (loads first) ---
+FTIShared.lua
+
+# --- Focus engine (macro factory + interrupt/stun DB, marker palette) ---
+Macros.lua
+FocusPalette.lua
+
+# --- The suite module (registers with /tap) ---
+ModuleFocus.lua

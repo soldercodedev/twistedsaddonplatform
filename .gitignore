@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Twisteds Addon Platform — repo hygiene
+# Keep dev tooling, scripts, and reference material OUT of what we push/ship.
+# Only the addon folders (TAP, TAP_*) + docs (README/CHANGELOG/CURSE/LICENSE/
+# THIRD_PARTY_NOTICES) belong in the repo.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Reference copy of the old standalone addon (kept locally, never shipped)
+/_TCC_source/
+
+# Deploy / packaging / build scripts (local dev only)
+/deploy.ps1
+/package.ps1
+*.ps1
+
+# Asset-generation tooling (Python + source art). The generated .tga/.ttf assets
+# that the addon actually loads ARE committed; the generators are not.
+/TAP/tools/
+**/tools/
+*.py
+
+# Internal design notes / scratch docs (not part of the shipped addon)
+/RotationKeybindCue.md
+/NOTES.md
+/scratch/
+
+# Editor / IDE / assistant
+.vscode/
+.idea/
+.claude/
+*.code-workspace
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build / release artifacts (produced by the release workflow)
+/.stage/
+/dist/
+cf_response.json
+
+# Temp / backup / logs
+*.tmp
+*.bak
+*.orig
+*.log
+*.zip

@@ -1,0 +1,24 @@
+## Interface: 120007
+## Title: Twisteds Combat Alerts
+## Notes: Combat-safe, rule-based audible & visual alerts, as a module of the Twisteds Addon Platform. Configure with /tap.
+## Author: Twistedfury-Zul'jin
+## Version: 2.1.1
+## Category: Twisteds Combat Alerts
+## SavedVariables: TAP_CombatAlertsDB
+## SavedVariablesPerCharacter: TAP_CombatAlertsCharDB
+## IconTexture: Interface\AddOns\TAP_CombatAlerts\assets\TCC_Logo.tga
+## X-Curse-Project-Name: TAP_CombatAlerts
+## Dependencies: TAP
+
+# --- Engine (kept from the standalone addon; the old self-skinned UI is gone). Sounds now come
+#     from the suite's shared catalog, so the local Sounds.lua/Sounds folder are dropped. ---
+Conditions.lua
+Core.lua
+Changelog.lua
+
+# --- Suite bridge: engine <-> manager window hooks ---
+TCCShared.lua
+
+# --- The Combat Alerts module (registers with /tap; settings rebuilt on the suite Builder).
+#     Focus Tools has moved to its own addon: TAP_FocusInterrupt. ---
+ModuleAlerts.lua
