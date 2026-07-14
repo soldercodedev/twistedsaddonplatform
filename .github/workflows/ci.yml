@@ -1,0 +1,36 @@
+name: CI
+
+# Validates every Lua file compiles (WoW runs Lua 5.1) on each push / pull request, so a syntax
+# error can never reach a release. Same check used during development.
+on:
+  push:
+    branches: ['**']
+    tags-ignore: ['**']        # release.yml handles tags
+  pull_request:
+
+jobs:
+  lua-syntax:
+    name: Lua 5.1 syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.1
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends lua5.1
+
+      - name: Compile-check all addon Lua
+        run: |
+          set -uo pipefail
+          fail=0
+          count=0
+          while IFS= read -r -d '' f; do
+            count=$((count + 1))
+            if ! luac5.1 -p "$f" 2> err.txt; then
+              echo "::error file=${f}::$(head -1 err.txt)"
+              fail=1
+            fi
+          done < <(find TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_RotationAssistant TAP_GameDB \
+                        -name '*.lua' -not -path '*/tools/*' -print0)
+          echo "Checked ${count} Lua file(s)."
+          exit $fail
