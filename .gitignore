@@ -24,6 +24,10 @@
 /NOTES.md
 /scratch/
 
+# Support-bot context (private - for the live help AI agent, never shipped/pushed)
+/context.md
+/guardrails.md
+
 # Editor / IDE / assistant
 .vscode/
 .idea/
