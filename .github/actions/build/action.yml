@@ -1,0 +1,95 @@
+name: "Build TAP package"
+description: "Stamp the version into every TOC and build the single multi-folder addon ZIP (all TAP folders at the archive root, no dev/tooling files)."
+
+inputs:
+  version:
+    description: "Explicit version (e.g. 1.0.0-beta). Empty = derive from the pushed tag."
+    required: false
+    default: ""
+
+outputs:
+  version:
+    description: "Resolved version string."
+    value: ${{ steps.ver.outputs.version }}
+  reltype:
+    description: "release | beta | alpha (inferred from the version string)."
+    value: ${{ steps.ver.outputs.reltype }}
+  zip:
+    description: "Workspace-relative path to the built ZIP."
+    value: ${{ steps.build.outputs.zip }}
+  patch:
+    description: "Retail patch derived from the TOC Interface (e.g. 12.0.7)."
+    value: ${{ steps.build.outputs.patch }}
+
+runs:
+  using: composite
+  steps:
+    - name: Determine version and release type
+      id: ver
+      shell: bash
+      run: |
+        VER="${{ inputs.version }}"
+        [ -z "$VER" ] && VER="${GITHUB_REF_NAME#v}"   # strip a leading v from the tag
+        [ -n "$VER" ] || { echo "::error::No version given (workflow input) and no tag to derive from."; exit 1; }
+        echo "version=$VER" >> "$GITHUB_OUTPUT"
+        case "$VER" in
+          *alpha*) RT=alpha ;;
+          *beta*)  RT=beta ;;
+          *)       RT=release ;;
+        esac
+        echo "reltype=$RT" >> "$GITHUB_OUTPUT"
+        echo "Building version '$VER' (release type: $RT)"
+
+    - name: Stamp version into every TOC
+      shell: bash
+      run: |
+        set -euo pipefail
+        VER="${{ steps.ver.outputs.version }}"
+        for toc in TAP/TAP.toc TAP_*/*.toc; do
+          sed -i -E "s/^## Version:.*/## Version: ${VER}/" "$toc"
+        done
+        grep -H '## Version:' TAP/TAP.toc TAP_*/*.toc
+
+    - name: Build ZIP (addon folders at archive root)
+      id: build
+      shell: bash
+      run: |
+        set -euo pipefail
+        VER="${{ steps.ver.outputs.version }}"
+        WS="$PWD"
+        FOLDERS="TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_RotationAssistant TAP_GameDB"
+        STAGE="$(mktemp -d)"
+        for d in $FOLDERS; do cp -r "$d" "$STAGE/$d"; done
+
+        # Strip dev-only / VCS / caches from the package.
+        find "$STAGE" -type d \( \
+            -name tools -o -name scripts -o -name build-tools -o -name tests -o -name test \
+            -o -name __pycache__ -o -name .git -o -name .github -o -name .vscode -o -name .idea \
+          \) -prune -exec rm -rf {} +
+        find "$STAGE" -type f \( \
+            -name '*.py' -o -name '*.pyc' -o -name '*.ps1' \
+            -o -name '*.log' -o -name '*.bak' -o -name '*.tmp' -o -name '*.zip' -o -name '*.orig' \
+          \) -delete
+
+        # Validation: no dev files leaked, all folders present, root is exactly the addon folders.
+        if find "$STAGE" \( -name '*.py' -o -name '*.ps1' -o -name '__pycache__' -o -name '.git' \) | grep -q .; then
+          echo "::error::dev/tooling files leaked into the package"; exit 1
+        fi
+        for d in $FOLDERS; do
+          test -f "$STAGE/$d/$d.toc" || { echo "::error::missing TOC for $d"; exit 1; }
+        done
+        TOP="$(cd "$STAGE" && ls -1 | sort | tr '\n' ' ')"
+        EXPECT="TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_GameDB TAP_RotationAssistant "
+        [ "$TOP" = "$EXPECT" ] || { echo "::error::staging root is not exactly the addon folders: $TOP"; exit 1; }
+
+        ZIP="TwistedsAddonPlatform-${VER}.zip"
+        ( cd "$STAGE" && zip -r -X "$WS/$ZIP" $FOLDERS >/dev/null )
+        echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+        # Retail patch from the hub TOC Interface (120007 -> 12.0.7), for the uploader.
+        IFACE="$(grep -m1 '## Interface:' TAP/TAP.toc | tr -dc '0-9')"
+        MAJ=$((10#${IFACE:0:$((${#IFACE}-4))})); MIN=$((10#${IFACE: -4:2})); PAT=$((10#${IFACE: -2}))
+        echo "patch=${MAJ}.${MIN}.${PAT}" >> "$GITHUB_OUTPUT"
+
+        echo "Built $ZIP (retail patch ${MAJ}.${MIN}.${PAT})"
+        unzip -l "$ZIP" | tail -n +2 | awk '{print $4}' | awk -F/ 'NF{print $1}' | sort -u

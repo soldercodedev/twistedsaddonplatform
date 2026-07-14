@@ -1,0 +1,75 @@
+name: "Upload to CurseForge"
+description: "Upload a built ZIP to CurseForge via the Upload API. Project id comes from the input, or falls back to ## X-Curse-Project-ID in TAP/TAP.toc."
+
+inputs:
+  token:
+    description: "CurseForge API token (CF_API_TOKEN secret)."
+    required: true
+  project-id:
+    description: "CurseForge numeric project id. Empty = read it from TAP/TAP.toc."
+    required: false
+    default: ""
+  version:
+    description: "Version string (for the fallback changelog line)."
+    required: true
+  reltype:
+    description: "release | beta | alpha (CurseForge releaseType)."
+    required: true
+  zip:
+    description: "Path to the ZIP to upload."
+    required: true
+  patch:
+    description: "Retail patch to publish for, e.g. 12.0.7."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        CF_API_TOKEN:  ${{ inputs.token }}
+        CF_PROJECT_ID: ${{ inputs.project-id }}
+        VER:           ${{ inputs.version }}
+        RELTYPE:       ${{ inputs.reltype }}
+        ZIP:           ${{ inputs.zip }}
+        GAMEVER:       ${{ inputs.patch }}
+      run: |
+        set -euo pipefail
+        [ -n "${CF_API_TOKEN:-}" ] || { echo "::error::CF_API_TOKEN secret is not set."; exit 1; }
+
+        # Project id: explicit input, else read it from the hub TOC (single source of truth).
+        if [ -z "${CF_PROJECT_ID:-}" ]; then
+          CF_PROJECT_ID="$(grep -m1 'X-Curse-Project-ID' TAP/TAP.toc | tr -dc '0-9')"
+        fi
+        { [ -n "$CF_PROJECT_ID" ] && [ "$CF_PROJECT_ID" != "000000" ]; } || {
+          echo "::error::No CurseForge project id (set the CF_PROJECT_ID secret or ## X-Curse-Project-ID in TAP/TAP.toc)."; exit 1; }
+
+        echo "Game version from TOC: $GAMEVER"
+        # Map the patch name to CurseForge's numeric game-version id.
+        GVID="$(curl -sf -H "X-Api-Token: $CF_API_TOKEN" \
+                  https://wow.curseforge.com/api/game/versions \
+                | jq -r --arg n "$GAMEVER" '[.[] | select(.name==$n)] | (first // {}) | .id // empty')"
+        [ -n "$GVID" ] || {
+          echo "::error::CurseForge has no game version named '$GAMEVER' yet. Add it on the project's file page, or wait for CurseForge to list that patch."; exit 1; }
+        echo "CurseForge game-version id: $GVID"
+
+        # Changelog = the latest section of the root CHANGELOG.md (fallback to a one-liner).
+        CHANGELOG="$(awk '/^## /{c++} c==1' CHANGELOG.md 2>/dev/null || true)"
+        [ -n "$CHANGELOG" ] || CHANGELOG="Twisteds Addon Platform ${VER}"
+
+        META="$(jq -nc --arg cl "$CHANGELOG" --arg dn "Twisteds Addon Platform ${VER}" \
+          --arg rt "$RELTYPE" --argjson gv "[$GVID]" \
+          '{changelog:$cl, changelogType:"markdown", displayName:$dn, gameVersions:$gv, releaseType:$rt}')"
+
+        echo "Uploading $ZIP to CurseForge project $CF_PROJECT_ID (releaseType=$RELTYPE)..."
+        # metadata via --form-string (NOT -F): ';'/'@'/'<' in the JSON would be misread by -F.
+        HTTP="$(curl -sS -o /tmp/cf_resp.json -w '%{http_code}' -X POST \
+                  -H "X-Api-Token: $CF_API_TOKEN" \
+                  --form-string "metadata=$META" \
+                  -F "file=@${ZIP}" \
+                  "https://wow.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file")"
+        echo "HTTP $HTTP"; cat /tmp/cf_resp.json; echo
+        case "$HTTP" in
+          2*) echo "CurseForge upload OK (file id: $(jq -r '.id // "?"' /tmp/cf_resp.json))" ;;
+          *)  echo "::error::CurseForge upload failed (HTTP $HTTP)"; exit 1 ;;
+        esac

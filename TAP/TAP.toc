@@ -5,7 +5,7 @@
 ## Version: 1.1.0
 ## Category: Libraries
 ## X-Website: shared UI foundation + plugin hub for the tool suite
-## X-Curse-Project-ID: 000000
+## X-Curse-Project-ID: 1609931
 ## DefaultState: enabled
 ## LoadOnDemand: 0
 ## SavedVariables: TAPDB

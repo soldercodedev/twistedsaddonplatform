@@ -1,20 +1,18 @@
-name: Release to CurseForge
+name: Package and release
 
-# Fires when you push a version tag, e.g.:  git tag v1.0.0-beta ; git push origin v1.0.0-beta
-# Tag name sets the release type:  "*alpha*" -> alpha,  "*beta*" -> beta,  otherwise -> release.
+# Manual release. Run it from the Actions tab (Run workflow), enter a version, and it builds the
+# single multi-folder ZIP and uploads it to CurseForge via the CurseForge Upload API.
 #
-# Uses the CurseForge Upload API directly (no third-party packager):
-#   docs: https://support.curseforge.com/en/support/solutions/articles/9000197321-curseforge-api
-#
-# One-time setup:
-#   1. Put your CurseForge numeric Project ID in TAP/TAP.toc  (## X-Curse-Project-ID: <id>)
-#   2. Create an API token at authors.curseforge.com > API Tokens and add it as the repo
-#      secret  CF_API_KEY.
+# Repo secret (Settings > Secrets and variables > Actions):
+#   CF_API_TOKEN    - CurseForge API token (authors.curseforge.com > API Tokens)
+#   CF_PROJECT_ID   - optional; if unset, the id is read from ## X-Curse-Project-ID in TAP/TAP.toc
 
 on:
-  push:
-    tags:
-      - '**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build and publish (e.g. 1.0.0-beta)"
+        required: true
 
 jobs:
   release:
@@ -23,76 +21,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build the release zip
+      - name: Build package
         id: build
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"           # strip a leading "v" from the tag
-          PKG="TwistedsAddonPlatform"
-          ZIP="${PKG}-${VERSION}.zip"
-
-          # Assemble ONLY the shippable addon folders at the top level of the zip, plus the
-          # license/notices inside the always-present hub folder. Dev tooling is left out.
-          rm -rf .stage && mkdir -p .stage
-          for d in TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_RotationAssistant TAP_GameDB; do
-            cp -r "$d" .stage/
-          done
-          rm -rf .stage/TAP/tools                  # asset-generation scripts never ship
-          cp LICENSE THIRD_PARTY_NOTICES.md .stage/TAP/ 2>/dev/null || true
-
-          ( cd .stage && zip -qr "../${ZIP}" . -x '*/.*' )
-          echo "zip=${ZIP}"     >> "$GITHUB_OUTPUT"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "pkg=${PKG}"     >> "$GITHUB_OUTPUT"
+        uses: ./.github/actions/build
+        with:
+          version: ${{ github.event.inputs.version }}
 
       - name: Upload to CurseForge
-        env:
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
-        run: |
-          set -euo pipefail
-          ZIP="${{ steps.build.outputs.zip }}"
-          VERSION="${{ steps.build.outputs.version }}"
-          PKG="${{ steps.build.outputs.pkg }}"
-
-          [ -n "${CF_API_KEY:-}" ] || { echo "::error::Missing CF_API_KEY repo secret."; exit 1; }
-
-          # Project ID comes from the hub .toc (single source of truth).
-          PROJECT_ID="$(grep -m1 'X-Curse-Project-ID' TAP/TAP.toc | tr -dc '0-9')"
-          [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "000000" ] || {
-            echo "::error::Set your CurseForge Project ID in TAP/TAP.toc (## X-Curse-Project-ID)."; exit 1; }
-
-          # Release type from the tag name.
-          TAG="${GITHUB_REF_NAME,,}"
-          case "$TAG" in
-            *alpha*) RELEASE_TYPE=alpha ;;
-            *beta*)  RELEASE_TYPE=beta  ;;
-            *)       RELEASE_TYPE=release ;;
-          esac
-
-          # Map the .toc Interface number (e.g. 120007 -> 12.0.7) to a CurseForge game-version id.
-          IFACE="$(grep -m1 '## Interface:' TAP/TAP.toc | tr -dc '0-9')"
-          PATCH=$((10#${IFACE: -2})); MINOR=$((10#${IFACE: -4:2})); MAJOR=$((10#${IFACE::-4}))
-          GAMEVER="${MAJOR}.${MINOR}.${PATCH}"
-          echo "Interface ${IFACE} -> game version ${GAMEVER}"
-
-          VERSIONS="$(curl -fsS -H "X-Api-Token: ${CF_API_KEY}" https://wow.curseforge.com/api/game/versions)"
-          GV_ID="$(printf '%s' "$VERSIONS" | jq -r --arg v "$GAMEVER" 'map(select(.name == $v)) | (.[0].id // empty)')"
-          [ -n "$GV_ID" ] || { echo "::error::No CurseForge game-version id found for ${GAMEVER}."; exit 1; }
-
-          METADATA="$(jq -nc \
-            --rawfile cl CHANGELOG.md \
-            --argjson gv "[${GV_ID}]" \
-            --arg name "${PKG} ${VERSION}" \
-            --arg rt "${RELEASE_TYPE}" \
-            '{changelog:$cl, changelogType:"markdown", displayName:$name, gameVersions:$gv, releaseType:$rt}')"
-
-          echo "Uploading ${ZIP} to project ${PROJECT_ID} as ${RELEASE_TYPE} for ${GAMEVER}..."
-          HTTP="$(curl -sS -o cf_response.json -w '%{http_code}' \
-            -H "X-Api-Token: ${CF_API_KEY}" \
-            -F "metadata=${METADATA}" \
-            -F "file=@${ZIP}" \
-            "https://wow.curseforge.com/api/projects/${PROJECT_ID}/upload-file")"
-
-          echo "HTTP ${HTTP}"; cat cf_response.json; echo
-          [ "$HTTP" = "200" ] || { echo "::error::CurseForge upload failed (HTTP ${HTTP})."; exit 1; }
-          echo "Uploaded. File id: $(jq -r '.id // "?"' cf_response.json)"
+        uses: ./.github/actions/curseforge-upload
+        with:
+          token:      ${{ secrets.CF_API_TOKEN }}
+          project-id: ${{ secrets.CF_PROJECT_ID }}   # optional - falls back to TAP/TAP.toc
+          version:    ${{ steps.build.outputs.version }}
+          reltype:    ${{ steps.build.outputs.reltype }}
+          zip:        ${{ steps.build.outputs.zip }}
+          patch:      ${{ steps.build.outputs.patch }}
