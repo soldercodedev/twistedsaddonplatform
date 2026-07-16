@@ -542,7 +542,7 @@ local function sectionVisual(P, a, rule, y, win)
         b:Label("Font", P.x, y - 2, C.subtext)
         local fd = b:Dropdown(P.x + 80, y); fd:SetChoices(200, FONT_CHOICES, function() return a.font or "UBUNTU" end,
             function(v) a.font = v; refreshPrev(); softApply() end)
-        y = y - 32
+        y = y - 44   -- extra headroom so the slider's value readout (above the thumb) clears the row above
         b:Label("Text size", P.x, y - 2, C.subtext)
         b:Slider(P.x + 100, y):Configure(200, 12, 96, 1, function() return tonumber(a.fontSize) or 48 end,
             function(v) a.fontSize = v; refreshPrev(); softApply() end, "%d")
@@ -560,7 +560,7 @@ local function sectionVisual(P, a, rule, y, win)
         P:tip(b:Button(P.x + 110, y - 2, 120, "Choose icon", "default", function()
             browseIcon(b, a.icon, function(v) a.icon = v or ""; refreshPrev(); softApply(); P.repage() end)
         end, { icon = "photo", iconSize = 13 }), "Choose icon", "Pick a framework icon, or type a spell / item / ID to use its icon.")
-        y = y - 34
+        y = y - 46   -- extra headroom so the slider's value readout (above the thumb) clears the row above
         b:Label("Icon size", P.x, y - 2, C.subtext)
         b:Slider(P.x + 100, y):Configure(200, 16, 96, 1, function() return tonumber(a.iconSize) or 40 end,
             function(v) a.iconSize = v; refreshPrev(); softApply() end, "%d")
@@ -758,6 +758,93 @@ local function renderList(mod, b, x, y, w, win)
     d.channel = d.channel or "Master"
     d.pollInterval = tonumber(d.pollInterval) or 0.25
     local P = newPen(b, win, x, w)
+
+    -- PROFILE (which alert set this character uses, + copy alerts between profiles)
+    b:Sub("PROFILE", x, y); y = y - 36
+    b:Label("Active profile", x, y - 2, C.subtext)
+    local active = TCC.activeProfile or TCC.AccountKey()
+    -- Choices: Account-wide, this character, then any custom profiles (deduped, in that order).
+    local choices, seen = {}, {}
+    local function addChoice(name)
+        if not name or seen[name] then return end
+        seen[name] = true; choices[#choices + 1] = { name, TCC.ProfileLabel(name) }
+    end
+    addChoice(TCC.AccountKey())
+    addChoice(TCC.CurrentCharKey())
+    for _, n in ipairs(TCC.ListProfiles()) do addChoice(n) end
+    P:tip(b:Dropdown(x + 110, y), "Active profile",
+        "Which alert set this character uses. Account-wide is shared across all your characters; "
+        .. "others are private. Pick This character, or create your own named profiles."):SetChoices(
+        300, choices, function() return TCC.activeProfile end,
+        function(v) TCC.SetActiveProfile(v) end)
+    y = y - 40
+
+    -- New / Rename / Delete named profiles (the Account profile can't be renamed or deleted).
+    local canEdit = active ~= TCC.AccountKey()
+    P:tip(b:Button(x + 110, y, 92, "New", "default", function()
+        if b.theme.ShowInputDialog then
+            b.theme:ShowInputDialog("New profile",
+                "Name the new profile, then switch to it. Use the Copy tool below to bring alerts in from another profile.",
+                "Create", function(txt)
+                    local nm, why = TCC.CreateProfile(txt, true)
+                    if not nm then print("|cffa06cf0Combat Alerts|r " ..
+                        (why == "exists" and "a profile with that name already exists."
+                        or why == "reserved" and "that name is reserved."
+                        or "enter a profile name.")) end
+                end)
+        end
+    end, { icon = "plus", iconSize = 13 }), "New profile", "Create a new named profile and switch to it.")
+    P:tip(b:Button(x + 210, y, 92, "Rename", canEdit and "default" or "ghost", function()
+        if not canEdit then return end
+        if b.theme.ShowInputDialog then
+            b.theme:ShowInputDialog("Rename profile", "New name for this profile.", "Rename", function(txt)
+                local nn, why = TCC.RenameProfile(active, txt)
+                if not nn then print("|cffa06cf0Combat Alerts|r " ..
+                    (why == "exists" and "that name is taken." or "couldn't rename the profile.")) end
+            end)
+        end
+    end, { icon = "pencil", iconSize = 13 }), "Rename profile",
+        canEdit and "Rename the active profile." or "The account-wide profile can't be renamed.")
+    P:tip(b:Button(x + 310, y, 92, "Delete", canEdit and "danger" or "ghost", function()
+        if not canEdit then return end
+        b.theme:Confirm({ title = "Delete profile?", variant = "danger", confirmLabel = "Delete",
+            message = "Delete '" .. TCC.ProfileLabel(active) .. "' and its alerts? Any character using it "
+                .. "falls back to Account-wide.",
+            onConfirm = function() TCC.DeleteProfile(active) end })
+    end, { icon = "trash", iconSize = 13 }), "Delete profile",
+        canEdit and "Delete the active profile." or "The account-wide profile can't be deleted.")
+    y = y - 46
+
+    -- Copy alerts between any two profiles (account or any character that has its own set).
+    local names = TCC.ListProfiles()
+    local hasMe = false
+    for _, n in ipairs(names) do if n == TCC.CurrentCharKey() then hasMe = true end end
+    if not hasMe then names[#names + 1] = TCC.CurrentCharKey() end
+    local profChoices = {}
+    for _, n in ipairs(names) do profChoices[#profChoices + 1] = { n, TCC.ProfileLabel(n) } end
+    TCC._copyFrom = TCC._copyFrom or TCC.AccountKey()
+    TCC._copyTo   = TCC._copyTo   or TCC.CurrentCharKey()
+    TCC._copyRule = TCC._copyRule or "__all__"
+    b:Label("Copy from", x, y - 2, C.subtext)
+    P:tip(b:Dropdown(x + 110, y), "Source profile", "Copy alerts FROM this profile."):SetChoices(300, profChoices,
+        function() return TCC._copyFrom end,
+        function(v) TCC._copyFrom = v; TCC._copyRule = "__all__"; TCC.RefreshManager() end)
+    y = y - 34
+    b:Label("Alert", x, y - 2, C.subtext)
+    local ruleItems = { { "__all__", "All alerts" } }
+    for _, r in ipairs(TCC.GetProfileRuleList(TCC._copyFrom)) do ruleItems[#ruleItems + 1] = { r.id, r.name } end
+    P:tip(b:Dropdown(x + 110, y), "Alert to copy", "Copy every alert (replaces destination) or just one (appended)."):SetChoices(
+        300, ruleItems, function() return TCC._copyRule end, function(v) TCC._copyRule = v end)
+    y = y - 34
+    b:Label("Copy to", x, y - 2, C.subtext)
+    P:tip(b:Dropdown(x + 110, y), "Destination profile", "Copy alerts INTO this profile."):SetChoices(300, profChoices,
+        function() return TCC._copyTo end, function(v) TCC._copyTo = v end)
+    y = y - 40
+    P:tip(b:Button(x, y, 150, "Copy alerts", "primary", function()
+        TCC.CopyProfileRules(TCC._copyFrom, TCC._copyTo, TCC._copyRule)
+    end, { icon = "copy", iconSize = 14 }), "Copy alerts",
+        "Copy the selected alert(s) from the source profile into the destination.")
+    y = y - 50
 
     -- GLOBAL
     b:Sub("GLOBAL", x, y); y = y - 36

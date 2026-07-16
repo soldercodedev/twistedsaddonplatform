@@ -63,14 +63,22 @@ function UIF:NewTheme(opts)
     theme.sceneDir  = opts.sceneDir or "Interface\\AddOns\\TAP\\assets\\scenes\\"
     theme.sounds    = opts.sounds   -- optional sound catalog override (defaults to UIF.SOUNDS)
     theme.iconInset = opts.iconInset or UIF.ICON_INSET
-    -- Default UI font: opts.font may be a registry key ("UBUNTU") or a path; otherwise the
-    -- bundled Ubuntu (a cleaner, modern look). ResolveFontFile probes it and falls back to the
-    -- game font if it isn't loadable yet (e.g. first launch before WoW has indexed the TTF).
-    local fontSpec  = opts.font or (skin and skin.font) or "UBUNTU"
-    theme.FONT      = UIF.ResolveFontFile(theme:ResolveFont(fontSpec))
+    -- UI font: there is NO per-theme / per-skin font. Every theme uses the ONE global font choice
+    -- (UIF._globalFontSpec, driven by the appearance page via UIF.SetGlobalFont); until that's set we
+    -- use the framework default. Storing _fontSpec lets :ApplyFont() re-resolve after login - a
+    -- first-launch fallback (before WoW indexes the bundled TTF) then corrects itself. `opts.font` /
+    -- `skin.font` are intentionally ignored so a theme/skin can never fight the selected font.
+    theme._fontSpec = UIF._globalFontSpec or UIF.DEFAULT_FONT_KEY or "UBUNTU"
+    theme.FONT      = UIF.ResolveFontFile(theme:ResolveFont(theme._fontSpec))
     theme._onAccent = opts.onAccent
+    theme._onFont   = opts.onFont
     theme._accentCode = "|cff5c9dff"
     theme:_updateAccentCode()
+
+    -- Register every theme so a global font re-resolution can reach it (module addons each make
+    -- their own theme; without this only the hub's font would correct after login).
+    UIF._themes = UIF._themes or {}
+    UIF._themes[#UIF._themes + 1] = theme
 
     -- Bound closures so widgets can wire OnEnter/OnLeave directly to the theme's tooltip.
     theme.showTip = function(f) theme:_showTip(f) end
@@ -111,6 +119,33 @@ function Mixin:ApplyAccent(rgb)
     self:_updateAccentCode()
     if self._onAccent then self._onAccent(self) end
 end
+
+-- Re-resolve this theme's UI font (from a new spec, or the stored one) and fire the onFont hook so
+-- live frames can re-apply it. Safe to call repeatedly - the point is that a bundled TTF may not be
+-- loadable until after login, so a first-launch fallback (Friz) corrects itself when this re-runs.
+function Mixin:ApplyFont(spec)
+    if spec ~= nil then self._fontSpec = spec end
+    local resolved = UIF.ResolveFontFile(self:ResolveFont(self._fontSpec or "UBUNTU"))
+    local changed = (resolved ~= self.FONT)
+    self.FONT = resolved
+    if self._onFont then pcall(self._onFont, self, changed) end
+    return resolved, changed
+end
+
+-- Set the global UI (chrome) font for EVERY registered theme, re-resolve, and fire each onFont hook.
+-- The hub owns this choice; module addons each build their own theme, and their config panels create
+-- fontstrings from their own theme.FONT - so without this a non-default global font would leave module
+-- chrome on the bundled default (the "mixed / fell-back font" bug). Per-widget fonts (a specific
+-- alert's font, the rotation keybind font) are set explicitly elsewhere and are NOT touched.
+--   spec = a font key/path to push to all themes; nil = just re-resolve each from its stored spec
+--   (used on login, once WoW has finished indexing bundled TTFs, to correct a first-launch fallback).
+function UIF.SetGlobalFont(spec)
+    if spec ~= nil then UIF._globalFontSpec = spec end   -- remember it so themes created LATER adopt it
+    for _, t in ipairs(UIF._themes or {}) do pcall(t.ApplyFont, t, spec) end
+end
+
+-- Backwards-compatible alias: re-resolve every theme from its current spec (no change of choice).
+function UIF.ReapplyAllFonts() UIF.SetGlobalFont(nil) end
 
 ----------------------------------------------------------------------
 -- Tooltip system: any frame with ._tipTitle set shows help on hover.

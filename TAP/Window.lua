@@ -380,8 +380,14 @@ function WindowMixin:Refresh()
         else UIF.paint(mgr.logo, theme.C.accent) end
     end
     if self.sidebarButton then self.sidebarButton:Retheme() end
-    -- Re-apply the live theme font to window chrome (nav + title) so a global font swap sticks.
-    if mgr.titleFS then mgr.titleFS:SetFont(theme.FONT, 15) end
+    -- Re-apply the live theme font to window chrome (nav + title) so a global font swap sticks, and
+    -- refresh the title text: a page may contribute a `titleSuffix` (e.g. the selected module's name),
+    -- so the header reads "<Window title><suffix>" while that page is open and just the base otherwise.
+    if mgr.titleFS then
+        mgr.titleFS:SetFont(theme.FONT, 15)
+        local page = self:_pageFor(self.view)
+        mgr.titleFS:SetText((o.title or "UIFoundry") .. ((page and page.titleSuffix) or ""))
+    end
     for _, r in ipairs(self.navRows or {}) do r.fs:SetFont(theme.FONT, 12) end
     for _, h in ipairs(self.navHeaders or {}) do if h.fs then h.fs:SetFont(theme.FONT, 10) end end
     if self.updateNavScrollbar then C_Timer.After(0, function() self:updateNavScrollbar() end) end

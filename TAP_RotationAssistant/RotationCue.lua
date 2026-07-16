@@ -603,6 +603,10 @@ local function uiTheme()
     return (s and s.uiTheme) or theme
 end
 
+-- When the global UI font is (re)applied - on login once TTFs index, or when the user changes it -
+-- re-lay the on-screen cue so its text picks up the corrected font instead of a first-launch fallback.
+theme._onFont = function() pcall(applyLayout) end
+
 -- End placement: lock the cue again, drop test mode, hide the cue, reopen the manager. Runs from
 -- the bar's OnHide, so Done, Escape, or any other hide all cleanly return you to the UI.
 local function finalizePlacement()
@@ -1045,6 +1049,15 @@ end
 local CHANGELOG = [==[
 # Rotation Assistant - What's New
 
+## 1.0.0-beta.2
+
+- **[NEW]** Slash commands: **/tap rotation** jumps straight to this page, and **/rcue** runs the
+  diagnostics (run it twice, ~10s apart, to check the cue is reading Blizzard's suggestions).
+- **[CHANGE]** The on-screen cue now follows your chosen **Platform font** automatically.
+- **[NEW]** Fresh platform look in Settings: pick a **shape** and a **colour scheme** (neutrals,
+  light themes, or a WoW-expansion palette) or full custom colours, and scale the menu with
+  **Menu scale**.
+
 ## 1.1.0
 
 - **[NEW]** Cast vs instant indicator - a coloured corner dot (or border tint) tells you whether
@@ -1080,6 +1093,19 @@ Suite:RegisterModule({
     OnDisable = OnDisable,
     Settings  = Settings,
 })
+
+-- List this module's commands on the Manager's Help > Commands page. /tap rotation opens the
+-- module page; /rcue (registered below) stays the native diagnostics command.
+if Suite and Suite.RegisterCommand then
+    Suite:RegisterCommand({
+        cmd = "/tap rotation", desc = "Open the Rotation Assistant page", owner = "Rotation Assistant",
+        sub = "rotation", handler = function() if Suite.OpenWindow then Suite:OpenWindow("mod:rotationCue") end end,
+    })
+    Suite:RegisterCommand({
+        cmd = "/rcue", desc = "Rotation Assistant diagnostics (run twice, ~10s apart)",
+        owner = "Rotation Assistant",
+    })
+end
 
 ----------------------------------------------------------------------
 -- /rcue - diagnostics. Prints the whole pipeline (API availability, mapped buttons, the

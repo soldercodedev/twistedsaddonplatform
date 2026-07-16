@@ -180,6 +180,8 @@ function Mixin:Dropdown(parent)
     b:SetScript("OnLeave", function(self) theme:FillPaint(self, theme.C.card); GameTooltip_Hide() end)
 
     function b:SetChoices(w, choices, getVal, setVal)
+        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/colour so a live skin swap sticks
+        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text colour too (light themes)
         self:SetSize(w, 26)
         self.fs:SetFont(theme.FONT, 12)
         self.iconTex:Hide(); self.fs:SetPoint("LEFT", 8, 0)   -- clear any leftover icon from pooled reuse
@@ -196,6 +198,8 @@ function Mixin:Dropdown(parent)
 
     -- Dropdown where each item carries an icon; the button shows the selected item's icon.
     function b:SetIconChoices(w, items, getVal, setVal)
+        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/colour so a live skin swap sticks
+        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text colour too (light themes)
         self:SetSize(w, 26)
         self.caret:SetTextColor(theme.C.accent[1], theme.C.accent[2], theme.C.accent[3])
         local function cur() for _, it in ipairs(items) do if it.value == getVal() then return it end end end
@@ -221,6 +225,8 @@ function Mixin:Dropdown(parent)
     -- Fully custom: buildItems() returns a fresh item array each open (for headers /
     -- dynamic lists), labelFor(value) renders the closed-state label.
     function b:SetMenu(w, buildItems, getVal, onPick, labelFor)
+        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/colour so a live skin swap sticks
+        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text colour too (light themes)
         self:SetSize(w, 26)
         self.iconTex:Hide(); self.fs:SetPoint("LEFT", 8, 0)
         self.caret:SetTextColor(theme.C.accent[1], theme.C.accent[2], theme.C.accent[3])
@@ -246,6 +252,8 @@ function Mixin:EditBox(parent)
     e:SetScript("OnEnter", theme.showTip)
     e:SetScript("OnLeave", GameTooltip_Hide)
     function e:Configure(w, h, value, onCommit)
+        theme:StylePanel(self, C.bg)           -- pooled: re-apply shape/colour so a live skin swap sticks
+        self:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text colour too (light themes)
         self:SetSize(w, h or 24)
         self:SetFont(theme.FONT, 12, "")       -- re-apply live theme font (global font swap)
         self:SetScript("OnTextChanged", nil)   -- pooled: avoid a stale handler firing on SetText
@@ -380,6 +388,7 @@ function Mixin:Swatch(parent)
     b.color:SetPoint("TOPLEFT", 2, -2); b.color:SetPoint("BOTTOMRIGHT", -2, 2)
     -- colorTbl = { r, g, b } (mutated on pick); onChange() fires live while dragging.
     function b:Configure(colorTbl, onChange, tipTitle, tipBody)
+        theme:StylePanel(self, theme.C.bg)   -- pooled: re-apply shape so a live skin swap sticks
         local col = colorTbl
         self.color:SetColorTexture(col[1] or 1, col[2] or 0.1, col[3] or 0.1)
         self._tipTitle, self._tipBody = tipTitle or "Choose a color", tipBody

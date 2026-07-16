@@ -116,10 +116,20 @@ local function ensureMarkerPalette()
         b.tex:SetTexture(RAID_ATLAS); b.tex:SetTexCoord(unpack(RT_COORDS[i]))
         b.sel = b:CreateTexture(nil, "OVERLAY"); b.sel:SetPoint("TOPLEFT", -2, 2); b.sel:SetPoint("BOTTOMRIGHT", 2, -2)
         b.sel:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.55); b.sel:Hide()
-        b:SetScript("PostClick", function()   -- insecure state update (safe in combat)
-            if FTI.db and FTI.db.macro then FTI.db.macro.mark = i end
-            FTI.UpdateMarkerPalette()
-            if FTI.UpdateFocusMacro then FTI.UpdateFocusMacro() end
+        b:SetScript("PostClick", function()   -- insecure state update (the secure /focus + /tm already ran)
+            -- The click already marked your target (secure). ALSO make it your saved focus marker,
+            -- which edits the "TAP Focus" macro - that needs the macro pane open and can't happen in
+            -- combat, so we only change it out of combat and force the pane open so it saves.
+            if not (InCombatLockdown and InCombatLockdown()) then
+                local ok = FTI.SetFocusMarker and FTI.SetFocusMarker(i)
+                if ok then
+                    print(FTI.PREFIX .. "Focus marker set to |TInterface\\TargetingFrame\\UI-RaidTargetingIcon_"
+                        .. i .. ":0|t " .. (MARK_NAMES[i] or ("marker " .. i)) .. ".")
+                else
+                    print(FTI.PREFIX .. "Marked your target, but couldn't open the macro window to save the focus-marker change.")
+                end
+            end
+            FTI.UpdateMarkerPalette()   -- highlight follows the ACTUAL saved marker (unchanged in combat)
             FTI.RefreshManager()
         end)
         b:SetScript("OnEnter", function(self)

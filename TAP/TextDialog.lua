@@ -64,6 +64,12 @@ function Mixin:ShowCopyDialog(title, text, info, opts)
     local single = opts.singleLine and true or false
     d.eb:SetMultiLine(not single)
     d:SetHeight(single and 128 or 300)
+    -- A multi-line editbox auto-sizes its height to its content (so it works as a scroll child),
+    -- but a single-line one has NO content-driven height - as a scroll child it ends up zero-height
+    -- and the text renders in an invisible strip (the "empty link box" bug). Give the single-line
+    -- box an explicit height so the string actually shows (and vertically centres); clear it again
+    -- for multi-line so that mode goes back to auto-sizing with its content.
+    d.eb:SetHeight(single and 26 or 0)
     d.title:SetText(title or "Copy this text (Ctrl+C)")
     d.eb:SetText(text or ""); d.eb:SetCursorPosition(0); d.eb:HighlightText()
     d.info:SetText(info or "Selected for you - press Ctrl+C.")

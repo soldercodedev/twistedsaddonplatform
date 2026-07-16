@@ -10,6 +10,15 @@ if not Suite then return end
 local CHANGELOG = [==[
 # Focus Target Interrupt - What's New
 
+## 1.0.0-beta.2
+
+- **[NEW]** The marker bar now **remembers your focus marker**. Click a marker on the bar out of
+  combat and it becomes your **saved** Focus macro marker (the "TAP Focus" macro updates and you get
+  a chat confirmation). In combat it still just marks your current target, with no change or spam.
+- **[NEW]** Fresh platform look in Settings: pick a **shape** and a **colour scheme** (neutrals,
+  light themes, or a WoW-expansion palette) or full custom colours, and scale the menu with
+  **Menu scale**.
+
 ## 1.0.0
 
 - **[NEW]** Focus Target Interrupt is here - the focus & interrupt tools split out into their own
@@ -89,7 +98,6 @@ local function Settings(mod, b, x, y, w, win)
     end
     local function copy(title, text) if b.theme.ShowCopyDialog then b.theme:ShowCopyDialog(title, text) end end
 
-    b:Label("FOCUS TARGET INTERRUPT", x, y, C.accent, 13); y = y - 20
     local _, ih = b:Wrap("Generate ready-made macros. |cffffffffCreate Macro|r saves it to your macro "
         .. "list (out of combat only); |cffffffffCopy text|r opens it so you can paste it into a macro yourself.",
         x, y, w - 48, C.subtext, 11)
@@ -271,3 +279,12 @@ Suite:RegisterModule({
     end,
     Settings = Settings,
 })
+
+-- List a shortcut to this module's page on Help > Commands. Its macro tools also live under
+-- /tcc macros (or /tap alerts macros).
+if Suite and Suite.RegisterCommand then
+    Suite:RegisterCommand({
+        cmd = "/tap focus", desc = "Open the Focus Target Interrupt page", owner = "Focus Target Interrupt",
+        sub = "focus", handler = function() if Suite.OpenWindow then Suite:OpenWindow("mod:focusInterrupt") end end,
+    })
+end

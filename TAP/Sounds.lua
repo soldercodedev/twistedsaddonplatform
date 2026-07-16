@@ -86,6 +86,7 @@ UIF.SOUNDS = {
     { key = "TempleBellHuge", label = "Temple Bell Huge", file = "TempleBellHuge.ogg" },
     { key = "Torch", label = "Torch", file = "Torch.ogg" },
     { key = "Triangle", label = "Triangle", file = "Triangle.ogg" },
+    { key = "VictoryFanfare", label = "Victory Fanfare (FFVII)", file = "VictoryFanfare.ogg" },
     { key = "WarningSiren", label = "Warning Siren", file = "WarningSiren.ogg" },
     { key = "WaterDrop", label = "Water Drop", file = "WaterDrop.ogg" },
     { key = "Xylophone", label = "Xylophone", file = "Xylophone.ogg" },

@@ -30,7 +30,7 @@ jobs:
               echo "::error file=${f}::$(head -1 err.txt)"
               fail=1
             fi
-          done < <(find TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_RotationAssistant TAP_GameDB \
+          done < <(find TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_RotationAssistant TAP_GameDB TAP_MythicLedger \
                         -name '*.lua' -not -path '*/tools/*' -print0)
           echo "Checked ${count} Lua file(s)."
           exit $fail

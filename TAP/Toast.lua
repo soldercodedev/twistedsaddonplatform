@@ -101,13 +101,21 @@ function Mixin:Toast(opts)
         ic:SetTexture(iconTex); ic:SetVertexColor(accent[1], accent[2], accent[3])
         textX = 38
     end
+    local bo
     if hasTitle then
         local ti = theme:Heading(t, { text = opts.title, role = "h5", textColor = C.text }); ti:SetPoint("TOPLEFT", textX, -9)
-        local bo = theme:Heading(t, { text = opts.text or "", role = "caption", wrapWidth = w - textX - rightPad }); bo:SetPoint("TOPLEFT", textX, -26)
+        bo = theme:Heading(t, { text = opts.text or "", role = "caption", wrapWidth = w - textX - rightPad }); bo:SetPoint("TOPLEFT", textX, -26)
     else
-        local bo = t:CreateFontString(nil, "OVERLAY"); theme:StyleFont(bo, opts, { fontSize = 12, textColor = C.text })
-        bo:SetPoint("LEFT", textX, 0); bo:SetPoint("RIGHT", -rightPad, 0); bo:SetJustifyH("LEFT"); bo:SetText(theme:HL(opts.text or ""))
+        bo = t:CreateFontString(nil, "OVERLAY"); theme:StyleFont(bo, opts, { fontSize = 12, textColor = C.text })
+        bo:SetPoint("TOPLEFT", textX, -10); bo:SetWidth(w - textX - rightPad); bo:SetJustifyH("LEFT"); bo:SetWordWrap(true); bo:SetText(theme:HL(opts.text or ""))
     end
+
+    -- Size the toast to its content so long / multi-line bodies aren't clipped (the body wraps at
+    -- a fixed width, so its rendered height tells us how tall the card needs to be).
+    local bodyH = (bo and bo:GetStringHeight()) or 12
+    local topInset = hasTitle and 26 or 10
+    local needed = topInset + bodyH + 12
+    t:SetHeight(math.max(hasTitle and 52 or 36, needed))
 
     local function dismiss()
         if t._gone then return end

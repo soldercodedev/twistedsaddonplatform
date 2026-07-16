@@ -150,6 +150,38 @@ end
 function Suite:GetModule(id) return self.byId[id] end
 
 ----------------------------------------------------------------------
+-- Slash-command registry. Modules add entries so the Manager's Commands page can list every
+-- command in one place, and (when an entry supplies `sub` + `handler`) so `/tap <sub> ...`
+-- dispatches to the module. A module's own slash (e.g. /tcc, /rcue) keeps working alongside this.
+--   entry = {
+--     cmd     = "/tap alerts",          -- display string
+--     desc    = "Open the alerts manager",
+--     owner   = "Combat Alerts",        -- groups the list (defaults to "Platform")
+--     sub     = "alerts",               -- optional: the /tap subcommand token (dispatch)
+--     handler = function(rest) ... end, -- optional: runs on "/tap <sub> <rest>"
+--     subcommands = { { "test", "Play a test alert" }, ... },  -- optional display-only children
+--   }
+----------------------------------------------------------------------
+Suite._commands = {}
+function Suite:RegisterCommand(entry)
+    if type(entry) ~= "table" or not entry.cmd then return end
+    self._commands[#self._commands + 1] = entry
+    self:_notify()   -- refresh the Commands page if the Manager is open
+    return entry
+end
+function Suite:GetCommands() return self._commands end
+
+-- Dispatch "/tap <sub> <rest>" to a registered handler. Returns true if one took it.
+function Suite:RunCommand(sub, rest)
+    if not sub then return false end
+    sub = sub:lower()
+    for _, c in ipairs(self._commands) do
+        if c.sub == sub and c.handler then c.handler(rest or ""); return true end
+    end
+    return false
+end
+
+----------------------------------------------------------------------
 -- Central load-on-demand data. Modules that need a big optional dataset ask the SUITE to load it,
 -- so on-demand loading lives in ONE place instead of each module poking C_AddOns itself. (WoW has
 -- no real "unload" - an addon stays resident for the session once loaded - so this is load-when-

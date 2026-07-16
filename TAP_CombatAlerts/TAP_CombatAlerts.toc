@@ -1,12 +1,12 @@
 ## Interface: 120007
-## Title: Twisteds Combat Alerts
+## Title: |cffa06cf0TAP:|r Combat Alerts
 ## Notes: Combat-safe, rule-based audible & visual alerts, as a module of the Twisteds Addon Platform. Configure with /tap.
 ## Author: Twistedfury-Zul'jin
-## Version: 2.1.1
+## Version: 1.0.0-beta.2
 ## Category: Twisteds Combat Alerts
 ## SavedVariables: TAP_CombatAlertsDB
 ## SavedVariablesPerCharacter: TAP_CombatAlertsCharDB
-## IconTexture: Interface\AddOns\TAP_CombatAlerts\assets\TCC_Logo.tga
+## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
 ## X-Curse-Project-Name: TAP_CombatAlerts
 ## Dependencies: TAP
 

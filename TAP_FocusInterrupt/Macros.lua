@@ -199,6 +199,31 @@ function FTI.OpenMacroUI()
     end
 end
 
+-- Make marker `i` the SAVED focus marker and write it into the "TAP Focus" macro. Editing a macro
+-- only actually sticks with Blizzard's macro pane open, and macros can't be edited in combat - so
+-- this force-opens the pane and refuses (leaving the marker unchanged) in combat or if the pane
+-- can't be opened. Returns true on success, or false + a reason ("combat" / "nomacroui" / "nodb").
+function FTI.SetFocusMarker(i)
+    if InCombatLockdown and InCombatLockdown() then return false, "combat" end
+    local m = FTI.db and FTI.db.macro
+    if not m then return false, "nodb" end
+    local wasOpen = MacroFrame and MacroFrame:IsShown()
+    FTI.OpenMacroUI()                                        -- required so the edit below persists
+    if not (MacroFrame and MacroFrame:IsShown()) then return false, "nomacroui" end
+    m.mark = i
+    FTI.UpdateFocusMacro()                                   -- writes the new marker into "TAP Focus"
+    -- Auto-close the pane if WE opened it (leave it be if the player already had it up). Deferred one
+    -- frame so the edit above is fully committed before we hide it.
+    if not wasOpen then
+        local function shut()
+            if HideUIPanel and MacroFrame then HideUIPanel(MacroFrame)
+            elseif MacroFrame then MacroFrame:Hide() end
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, shut) else shut() end
+    end
+    return true
+end
+
 ----------------------------------------------------------------------
 -- Focus announce + auto-focus (event driven)
 --

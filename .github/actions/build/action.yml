@@ -57,7 +57,7 @@ runs:
         set -euo pipefail
         VER="${{ steps.ver.outputs.version }}"
         WS="$PWD"
-        FOLDERS="TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_RotationAssistant TAP_GameDB"
+        FOLDERS="TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_RotationAssistant TAP_GameDB TAP_MythicLedger"
         STAGE="$(mktemp -d)"
         for d in $FOLDERS; do cp -r "$d" "$STAGE/$d"; done
 
@@ -79,7 +79,7 @@ runs:
           test -f "$STAGE/$d/$d.toc" || { echo "::error::missing TOC for $d"; exit 1; }
         done
         TOP="$(cd "$STAGE" && ls -1 | sort | tr '\n' ' ')"
-        EXPECT="TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_GameDB TAP_RotationAssistant "
+        EXPECT="TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_GameDB TAP_MythicLedger TAP_RotationAssistant "
         [ "$TOP" = "$EXPECT" ] || { echo "::error::staging root is not exactly the addon folders: $TOP"; exit 1; }
 
         ZIP="TwistedsAddonPlatform-${VER}.zip"

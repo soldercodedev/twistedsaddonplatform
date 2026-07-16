@@ -4,6 +4,22 @@ local _, TCC = ...
 TCC.CHANGELOG = [==[
 # Twisteds Combat Alerts - What's New
 
+## 1.0.0-beta.2
+
+- **[BUG FIX]** Alerts can now be **per-character**. The **Profile** section at the top of the page
+  lets you switch this character between **Account-wide** (shared by all your characters) and **This
+  character** (private) - or your own named profiles - so alerts made on your Hunter no longer show
+  up on your Healer.
+- **[NEW]** **Find** search when building an alert - search your spellbook, auras, gear and bags
+  (plus the platform's game database when it's loaded) and pick a spell or item instead of typing an
+  ID. The lookup field shows a **live icon** of what you picked, and stores the ID so it keeps working
+  in Mythic+.
+- **[NEW]** Fresh platform look in Settings: pick a **shape** (sharp or rounded) and a **colour
+  scheme** (neutral greys, light themes, or a WoW-expansion palette), or set every colour yourself,
+  and scale the whole menu with **Menu scale**.
+- **[BUG FIX]** Fixed cramped spacing on the **Text size** and **Icon size** sliders in the alert
+  editor (the value readout no longer overlaps the row above).
+
 ## 2.1.1
 
 - **[CHANGE]** Group-range checks (the "range to a group role" condition, e.g. "Healer/Tank

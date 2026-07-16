@@ -1,12 +1,14 @@
 -- UIFoundry - Skins.lua
--- A skin is a named preset that changes both COLOR (palette + accent) and SHAPE (corner
--- radius + border weight + font). Pick one at creation, or swap it live.
+-- A skin is a named preset that changes COLOR (palette + accent) and SHAPE (corner radius + border
+-- weight). Pick one at creation, or swap it live.
 --
 --   local theme = UIFoundry:NewTheme({ name = "MyAddon", skin = "rounded" })
 --   theme:ApplySkin("blizzard");  win:Refresh()          -- swap live, then re-render
 --
--- Each skin: { palette = { key = {r,g,b}, ... }, accent = {r,g,b}, radius, borderSize,
---              winRadius, font = "KEY" }.  Anything omitted falls back to the base defaults.
+-- Each skin: { palette = { key = {r,g,b}, ... }, accent = {r,g,b}, radius, borderSize, winRadius }.
+-- Skins DELIBERATELY carry NO font: the UI font is a single global choice (UIF.SetGlobalFont, driven
+-- by the appearance page's font selector) that always wins and is shared by every theme, so a skin
+-- swap can never fight the user's chosen font. Anything omitted falls back to the base defaults.
 
 local ADDON, UIF = ...
 local Mixin = UIF.ThemeMixin
@@ -14,11 +16,11 @@ local Mixin = UIF.ThemeMixin
 UIF.SKINS = {
     -- Flat / clean: the default dark look, square corners, thin border.
     flat = {
-        accent = { 0.04, 0.34, 0.79 }, radius = 0, borderSize = 1, font = "UBUNTU",
+        accent = { 0.04, 0.34, 0.79 }, radius = 0, borderSize = 1,
     },
     -- Rounded: same palette, soft 8px corners.
     rounded = {
-        accent = { 0.04, 0.34, 0.79 }, radius = 8, borderSize = 1, font = "UBUNTU",
+        accent = { 0.04, 0.34, 0.79 }, radius = 8, borderSize = 1,
     },
     -- Modern: cooler deep-space palette, teal accent, big 12px corners.
     modern = {
@@ -27,7 +29,7 @@ UIF.SKINS = {
             card = { 0.15, 0.16, 0.22 }, hover = { 0.20, 0.22, 0.30 }, border = { 0.22, 0.24, 0.32 },
             text = { 0.92, 0.94, 0.97 }, subtext = { 0.55, 0.60, 0.70 },
         },
-        accent = { 0.13, 0.79, 0.59 }, radius = 12, borderSize = 1, font = "POPPINS",
+        accent = { 0.13, 0.79, 0.59 }, radius = 12, borderSize = 1,
     },
     -- Blizzard-inspired: dark parchment tones, muted gold accent, square + a heavier border.
     -- (An evocative palette, not the literal gold DialogBox texture.)
@@ -37,7 +39,7 @@ UIF.SKINS = {
             card = { 0.115, 0.10, 0.07 }, hover = { 0.165, 0.135, 0.085 }, border = { 0.28, 0.22, 0.12 },
             text = { 0.88, 0.83, 0.71 }, subtext = { 0.56, 0.50, 0.39 },
         },
-        accent = { 0.82, 0.65, 0.27 }, radius = 0, borderSize = 2, font = "FRIZQT",
+        accent = { 0.82, 0.65, 0.27 }, radius = 0, borderSize = 2,
     },
     -- Neon: near-black with a vivid magenta accent and 10px corners.
     neon = {
@@ -46,7 +48,7 @@ UIF.SKINS = {
             card = { 0.10, 0.10, 0.15 }, hover = { 0.17, 0.14, 0.25 }, border = { 0.26, 0.19, 0.38 },
             text = { 0.95, 0.95, 0.98 }, subtext = { 0.62, 0.58, 0.72 },
         },
-        accent = { 0.86, 0.20, 0.76 }, radius = 10, borderSize = 1, font = "RUSSO",
+        accent = { 0.86, 0.20, 0.76 }, radius = 10, borderSize = 1,
     },
 }
 -- Per-expansion presets: each is the base dark palette with borders / hover / bg subtly
@@ -64,7 +66,7 @@ local function expac(accent, opts)
             hover   = UIF.mix(base.hover, accent, 0.22),
             border  = UIF.mix(base.border, accent, 0.30),
         },
-        radius = opts.radius or 6, borderSize = opts.borderSize or 1, font = opts.font or "UBUNTU",
+        radius = opts.radius or 6, borderSize = opts.borderSize or 1,
     }
 end
 
@@ -102,9 +104,9 @@ UIF.SKIN_LABELS = {
 }
 function Mixin:SkinLabel(name) return UIF.SKIN_LABELS[name] or name end
 
--- Apply a skin to a live theme: reset the palette to defaults, layer the skin's palette /
--- accent / shape tokens / font, then fire onAccent so the consumer re-renders. Call
--- win:Refresh() (or rebuild your UI) afterward to see it.
+-- Apply a skin to a live theme: reset the palette to defaults, layer the skin's palette / accent /
+-- shape tokens, then fire onAccent so the consumer re-renders. Skins NEVER touch the font - that's a
+-- single global choice owned by UIF.SetGlobalFont. Call win:Refresh() afterward to see it.
 function Mixin:ApplySkin(name)
     local skin = UIF.SKINS[name]; if not skin then return self end
     self.skin = name
@@ -114,10 +116,134 @@ function Mixin:ApplySkin(name)
     self.radius     = skin.radius or 0
     self.borderSize = skin.borderSize or 1
     self.winRadius  = skin.winRadius or self.radius
-    if skin.font then self.FONT = UIF.ResolveFontFile(self:ResolveFont(skin.font)) end
     self:_updateAccentCode()
     if self._onAccent then self._onAccent(self) end
     return self
 end
 
 function Mixin:SkinList() return UIF.SKIN_ORDER end
+
+----------------------------------------------------------------------
+-- Decoupled shape + palette selection.
+-- A skin bundles SHAPE (corner radius + border weight) and COLOR (palette + accent) together.
+-- The suite's appearance UI splits those into two independent axes so you can pick, say, a
+-- rounded shape with the Neon palette. Sidecars can keep using the bundled skins (ApplySkin);
+-- these just let a consumer drive each axis on its own, or supply a fully custom palette.
+----------------------------------------------------------------------
+
+-- SHAPE presets (the "buttons"): square/sharp vs rounded corners + borders.
+UIF.SHAPES = {
+    square  = { radius = 0, borderSize = 1 },
+    rounded = { radius = 8, borderSize = 1 },
+}
+UIF.SHAPE_ORDER  = { "square", "rounded" }
+UIF.SHAPE_LABELS = { square = "Sharp / Square", rounded = "Rounded" }
+function Mixin:ShapeLabel(name) return UIF.SHAPE_LABELS[name] or name end
+function Mixin:ShapeList() return UIF.SHAPE_ORDER end
+
+-- Extra full palettes beyond the WoW-expansion set: a neutral greyscale ramp (blacks -> greys) and a
+-- couple of LIGHT templates (light background, dark text). Each sets every colour key, so switching is
+-- a clean swap; the accent stays tasteful but you can override it or go Custom. radius/borderSize only
+-- matter if applied as a full skin - the appearance page drives shape on its own axis.
+UIF.SKINS.obsidian = {   -- near-black, cool neutral
+    palette = {
+        bg = { 0.030, 0.032, 0.038 }, sidebar = { 0.050, 0.052, 0.060 }, panel = { 0.070, 0.073, 0.083 },
+        card = { 0.100, 0.104, 0.118 }, hover = { 0.150, 0.156, 0.176 }, border = { 0.200, 0.208, 0.232 },
+        text = { 0.920, 0.930, 0.945 }, subtext = { 0.540, 0.560, 0.600 },
+    },
+    accent = { 0.40, 0.52, 0.70 }, radius = 8, borderSize = 1,
+}
+UIF.SKINS.graphite = {   -- dark neutral grey
+    palette = {
+        bg = { 0.085, 0.088, 0.095 }, sidebar = { 0.110, 0.113, 0.122 }, panel = { 0.130, 0.134, 0.144 },
+        card = { 0.175, 0.180, 0.193 }, hover = { 0.235, 0.242, 0.258 }, border = { 0.300, 0.310, 0.330 },
+        text = { 0.905, 0.910, 0.922 }, subtext = { 0.560, 0.570, 0.600 },
+    },
+    accent = { 0.55, 0.60, 0.68 }, radius = 8, borderSize = 1,
+}
+UIF.SKINS.nickel = {   -- medium grey, softer contrast
+    palette = {
+        bg = { 0.150, 0.155, 0.165 }, sidebar = { 0.180, 0.186, 0.198 }, panel = { 0.205, 0.212, 0.226 },
+        card = { 0.255, 0.263, 0.280 }, hover = { 0.320, 0.330, 0.350 }, border = { 0.390, 0.402, 0.425 },
+        text = { 0.930, 0.935, 0.945 }, subtext = { 0.640, 0.652, 0.680 },
+    },
+    accent = { 0.60, 0.66, 0.78 }, radius = 8, borderSize = 1,
+}
+UIF.SKINS.daylight = {   -- clean light: light-grey background, dark text
+    palette = {
+        bg = { 0.950, 0.960, 0.972 }, sidebar = { 0.900, 0.912, 0.930 }, panel = { 0.875, 0.888, 0.908 },
+        card = { 0.822, 0.840, 0.866 }, hover = { 0.760, 0.792, 0.850 }, border = { 0.680, 0.706, 0.748 },
+        text = { 0.120, 0.140, 0.180 }, subtext = { 0.380, 0.410, 0.470 },
+    },
+    accent = { 0.10, 0.42, 0.82 }, radius = 8, borderSize = 1,
+}
+UIF.SKINS.parchment = {   -- warm light / cream
+    palette = {
+        bg = { 0.960, 0.945, 0.905 }, sidebar = { 0.918, 0.898, 0.848 }, panel = { 0.895, 0.872, 0.815 },
+        card = { 0.852, 0.822, 0.752 }, hover = { 0.800, 0.760, 0.668 }, border = { 0.700, 0.652, 0.548 },
+        text = { 0.175, 0.150, 0.105 }, subtext = { 0.430, 0.390, 0.310 },
+    },
+    accent = { 0.72, 0.46, 0.14 }, radius = 8, borderSize = 1,
+}
+
+-- Palette dropdown, GROUPED. Each entry is a full DISTINCT palette (shape is its own axis, so the
+-- shape-only "rounded" skin is excluded). Neutral = greyscale ramp; Light = light templates;
+-- Styled = the characterful ones; Expansion = the WoW-signature accent palettes.
+UIF.PALETTE_GROUPS = {
+    { header = "Neutral",   names = { "flat", "obsidian", "graphite", "nickel" } },
+    { header = "Light",     names = { "daylight", "parchment" } },
+    { header = "Styled",    names = { "modern", "blizzard", "neon" } },
+    { header = "Expansion", names = { "classic", "tbc", "wrath", "cataclysm", "mop", "wod",
+                                      "legion", "bfa", "shadowlands", "dragonflight", "warwithin", "midnight" } },
+}
+
+-- Flattened order (backward-compatible with callers that just want a simple list).
+UIF.PALETTE_ORDER = {}
+for _, g in ipairs(UIF.PALETTE_GROUPS) do
+    for _, n in ipairs(g.names) do UIF.PALETTE_ORDER[#UIF.PALETTE_ORDER + 1] = n end
+end
+
+UIF.PALETTE_LABELS = {
+    flat = "Default (Dark)", obsidian = "Obsidian", graphite = "Graphite", nickel = "Nickel",
+    daylight = "Daylight (Light)", parchment = "Parchment (Light)",
+}   -- Styled + Expansion fall back to UIF.SKIN_LABELS
+function Mixin:PaletteLabel(name) return UIF.PALETTE_LABELS[name] or UIF.SKIN_LABELS[name] or name end
+function Mixin:PaletteList() return UIF.PALETTE_ORDER end
+function Mixin:PaletteGroups() return UIF.PALETTE_GROUPS end
+
+-- The palette colour variables, in editor display order (the Custom editor edits each of these).
+UIF.PALETTE_KEYS = { "bg", "sidebar", "panel", "card", "hover", "border", "accent", "text", "subtext" }
+
+-- Apply ONLY the shape tokens (corner radius + border weight); colour + font are untouched.
+function Mixin:ApplyShape(name)
+    local s = UIF.SHAPES[name]; if not s then return self end
+    self.shape      = name
+    self.radius     = s.radius or 0
+    self.borderSize = s.borderSize or 1
+    self.winRadius  = s.winRadius or s.radius or 0
+    return self
+end
+
+-- Apply ONLY the colour (palette + accent) of a named scheme; shape + font are untouched.
+-- Resets to the base palette first so switching schemes never leaves stale entries behind.
+function Mixin:ApplyPalette(name)
+    local skin = UIF.SKINS[name]; if not skin then return self end
+    self.palette = name
+    for k, v in pairs(UIF.DEFAULT_PALETTE) do self.C[k] = { v[1], v[2], v[3] } end
+    if skin.palette then for k, v in pairs(skin.palette) do self.C[k] = { v[1], v[2], v[3] } end end
+    if skin.accent then self.C.accent = { skin.accent[1], skin.accent[2], skin.accent[3] } end
+    self:_updateAccentCode()
+    if self._onAccent then self._onAccent(self) end
+    return self
+end
+
+-- Apply a fully custom palette: a table of { key = {r,g,b} } layered over the base defaults.
+-- Any key in UIF.PALETTE_KEYS is honoured; missing keys keep the default. Shape + font stay.
+function Mixin:ApplyCustomPalette(pal)
+    self.palette = "custom"
+    for k, v in pairs(UIF.DEFAULT_PALETTE) do self.C[k] = { v[1], v[2], v[3] } end
+    if pal then for k, v in pairs(pal) do if self.C[k] then self.C[k] = { v[1], v[2], v[3] } end end end
+    self:_updateAccentCode()
+    if self._onAccent then self._onAccent(self) end
+    return self
+end

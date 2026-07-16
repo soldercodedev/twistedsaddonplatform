@@ -129,23 +129,209 @@ end
 -- StatTile: a small KPI tile - big value, label, optional trend/delta.
 --   theme:StatTile(parent, { label="DPS", value="128.4k", delta="+12%", trend="up",
 --       width=150, height=72 })
+--
+-- Metric colouring (opt-in): pass `accent` = a colour (hex/{r,g,b}) to draw a subtle 3px
+-- left accent bar, tint the 1px border toward it, and (unless overridden) colour the value
+-- and icon with it - the pattern the Mythic Ledger hero tiles use.
+--   opts: icon (bundled icon name) · iconVariant · iconColor (defaults to accent/value) ·
+--         iconSize · accent · valueColor · valueRole · hero (bold/flashy treatment) ·
+--         tip = { title, body } · tipData = { icon, title, lines } (rich, see Tooltip.lua)
+--
+-- `hero = true` (used with `accent`) gives the bold look: the icon sits in a SOLID metric
+-- badge with a knocked-out glyph, the value is large with a soft metric glow, the card carries
+-- a faint metric wash + tinted border, and (when `meter` is a 0..1 fraction) a coloured rank
+-- meter bar runs along the bottom showing where the value sits on its scale.
 ----------------------------------------------------------------------
+-- Three opt-in card styles (opts.style) sharing one formula - label / big value / supporting
+-- subtext / icon - with distinct treatments. Used by the Mythic Ledger Overview (chosen in its
+-- Settings); any caller that omits opts.style gets the original behaviour below untouched.
+--   "clean"   - flat card, thin accent-tinted border, minimal corner glyph, one subtext line
+--   "panel"   - darker "stone" card, framed accent icon badge, value glow, accent gem + rank meter
+--   "compact" - flat card, big value, a two-line data footer (Best / range / last-N / this week)
+local function styledStatTile(theme, parent, opts)
+    local C = theme.C
+    local accent = opts.accent and UIF.toColor(opts.accent) or UIF.toColor(C.accent) or { 0.6, 0.62, 0.7 }
+    local style = opts.style
+    local w = opts.width or 150
+    local pad = opts.padding or 12
+    local h = opts.height or ((style == "panel" and 100) or (style == "compact" and 104) or 96)
+
+    -- Card ground + border per style.
+    local bg, borderCol
+    if style == "panel" then
+        bg = UIF.mix(C.card, { 0, 0, 0 }, 0.22)             -- darker stone/metal
+        borderCol = UIF.mix(C.border, accent, 0.55)
+    elseif style == "compact" then
+        bg = C.card
+        borderCol = UIF.mix(C.border, accent, 0.30)
+    else -- clean
+        bg = C.card
+        borderCol = UIF.mix(C.border, accent, 0.42)         -- thin accent-tinted border
+    end
+    local f = theme:Card(parent, { width = w, height = h, bg = bg, borderColor = borderCol, padding = pad })
+    local body, bodyW = f.body, w - 2 * pad
+
+    -- Header: icon (framed badge for panel, minimal corner glyph otherwise) + label.
+    local labelX = 0
+    if opts.icon then
+        if style == "panel" then
+            local badge = 26
+            local frame = body:CreateTexture(nil, "ARTWORK", nil, 1)
+            frame:SetSize(badge, badge); frame:SetPoint("TOPLEFT", 0, 0)
+            theme:PaintShape(frame, UIF.mix(C.card, accent, 0.40), opts.badgeShape or "md", badge, badge, 1)
+            local g = theme:Glyph(body, { icon = opts.icon, variant = opts.iconVariant, size = 15,
+                color = UIF.mix(accent, { 1, 1, 1 }, 0.15) })
+            g:SetPoint("CENTER", frame, "CENTER", 0, 0); f.iconGlyph = g
+            labelX = badge + 8
+        else
+            local isz = opts.iconSize or 14
+            local g = theme:Glyph(body, { icon = opts.icon, variant = opts.iconVariant, size = isz,
+                color = opts.iconColor or UIF.mix(C.subtext, accent, 0.5) })
+            -- A large icon fills the right side of the card (hero style); a small one tucks top-right.
+            if isz >= 30 then g:SetPoint("RIGHT", 4, 0) else g:SetPoint("TOPRIGHT", 0, -1) end
+            f.iconGlyph = g
+        end
+    end
+    local label = theme:Heading(body, { text = opts.label or "", role = "overline" })
+    label:SetPoint("TOPLEFT", labelX, (style == "panel") and -2 or 0)
+
+    -- Big value.
+    local value = theme:Heading(body, { text = opts.value or "", role = "h1", textColor = opts.valueColor or accent })
+    value:SetPoint("TOPLEFT", labelX, (style == "panel") and -20 or -19)
+    if style == "panel" and value.SetShadowColor then
+        value:SetShadowColor(accent[1], accent[2], accent[3], 0.55); value:SetShadowOffset(0, 0)
+    end
+    f.valueFS = value
+
+    -- Supporting subtext: compact stacks up to two footer lines; clean/panel show one sub line.
+    if style == "compact" then
+        local fy, foot = 1, opts.footer or {}
+        for i = math.min(#foot, 2), 1, -1 do
+            local ln = foot[i]
+            if ln and ln ~= "" then
+                local fs = theme:Heading(body, { text = ln, role = "caption", textColor = C.subtext })
+                fs:SetPoint("BOTTOMLEFT", 0, fy); fs:SetWidth(bodyW); fs:SetJustifyH("LEFT")
+                fy = fy + 14
+            end
+        end
+    elseif opts.sub then
+        local fs = theme:Heading(body, { text = opts.sub, role = "caption", textColor = C.subtext })
+        fs:SetPoint("BOTTOMLEFT", 0, 1); fs:SetWidth(bodyW); fs:SetJustifyH("LEFT")
+    end
+
+    -- Panel extra: a small accent "gem" (rotated square) in the top-right corner.
+    if style == "panel" then
+        local gem = body:CreateTexture(nil, "OVERLAY")
+        gem:SetSize(9, 9); gem:SetPoint("TOPRIGHT", -1, -2)
+        UIF.paint(gem, accent); gem:SetRotation(0.7854); f.gem = gem   -- 45deg -> diamond
+    end
+
+    -- Tooltip (rich tipData wins over simple tip); Card frames aren't mouse-enabled by default.
+    if opts.tipData or opts.tip then
+        f:EnableMouse(true)
+        if opts.tipData then theme:SetTipData(f, opts.tipData)
+        else theme:SetTip(f, opts.tip.title, opts.tip.body, opts.tip.anchor) end
+        f:SetScript("OnEnter", function(s) theme:_showTip(s) end)
+        f:SetScript("OnLeave", function() GameTooltip_Hide() end)
+    end
+    f.labelFS = label
+    function f:SetValue(v) self.valueFS:SetText(v) end
+    return f
+end
+
 function Mixin:StatTile(parent, opts)
     opts = opts or {}
+    if opts.style then return styledStatTile(self, parent, opts) end
     local theme, C = self, self.C
+    -- The accent colour drives the border tint, the badge/meter, and (by default) the value.
+    local accent = opts.accent and UIF.toColor(opts.accent) or nil
+    local hero = opts.hero and accent or nil
+    local borderCol = opts.borderColor
+    if accent and borderCol == nil then borderCol = UIF.mix(C.border, accent, hero and 0.55 or 0.35) end
+    local valueCol = opts.valueColor
+    if valueCol == nil and accent then valueCol = accent end
+    -- Hero cards get a faint metric wash so they read as "coloured" without a solid fill.
+    local bgCol = opts.bg
+    if bgCol == nil and hero then bgCol = UIF.mix(C.card, accent, 0.10) end
+
+    local pad = opts.padding or 12
     local f = theme:Card(parent, { width = opts.width or 150, height = opts.height or 72,
-        bg = opts.bg, borderColor = opts.borderColor, padding = opts.padding or 12 })
+        bg = bgCol, borderColor = borderCol, padding = pad })
+
+    -- Non-hero: subtle left accent bar. Hero uses the solid badge instead (below).
+    if accent and not hero then
+        local bs = theme.borderSize or 1
+        local rInset = (theme.radius and theme.radius > 0) and theme.radius or 0
+        local bar = f:CreateTexture(nil, "ARTWORK"); bar:SetWidth(opts.accentWidth or 3)
+        bar:SetPoint("TOPLEFT", bs, -rInset); bar:SetPoint("BOTTOMLEFT", bs, rInset)
+        UIF.paint(bar, accent); f.accentBar = bar
+    end
+
+    -- Header: optional icon (a SOLID metric badge with a knockout glyph in hero mode) + label.
+    local labelX, labelDY = 0, 0
+    if opts.icon then
+        local isz = opts.iconSize or (hero and 18 or 14)
+        if hero then
+            local badge = isz + 16
+            local bTex = f.body:CreateTexture(nil, "ARTWORK", nil, 1)
+            bTex:SetSize(badge, badge); bTex:SetPoint("TOPLEFT", 0, -1)
+            theme:PaintShape(bTex, accent, opts.badgeShape or "md", badge, badge, 1); f.iconChip = bTex
+            local g = theme:Glyph(f.body, { icon = opts.icon, variant = opts.iconVariant,
+                size = isz, color = opts.iconColor or UIF.mix(C.card, { 0, 0, 0 }, 0.35) })
+            g:SetPoint("CENTER", bTex, "CENTER", 0, 0); f.iconGlyph = g
+            labelX = badge + 10; labelDY = -3
+        else
+            local g = theme:Glyph(f.body, { icon = opts.icon, variant = opts.iconVariant,
+                size = isz, color = opts.iconColor or valueCol or C.subtext })
+            g:SetPoint("TOPLEFT", 0, -1); f.iconGlyph = g
+            labelX = isz + 6
+        end
+    end
     local label = theme:Heading(f.body, { text = opts.label or "", role = "overline" })
-    label:SetPoint("TOPLEFT", 0, 0)
-    local value = theme:Heading(f.body, { text = opts.value or "", role = opts.valueRole or "h2", textColor = opts.valueColor })
-    value:SetPoint("TOPLEFT", 0, -16)
+    label:SetPoint("TOPLEFT", labelX, labelDY)
+
+    local value = theme:Heading(f.body, { text = opts.value or "",
+        role = opts.valueRole or (hero and "h1" or "h2"), textColor = valueCol })
+    if hero then value:SetPoint("TOPLEFT", labelX, -18) else value:SetPoint("BOTTOMLEFT", 0, 0) end
+    -- Soft metric glow behind the value (a coloured text shadow), only on hero cards.
+    if hero and value.SetShadowColor then
+        value:SetShadowColor(accent[1], accent[2], accent[3], 0.6)
+        value:SetShadowOffset(0, 0)
+    end
     f.labelFS, f.valueFS = label, value
+
+    -- Rank meter along the bottom (hero + a 0..1 fraction): a dark track with a metric-filled
+    -- portion showing where the value sits on its scale. Bold, and it reads at a glance.
+    if hero and type(opts.meter) == "number" then
+        local frac = opts.meter; if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
+        local mh = opts.meterHeight or 6
+        local bodyW = (opts.width or 150) - 2 * pad
+        local track = f.body:CreateTexture(nil, "ARTWORK", nil, 1)
+        track:SetHeight(mh); track:SetPoint("BOTTOMLEFT", 0, 0); track:SetPoint("BOTTOMRIGHT", 0, 0)
+        theme:PaintShape(track, UIF.mix(C.card, { 0, 0, 0 }, 0.35), "pill", bodyW, mh, 0.9)
+        local fill = f.body:CreateTexture(nil, "ARTWORK", nil, 2)
+        fill:SetHeight(mh); fill:SetPoint("BOTTOMLEFT", 0, 0); fill:SetWidth(math.max(mh, frac * bodyW))
+        theme:PaintShape(fill, accent, "pill", bodyW, mh, 1)
+        f.meterTrack, f.meterFill = track, fill
+    end
+
     if opts.delta then
         local trendCol = opts.trend == "up" and UIF.BADGE_VARIANTS.success
             or opts.trend == "down" and UIF.BADGE_VARIANTS.danger or C.subtext
         local d = theme:Heading(f.body, { text = opts.delta, role = "caption", textColor = trendCol })
-        d:SetPoint("BOTTOMLEFT", 0, 0); f.deltaFS = d
+        d:SetPoint("BOTTOMRIGHT", 0, hero and 10 or 2); f.deltaFS = d
     end
+
+    -- Hover tooltip / accessible label for the whole tile (Card frames aren't mouse-enabled by
+    -- default, so wire it up here). tipData (rich) wins over tip = { title, body }.
+    if opts.tipData or opts.tip then
+        f:EnableMouse(true)
+        if opts.tipData then theme:SetTipData(f, opts.tipData)
+        else theme:SetTip(f, opts.tip.title, opts.tip.body, opts.tip.anchor) end
+        f:SetScript("OnEnter", function(s) theme:_showTip(s) end)
+        f:SetScript("OnLeave", function() GameTooltip_Hide() end)
+    end
+
     function f:SetValue(v) self.valueFS:SetText(v) end
     return f
 end

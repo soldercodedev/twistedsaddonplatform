@@ -1,0 +1,229 @@
+-- TAP: Mythic Ledger - Scoring/Score.lua
+-- Assembles the per-category results into an auditable PlayerScore: resolves weights (with
+-- redistribution), computes the weighted overall, assigns a grade, and generates plain-language
+-- explanation text. Every score carries its version, raw inputs, expected values, modifiers,
+-- confidence and final weights so it can be re-explained or recalculated later.
+
+local ADDON, ML = ...
+local Scoring = ML.Scoring
+local Score = {}
+Scoring.Score = Score
+
+local Cfg  = Scoring.Config
+local Cap  = Scoring.Capability
+local Norm = Scoring.Normalize
+local Comp = Scoring.Composition
+local Base = Scoring.Baselines
+local Cat  = Scoring.Categories
+local Weights = Scoring.Weights
+
+function Score.Grade(overall)
+    for _, g in ipairs(Cfg.grades) do if overall >= g.min then return g.grade end end
+    return "F"
+end
+
+local function round(v) return math.floor((v or 0) + 0.5) end
+local function pct(v) return round((v or 0) * 100) end
+
+-- Score a single normalized player. `summary` = group capability summary (also carries the throughput
+-- share denominators); `groupTotals` = { interrupts, dispels, dps, hps } summed across the party.
+function Score.ScoreNormalized(norm, summary, groupTotals)
+    groupTotals = groupTotals or {}
+    local role = norm.role or "DAMAGER"
+    local baseline = Base.Throughput(norm, summary, groupTotals)
+
+    local cats = {}
+    cats.throughput = Cat.Throughput(norm, baseline)
+    cats.interrupts = Cat.Interrupt(norm, summary, groupTotals.interrupts)
+    cats.dispels    = Cat.Dispel(norm, summary, groupTotals.dispels)
+    cats.survival   = Cat.Survival(norm)
+    cats.deaths     = Cat.Deaths(norm)
+    cats.roleContribution = Cat.RoleContribution(norm, cats)
+
+    local applicable = { interrupts = cats.interrupts.applicable, dispels = cats.dispels.applicable }
+    local weights, redistLog = Weights.Resolve(role, applicable)
+
+    -- Weighted overall over applicable categories (redistributed weights are already 0 for N/A ones).
+    local overall, wsum = 0, 0
+    for _, c in ipairs(Weights.CATS) do
+        local res = cats[c]
+        local wgt = weights[c] or 0
+        if res and res.applicable and wgt > 0 then
+            overall = overall + wgt * math.min(res.score or 0, 100)
+            wsum = wsum + wgt
+        end
+    end
+    if wsum > 0 then overall = overall / wsum end   -- guard: if any applicable weight was lost, renormalize
+    overall = Cfg.clamp(overall, 0, 100)
+    local grade = Score.Grade(overall)
+
+    -- Attach final weights onto each category for the UI.
+    for _, c in ipairs(Weights.CATS) do if cats[c] then cats[c].weight = weights[c] or 0 end end
+
+    local score = {
+        version = Cfg.version,
+        playerGUID = norm.playerGUID, name = norm.name, role = role, specID = norm.specID,
+        classFile = norm.classFile,
+        overall = round(overall), overallExact = overall, grade = grade,
+        categories = cats, weights = weights, redistribution = redistLog,
+        baseline = baseline, dataCompleteness = norm.dataCompleteness, dataSource = norm.dataSource,
+        inputs = {
+            durationSeconds = norm.durationSeconds, dps = norm.dps, hps = norm.hps,
+            damageDone = norm.damageDone, healing = norm.healing, damageTaken = norm.damageTaken,
+            avoidableDamageTaken = norm.avoidableDamageTaken, interrupts = norm.interrupts,
+            dispels = norm.dispels, deaths = norm.deaths,
+        },
+    }
+    score.explanation = Score.Explain(score)
+    return score
+end
+
+----------------------------------------------------------------------
+-- Explanation. short = one line; details = per-category human sentences (auditable, no mystery).
+----------------------------------------------------------------------
+function Score.Explain(score)
+    local cats = score.categories
+    local d = {}
+
+    -- Throughput (group-relative blend of a DPS and/or HPS component).
+    local t = cats.throughput
+    if t then
+        local det = t.detail
+        local segs = {}
+        if det and det.dps then
+            segs[#segs + 1] = string.format("DPS %s vs %s expected (%.2fx)",
+                Scoring._short(det.dps.value), Scoring._short(det.dps.expected), det.dps.ratio or 0)
+        end
+        if det and det.hps then
+            segs[#segs + 1] = string.format("HPS %s vs %s expected (%.2fx)",
+                Scoring._short(det.hps.value), Scoring._short(det.hps.expected), det.hps.ratio or 0)
+        end
+        if #segs > 0 then
+            d[#d + 1] = string.format("Throughput: %d  (%s; group-relative; weight %d%%)",
+                round(t.score), table.concat(segs, ", "), pct(t.weight))
+        else
+            d[#d + 1] = string.format("Throughput: %d  (%s)", round(t.score), t.note or "estimate")
+        end
+    end
+
+    -- Interrupts
+    local i = cats.interrupts
+    if i and not i.applicable then
+        d[#d + 1] = "Interrupt Contribution: N/A  (" .. (i.reason or "not applicable")
+            .. ") Its weight was redistributed."
+    elseif i then
+        if i.actual == nil then
+            d[#d + 1] = string.format("Interrupt Contribution: %d  (%s)", round(i.score), i.note or "no data")
+        else
+            d[#d + 1] = string.format(
+                "Interrupt Contribution: %d  (actual %d vs expected %.1f; profile %s; %.1f min x %.2f/min x comp %.2f; confidence %d%%; weight %d%%)",
+                round(i.score), i.actual, i.expected or 0, i.profile or "?", i.minutes or 0, i.rate or 0,
+                i.compModifier or 1, pct(i.confidence), pct(i.weight))
+        end
+    end
+
+    -- Dispels
+    local dp = cats.dispels
+    if dp and not dp.applicable then
+        d[#d + 1] = "Dispel Contribution: N/A  (" .. (dp.reason or "not applicable") .. ") Its weight was redistributed."
+    elseif dp then
+        if dp.actual == nil then
+            d[#d + 1] = string.format("Dispel Contribution: %d  (%s)", round(dp.score), dp.note or "no data")
+        else
+            d[#d + 1] = string.format(
+                "Dispel Contribution: %d  (actual %d vs expected %.1f; profile %s; confidence %d%%; weight %d%%)",
+                round(dp.score), dp.actual, dp.expected or 0, dp.profile or "?", pct(dp.confidence), pct(dp.weight))
+        end
+    end
+
+    -- Survival
+    local s = cats.survival
+    if s then
+        if s.detail and s.detail.avoidableShare then
+            d[#d + 1] = string.format("Survival: %d  (%.1f%% of damage taken was avoidable; weight %d%%)",
+                round(s.score), (s.detail.avoidableShare or 0) * 100, pct(s.weight))
+        else
+            d[#d + 1] = string.format("Survival: %d  (%s; weight %d%%)", round(s.score), s.note or "estimate", pct(s.weight))
+        end
+    end
+
+    -- Deaths
+    local de = cats.deaths
+    if de then
+        if de.deaths == nil then
+            d[#d + 1] = string.format("Death Impact: %d  (%s)", round(de.score), de.note or "no data")
+        else
+            d[#d + 1] = string.format("Death Impact: %d  (%d death(s), -%d penalty; weight %d%%)",
+                round(de.score), de.deaths, de.penalty, pct(de.weight))
+        end
+    end
+
+    -- Role contribution (only mention when it carries weight).
+    local rc = cats.roleContribution
+    if rc and (rc.weight or 0) > 0 then
+        d[#d + 1] = string.format("Role Contribution: %d  (composite of survival + utility; weight %d%%)",
+            round(rc.score), pct(rc.weight))
+    end
+
+    local short = string.format("%s (%d)", score.grade, score.overall)
+    return { short = short, details = d }
+end
+
+-- Compact number formatter for explanations (independent of the Util module so scoring stays standalone).
+function Scoring._short(n)
+    if type(n) ~= "number" then return "-" end
+    local a = math.abs(n)
+    if a >= 1e9 then return string.format("%.2fB", n / 1e9) end
+    if a >= 1e6 then return string.format("%.2fM", n / 1e6) end
+    if a >= 1e3 then return string.format("%.1fK", n / 1e3) end
+    return string.format("%d", round(n))
+end
+
+----------------------------------------------------------------------
+-- Public: score an entire run. Returns { list = {score,...}, byGuid = {guid=score}, summary }.
+----------------------------------------------------------------------
+function Score.ScoreRun(run)
+    if not run then return nil end
+    local players = Norm.Party(run)
+    local summary = Comp.Summarize(players)
+    local groupTotals = { interrupts = 0, dispels = 0, dps = 0, hps = 0 }
+    for _, p in ipairs(players) do
+        if p.interrupts then groupTotals.interrupts = groupTotals.interrupts + p.interrupts end
+        if p.dispels then groupTotals.dispels = groupTotals.dispels + p.dispels end
+        if p.dps then groupTotals.dps = groupTotals.dps + p.dps end
+        if p.hps then groupTotals.hps = groupTotals.hps + p.hps end
+    end
+    -- Cap each player's dps/hps contribution to the baseline at their share (over-DPSing your share
+    -- shouldn't raise the bar for the team or dilute your own ratio - see Baselines.EffectiveGroupTotals).
+    groupTotals = Base.EffectiveGroupTotals(players, summary, groupTotals)
+    local out = { list = {}, byGuid = {}, summary = summary, version = Cfg.version }
+    for _, p in ipairs(players) do
+        local sc = Score.ScoreNormalized(p, summary, groupTotals)
+        out.list[#out.list + 1] = sc
+        if sc.playerGUID then out.byGuid[sc.playerGUID] = sc end
+    end
+    return out
+end
+
+-- Convenience: score just the local player (the runner) of a run.
+function Score.ScorePlayer(run)
+    for _, m in ipairs(run and run.party or {}) do
+        if m.isPlayer then
+            local players = Norm.Party(run)
+            local summary = Comp.Summarize(players)
+            local totals = { interrupts = 0, dispels = 0, dps = 0, hps = 0 }
+            for _, p in ipairs(players) do
+                if p.interrupts then totals.interrupts = totals.interrupts + p.interrupts end
+                if p.dispels then totals.dispels = totals.dispels + p.dispels end
+                if p.dps then totals.dps = totals.dps + p.dps end
+                if p.hps then totals.hps = totals.hps + p.hps end
+            end
+            totals = Base.EffectiveGroupTotals(players, summary, totals)
+            return Score.ScoreNormalized(Norm.Player(run, m), summary, totals)
+        end
+    end
+    return nil
+end
+
+-- Run config validation at load (logs any weight-sum mistakes).
+if Cfg.Validate then Cfg.Validate() end

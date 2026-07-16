@@ -8,6 +8,9 @@
 # Reference copy of the old standalone addon (kept locally, never shipped)
 /_TCC_source/
 
+# Dev-only plugin: Mythic Ledger mock-data generator (local testing only, never shipped/pushed)
+/TAP_MythicLedger_Dev/
+
 # Deploy / packaging / build scripts (local dev only)
 /deploy.ps1
 /package.ps1
@@ -27,6 +30,12 @@
 # Support-bot context (private - for the live help AI agent, never shipped/pushed)
 /context.md
 /guardrails.md
+
+# Local dev working notes (not shipped/pushed)
+/PATCH_CHANGES.md
+
+# Local screenshots (dev captures, not part of the shipped addon)
+/ScreenShots/
 
 # Editor / IDE / assistant
 .vscode/

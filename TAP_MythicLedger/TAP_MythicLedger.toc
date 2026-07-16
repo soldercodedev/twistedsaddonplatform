@@ -1,0 +1,66 @@
+## Interface: 120007
+## Title: |cffa06cf0TAP:|r Mythic Ledger
+## Notes: Account-wide Mythic+ run, party, and performance history. A module of the Twisteds Addon Platform - configure with /tap.
+## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
+## Author: Twistedfury-Zul'jin
+## Version: 1.0.0-beta.1
+## Category: Combat
+## Dependencies: TAP
+## SavedVariables: TAP_MythicLedgerDB
+## X-Curse-Project-Name: TAP_MythicLedger
+## X-Suite-Module: mythicLedger
+
+# Namespace, constants, and the data-driven expansion/season registry (loads first).
+Constants.lua
+
+# Centralised, defensive Blizzard-API wrappers + Secret-value safety (all risky calls live here).
+Compat.lua
+
+# Account-wide SavedVariables: schema, defaults, and the versioned migration framework.
+Database.lua
+
+# Combat-stat providers (Blizzard C_DamageMeter -> metadata-only), behind one interface.
+Providers.lua
+
+# The Mythic+ run lifecycle state machine: run / encounter / party tracking, reload recovery, dedupe.
+Tracker.lua
+
+# Derived data: party-member history aggregation, per-role stats, and personal bests.
+History.lua
+
+# Player scoring engine (fair, explainable, spec-aware). Config -> capability profiles -> normalize
+# -> composition -> baselines -> category scorers -> weight redistribution -> overall + explanation.
+Scoring\Config.lua
+Scoring\Capability.lua
+Scoring\Normalize.lua
+Scoring\Composition.lua
+Scoring\Baselines.lua
+Scoring\Categories.lua
+Scoring\Weights.lua
+Scoring\Score.lua
+# Scoring\Learned.lua  -- DISABLED: self-learning removed; baselines are group-relative & deterministic (see Baselines.lua)
+# Deterministic coaching review: category states -> "did well / work on" + recommendations.
+Scoring\Review.lua
+Scoring\Store.lua
+Scoring\Tests.lua
+
+# Returning-player recap service (local-only, anti-spam, role-aware).
+Recap.lua
+
+# Versioned, non-executable export / import.
+Export.lua
+
+# API self-check / diagnostics (validate the live API surface without running a key).
+Diag.lua
+
+# In-game "What's New" changelog.
+Changelog.lua
+
+# Central hero-tile config: icons + WoW-quality colour scales for the Overview summary tiles.
+HeroStats.lua
+
+# All UI pages (one module page + internal tabs) and the post-run summary modal.
+UI.lua
+
+# Module registration, lifecycle wiring, and slash commands (loads last).
+Module.lua

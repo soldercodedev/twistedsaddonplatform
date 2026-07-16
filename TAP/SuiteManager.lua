@@ -18,8 +18,11 @@ local Suite = _G.TAP
 
 local ICON_DIR = "Interface\\AddOns\\TAP\\assets\\icons\\"
 
--- Default suite look, out of the box (overridden by any saved appearance).
-local DEFAULT_SKIN = "dragonflight"
+-- Default suite look, out of the box (overridden by any saved appearance). The look is split
+-- into two independent axes: SHAPE (square vs rounded) and a COLOUR scheme (palette + accent).
+local DEFAULT_SKIN         = "dragonflight"   -- seeds NewTheme's palette/accent at creation
+local DEFAULT_SHAPE        = "rounded"        -- soft corners out of the box
+local DEFAULT_PALETTE_NAME = "dragonflight"   -- dragon-fire colours out of the box
 
 local theme = UIF:NewTheme({
     name    = "TAPManager",
@@ -31,6 +34,9 @@ local theme = UIF:NewTheme({
 -- (e.g. transient dialogs). It's the same object the appearance page mutates, so it stays live.
 Suite.uiTheme = theme
 
+-- Base command, listed on Help > Commands. Modules add their own via Suite:RegisterCommand.
+Suite:RegisterCommand({ cmd = "/tap", desc = "Open this Manager window", owner = "Platform" })
+
 ----------------------------------------------------------------------
 -- SavedVariables slots (under the shared suite DB).
 ----------------------------------------------------------------------
@@ -40,13 +46,31 @@ local function managerDB()
     return db.manager
 end
 
--- Persisted appearance { skin, accent = {r,g,b}, font = key }. Seeded from the live theme.
+-- Persisted appearance:
+--   { shape = "square"|"rounded",
+--     palette = <scheme name>|"custom",
+--     custom = { key = {r,g,b}, ... },   -- full palette, only used when palette == "custom"
+--     accent = {r,g,b},                  -- accent override on top of a non-custom scheme
+--     font = key,
+--     menuScale = 1.0 }                   -- proportional scale of the whole /tap panel (text + chrome)
+-- Seeded from the live theme. Legacy saves that stored a single `skin` are migrated in place.
 local function appearanceDB()
     local m = managerDB()
     m.theme = m.theme or {}
-    m.theme.skin   = m.theme.skin or theme.skin or DEFAULT_SKIN
-    m.theme.accent = m.theme.accent or { theme.C.accent[1], theme.C.accent[2], theme.C.accent[3] }
-    return m.theme
+    local t = m.theme
+    -- Migrate a legacy bundled-skin setting into the split shape + palette model.
+    if t.skin and not t.palette then
+        local sk = UIF.SKINS[t.skin]
+        t.shape   = (sk and sk.radius and sk.radius > 0) and "rounded" or "square"
+        t.palette = (t.skin == "rounded") and "flat" or t.skin   -- "rounded" was flat's palette
+        t.skin = nil
+    end
+    t.shape     = t.shape   or DEFAULT_SHAPE
+    t.palette   = t.palette or DEFAULT_PALETTE_NAME
+    t.accent    = t.accent  or { theme.C.accent[1], theme.C.accent[2], theme.C.accent[3] }
+    t.menuScale = t.menuScale or t.fontScale or 1   -- fontScale = the old key for this setting
+    t.fontScale = nil
+    return t
 end
 
 -- The font is governed SOLELY by the font selector (a.font), defaulting to the suite's bundled
@@ -54,18 +78,46 @@ end
 -- loadable until after login (WoW indexes font files only at client launch).
 local function applyFont()
     local a = appearanceDB()
-    theme.FONT = UIF.ResolveFontFile(theme:ResolveFont(a.font or "UBUNTU"))
+    -- Push the chosen font to EVERY registered theme (hub + each module's own theme) so module
+    -- config panels/chrome follow the global choice and a first-login TTF fallback self-corrects.
+    if UIF.SetGlobalFont then UIF.SetGlobalFont(a.font or "UBUNTU")
+    else theme:ApplyFont(a.font or "UBUNTU") end
 end
 
--- Apply the saved appearance: skin (palette/shape - also resets the accent), then the accent
--- override, then the font LAST so a skin's font can never override the user's chosen font.
+-- Apply the saved appearance: the COLOUR scheme first (a custom palette, or a named scheme +
+-- its accent override), then the SHAPE tokens, then the font LAST so nothing overrides the
+-- user's chosen font.
 local function applySavedAppearance()
     local a = appearanceDB()
-    if a.skin then pcall(theme.ApplySkin, theme, a.skin) end
-    if a.accent then theme:ApplyAccent(a.accent) end
+    if a.palette == "custom" then
+        theme:ApplyCustomPalette(a.custom or {})
+    else
+        theme:ApplyPalette(a.palette)
+        if a.accent then theme:ApplyAccent(a.accent) end
+    end
+    theme:ApplyShape(a.shape)
     applyFont()
 end
 applySavedAppearance()
+
+-- Bundled TTFs may not be loadable at file-load (WoW only indexes font files at client launch), so
+-- the probe in applyFont() can fall back to the game font on login/reload - that's the "my font
+-- reset" bug. Re-apply the saved font once we're logged in (and shortly after) when the TTFs are
+-- ready, then refresh any open window so the choice actually sticks.
+do
+    local fw = CreateFrame("Frame")
+    fw:RegisterEvent("PLAYER_LOGIN")
+    fw:RegisterEvent("PLAYER_ENTERING_WORLD")
+    local function reapply()
+        applyFont()
+        if _G.TAP and _G.TAP.RefreshWindow then pcall(_G.TAP.RefreshWindow, _G.TAP) end
+    end
+    fw:SetScript("OnEvent", function(_, ev)
+        reapply()
+        if C_Timer and C_Timer.After then C_Timer.After(1.5, reapply) end   -- one more pass once fonts settle
+        if ev == "PLAYER_ENTERING_WORLD" then fw:UnregisterEvent("PLAYER_ENTERING_WORLD") end
+    end)
+end
 
 ----------------------------------------------------------------------
 -- Shared helpers.
@@ -79,7 +131,7 @@ local function addonVersion(addonName)
 end
 
 -- The suite's own version, with a sane fallback if the .toc metadata isn't ready yet.
-local function suiteVersion() return addonVersion("TAP") or "1.1.0" end
+local function suiteVersion() return addonVersion("TAP") or "1.0.0-beta.2" end
 
 local function moduleNavIcon(spec)
     if spec.icon then return theme:ResolveIcon(spec.icon) end
@@ -265,26 +317,13 @@ local function pageModule(b, win, mod)
     local spec = mod.spec
     local x, y = 24, -18
 
-    if spec.icon then b:Glyph(x, y - 2, { icon = spec.icon, size = 26, color = C.accent }) end
-    b:Heading(spec.title or spec.id, x + (spec.icon and 36 or 0), y, "h1"); y = y - 36
-
-    -- Enable switch + status.
-    b:Toggle(x, y, mod:IsEnabled(), function(v) mod:SetEnabled(v) end, { color = C.accent })
-    b:Label(mod:IsEnabled() and "Enabled" or "Disabled", x + 46, y - 2, C.text, 13)
-    statusBadge(b, mod, x + w - 120, y - 1)
-    y = y - 30
-
-    if spec.desc then
-        local _, hh = b:Wrap(spec.desc, x, y, w - 44, C.subtext, 11)
-        y = y - (hh + 14)
-    else
-        y = y - 6
-    end
-
-    b:Section("SETTINGS", x, y); y = y - 32
+    -- No in-page header: the module's name is shown as the window-title suffix, and its enable/disable
+    -- toggle + status live on the Overview and Installed pages. This page is just the module's settings -
+    -- it renders straight into its own sections with no redundant "SETTINGS" band on top.
 
     if not mod:IsEnabled() then
-        b:Wrap("Enable this module to configure it.", x, y, w - 44, C.subtext, 12)
+        b:Wrap("This module is turned off. Switch it on from the Overview page to configure it.",
+            x, y, w - 44, C.subtext, 12)
         return y - 40
     end
     if not spec.Settings then
@@ -301,8 +340,48 @@ local function pageModule(b, win, mod)
 end
 
 ----------------------------------------------------------------------
--- Page: Settings (suite appearance - skin, accent, font)
+-- Page: Settings (suite appearance - shape, colours, accent, font)
 ----------------------------------------------------------------------
+
+-- Friendly labels for each editable palette variable (Custom mode).
+local PALETTE_KEY_LABELS = {
+    bg = "Background", sidebar = "Sidebar", panel = "Panel", card = "Card", hover = "Hover",
+    border = "Border", accent = "Accent", text = "Text", subtext = "Subtext",
+}
+
+-- Menu-scale slider: apply the saved window scale only once the mouse button is released. The slider
+-- lives INSIDE the window it scales, so applying live on every drag tick moves the thumb out from under
+-- the cursor (the "slider slides away as you drag it" bug). We poll briefly and set the scale when the
+-- left button is no longer held - which also covers a value typed into the readout field.
+local menuScaleTimer
+local function applyMenuScaleWhenReleased(w)
+    if menuScaleTimer then menuScaleTimer:Cancel() end
+    menuScaleTimer = C_Timer.NewTimer(0.06, function()
+        if IsMouseButtonDown and IsMouseButtonDown("LeftButton") then
+            applyMenuScaleWhenReleased(w); return   -- still dragging - check again shortly
+        end
+        menuScaleTimer = nil
+        if w and w.frame then w.frame:SetScale(appearanceDB().menuScale or 1) end
+    end)
+end
+
+-- Ensure a.custom holds an {r,g,b} for every palette variable, seeded from what's on screen
+-- now (so entering Custom starts from the current colours). Idempotent - keeps existing edits.
+-- IMPORTANT: reuse the existing per-key table instead of replacing it. The colour picker holds
+-- a reference to the table it edits and fires live during a drag (which triggers win:Refresh ->
+-- this reseed); replacing the table here would orphan the picker's edits so the colour never
+-- sticks. Mutating in place keeps the picker and the saved value pointing at the same table.
+local function seedCustomPalette(a)
+    a.custom = a.custom or {}
+    for _, k in ipairs(UIF.PALETTE_KEYS) do
+        if not a.custom[k] then
+            local c = theme.C[k] or { 0.5, 0.5, 0.5 }
+            a.custom[k] = { c[1], c[2], c[3] }
+        end
+    end
+    return a.custom
+end
+
 local function pageSettings(b, win)
     local C = theme.C
     local w = b.contentWidth
@@ -310,46 +389,83 @@ local function pageSettings(b, win)
     local x, y = 24, -18
 
     b:Heading("Appearance", x, y, "h1"); y = y - 34
-    local _, hh = b:Wrap("Customize the look of the Platform Manager. A skin changes the palette and "
-        .. "shape; the accent and font can be tuned on top. Saved across sessions.",
-        x, y, w - 44, C.subtext, 11)
+    local _, hh = b:Wrap("Customize the look of the Platform Manager. Pick a shape for the buttons "
+        .. "and borders, choose a colour scheme, and set the font. Choose |cffffffffCustom|r to set "
+        .. "every colour yourself. Saved across sessions.", x, y, w - 44, C.subtext, 11)
     y = y - (hh + 16)
 
-    -- Skins (quick buttons for the base set + a dropdown for everything, incl. expansions).
-    b:Section("SKIN", x, y); y = y - 30
+    -- SHAPE - buttons: square/sharp vs rounded corners & borders.
+    b:Section("SHAPE", x, y); y = y - 30
     local sx = x
-    for _, name in ipairs({ "flat", "rounded", "modern", "blizzard", "neon" }) do
-        local activeSkin = (a.skin or DEFAULT_SKIN) == name
-        b:Button(sx, y, 88, theme:SkinLabel(name), activeSkin and "primary" or "default", function()
-            theme:ApplySkin(name)
-            a.skin = name
-            a.accent = { theme.C.accent[1], theme.C.accent[2], theme.C.accent[3] }
-            applyFont()   -- re-assert the user's font (ApplySkin may have set the skin's font)
+    for _, name in ipairs(theme:ShapeList()) do
+        local active = a.shape == name
+        b:Button(sx, y, 132, theme:ShapeLabel(name), active and "primary" or "default", function()
+            theme:ApplyShape(name)
+            a.shape = name
             win:Refresh()
         end)
-        sx = sx + 94
+        sx = sx + 140
     end
-    y = y - 38
-    b:Label("All skins", x, y - 2, C.subtext)
-    local choices = {}
-    for _, name in ipairs(theme:SkinList()) do choices[#choices + 1] = { name, theme:SkinLabel(name) } end
-    b:Dropdown(x + 90, y):SetChoices(230, choices, function() return a.skin or DEFAULT_SKIN end, function(v)
-        theme:ApplySkin(v)
-        a.skin = v
-        a.accent = { theme.C.accent[1], theme.C.accent[2], theme.C.accent[3] }
-        applyFont()   -- re-assert the user's font
-        win:Refresh()
-    end)
-    y = y - 44
+    y = y - 42
 
-    -- Accent color.
-    b:Section("ACCENT", x, y); y = y - 30
-    b:Swatch(x, y - 2, a.accent, function(r, g, b2)
-        theme:ApplyAccent({ r, g, b2 })
-        win:Refresh()
-    end, "Accent color", "The platform's highlight color.")
-    b:Label("Accent color  ·  #" .. UIF.hexOf(a.accent[1], a.accent[2], a.accent[3]), x + 30, y - 4, C.text)
-    y = y - 34
+    -- COLOURS - a scheme dropdown (all palettes), plus a Custom entry.
+    b:Section("COLOURS", x, y); y = y - 30
+    b:Label("Scheme", x, y - 2, C.subtext)
+    -- Grouped menu: Neutral / Light / Styled / Expansion sections, plus a Custom entry at the end.
+    local function schemeItems()
+        local items = {}
+        for _, g in ipairs(theme:PaletteGroups()) do
+            items[#items + 1] = { label = g.header, header = true }
+            for _, name in ipairs(g.names) do items[#items + 1] = { label = theme:PaletteLabel(name), value = name } end
+        end
+        items[#items + 1] = { label = "Custom…", value = "custom" }
+        return items
+    end
+    b:Dropdown(x + 76, y):SetMenu(230, schemeItems, function() return a.palette or DEFAULT_PALETTE_NAME end,
+        function(v)
+            if v == "custom" then
+                seedCustomPalette(a)               -- start from the currently-shown colours
+                a.palette = "custom"
+                theme:ApplyCustomPalette(a.custom)
+            else
+                a.palette = v
+                theme:ApplyPalette(v)
+                a.accent = { theme.C.accent[1], theme.C.accent[2], theme.C.accent[3] }   -- adopt the scheme's accent
+            end
+            win:Refresh()
+        end,
+        function(v) return v == "custom" and "Custom…" or theme:PaletteLabel(v) end)
+    y = y - 40
+
+    if a.palette == "custom" then
+        -- Full palette editor: a swatch + hex for every colour variable, in two columns.
+        local cust = seedCustomPalette(a)
+        b:Wrap("Click a swatch to set each colour. These define the whole palette.",
+            x, y, w - 44, C.subtext, 10)
+        y = y - 20
+        local colW, rowTop = (w - 52) / 2, y
+        for i, k in ipairs(UIF.PALETTE_KEYS) do
+            local col = (i - 1) % 2
+            local ry = rowTop - math.floor((i - 1) / 2) * 30
+            local cx = x + col * colW
+            local label = PALETTE_KEY_LABELS[k] or k
+            b:Swatch(cx, ry - 2, cust[k], function()
+                theme:ApplyCustomPalette(cust)   -- cust[k] was mutated in place by the swatch
+                win:Refresh()
+            end, label, "Set the " .. label:lower() .. " colour.")
+            b:Label(label .. "  ·  #" .. UIF.hexOf(cust[k][1], cust[k][2], cust[k][3]), cx + 28, ry - 4, C.text, 11)
+        end
+        y = rowTop - math.ceil(#UIF.PALETTE_KEYS / 2) * 30 - 10
+    else
+        -- Accent override, layered on top of the chosen scheme.
+        b:Section("ACCENT", x, y); y = y - 30
+        b:Swatch(x, y - 2, a.accent, function(r, g, b2)
+            theme:ApplyAccent({ r, g, b2 })
+            win:Refresh()
+        end, "Accent color", "The platform's highlight color, on top of the colour scheme.")
+        b:Label("Accent color  ·  #" .. UIF.hexOf(a.accent[1], a.accent[2], a.accent[3]), x + 30, y - 4, C.text)
+        y = y - 34
+    end
 
     -- Font.
     b:Section("FONT", x, y); y = y - 30
@@ -358,20 +474,25 @@ local function pageSettings(b, win)
         applyFont()
         win:Refresh()
     end })
-    y = y - 40
+    y = y - 42
 
-    -- Live preview + reset.
-    b:Section("PREVIEW", x, y); y = y - 30
-    b:Button(x, y, 96, "Primary", "primary", function() end)
-    b:Button(x + 104, y, 96, "Default", "default", function() end)
-    b:Badge(x + 208, y + 4, { text = "ACCENT", variant = "accent", pill = true })
-    y = y - 34
-    b:ProgressBar(x, y, { width = 300, height = 12, value = 66, color = "accent" })
-    y = y - 30
+    -- Menu scale - its own subsection. Scales the whole /tap panel (text + chrome) proportionally.
+    -- Applied on RELEASE (not per drag tick) via applyMenuScaleWhenReleased, because the slider sits
+    -- inside the window it scales.
+    b:Section("MENU SCALE", x, y); y = y - 36
+    theme:SetTip(b:Slider(x, y):Configure(300, 0.8, 1.5, 0.05,
+        function() return a.menuScale or 1 end,
+        function(v) a.menuScale = v; applyMenuScaleWhenReleased(win) end, "%.2fx"),
+        "Menu scale", "Scales this platform menu (text and everything in it) up or down.")
+    y = y - 24
+    local _, mh = b:Wrap("Only affects this /tap window - the scoreboard and on-screen combat cues keep "
+        .. "their own size.", x, y, w - 44, C.subtext, 10)
+    y = y - (mh + 14)
+
+    -- Reset.
     b:Button(x, y, 150, "Reset Appearance", "danger", function()
-        managerDB().theme = nil
-        theme:ApplySkin(DEFAULT_SKIN)   -- restores dragon-fire palette + accent
-        applyFont()                     -- back to the default Ubuntu font
+        managerDB().theme = nil         -- appearanceDB() re-seeds the defaults on next read
+        applySavedAppearance()          -- rounded shape + dragon-fire palette + default font
         win:Refresh()
     end)
     return y - 40
@@ -473,8 +594,14 @@ local function pageAbout(b, win)
     local C = theme.C
     local w = b.contentWidth
     local x, y = 24, -18
-    b:Heading("Twisteds Addon Platform", x, y, "h1"); y = y - 34
-    b:Label("Version " .. suiteVersion(), x, y, C.accent, 12); y = y - 26
+
+    -- Full platform logo, with the name + version alongside it.
+    local L = 72
+    b:Logo(x, y, L, "Interface\\AddOns\\TAP\\assets\\images\\TAP_LOGO_FULL.tga")
+    local tx = x + L + 16
+    b:Heading("Twisteds Addon Platform", tx, y - 4, "h1")
+    b:Label("Version " .. suiteVersion(), tx, y - 38, C.accent, 12)
+    y = y - (L + 14)
 
     local _, hh = b:Wrap("This is the home base for Twisted's collection of add-ons. Rather than a pile "
         .. "of separate add-ons that all look and behave differently, they live here together - sharing "
@@ -528,21 +655,60 @@ local function pageAbout(b, win)
     end
     y = y - 6
 
-    -- Commands
-    b:Section("COMMANDS", x, y); y = y - 30
-    b:Label("/tap", x, y, C.accent, 12)
-    b:Label("Open this window", x + 170, y, C.subtext, 12)
-    y = y - 26
-
     -- Community
     b:Section("COMMUNITY", x, y); y = y - 30
     local _, ch = b:Wrap("Questions, bug reports, or ideas? Come hang out - click to copy the invite.",
         x, y, w - 44, C.subtext, 11)
     y = y - (ch + 8)
     b:Button(x, y, 170, "Join our Discord", "default", function()
-        theme:ShowLinkDialog("Discord - copy this link (Ctrl+C)", "https://discord.com/invite/pN5vYDrQ5j")
+        theme:ShowLinkDialog("Discord - copy this link (Ctrl+C)", "https://discord.gg/pN5vYDrQ5j")
     end, { color = "5865F2", textColor = "FFFFFF", icon = theme:GetIcon("discord", "social"), iconSize = 15 })
     y = y - 36
+    return y - 16
+end
+
+----------------------------------------------------------------------
+-- Page: Commands (every slash command across the platform + its modules, grouped by owner).
+-- Modules contribute via Suite:RegisterCommand{ cmd, desc, owner, subcommands }.
+----------------------------------------------------------------------
+local function pageCommands(b, win)
+    local C = theme.C
+    local w = b.contentWidth
+    local x, y = 24, -18
+
+    b:Heading("Commands", x, y, "h1"); y = y - 34
+    local _, hh = b:Wrap("Every slash command across the platform and its installed modules. "
+        .. "Type |cffffffff/tap|r on its own to open this window.", x, y, w - 44, C.subtext, 11)
+    y = y - (hh + 16)
+
+    -- Group by owner, preserving the order owners first appear in the registry.
+    local order, byOwner = {}, {}
+    for _, c in ipairs(Suite:GetCommands()) do
+        local o = c.owner or "Platform"
+        if not byOwner[o] then byOwner[o] = {}; order[#order + 1] = o end
+        table.insert(byOwner[o], c)
+    end
+    if #order == 0 then
+        b:Wrap("No commands registered.", x, y, w - 44, C.subtext, 12)
+        return y - 30
+    end
+
+    for _, o in ipairs(order) do
+        b:Section(o:upper(), x, y); y = y - 30
+        for _, c in ipairs(byOwner[o]) do
+            b:Label(c.cmd, x, y - 2, C.accent, 12)
+            if c.desc then b:Label(c.desc, x + 210, y - 2, C.subtext, 12) end
+            y = y - 22
+            if c.subcommands then
+                for _, sc in ipairs(c.subcommands) do
+                    b:Label(c.cmd .. " " .. sc[1], x + 16, y - 2, C.text, 11)
+                    if sc[2] then b:Label(sc[2], x + 210, y - 2, C.subtext, 11) end
+                    y = y - 20
+                end
+            end
+        end
+        y = y - 12
+    end
     return y - 16
 end
 
@@ -575,6 +741,8 @@ local function buildPages()
                 view   = "mod:" .. m.spec.id,
                 label  = m.spec.title or m.spec.id,
                 icon   = moduleNavIcon(m.spec),
+                -- Shown after the platform name in the window title while this module is selected.
+                titleSuffix = "  ·  " .. (m.spec.title or m.spec.id),
                 render = function(b, w) return pageModule(b, w, m) end,
                 -- Let a module reset its page state when its nav entry is (re)clicked.
                 onSelect = function() if m.spec.OnSelect then m.spec.OnSelect(m) end end,
@@ -582,6 +750,7 @@ local function buildPages()
         end
     end
     pages[#pages + 1] = { header = "Help" }
+    pages[#pages + 1] = { view = "commands", label = "Commands", icon = theme:GetIcon("chevron-right"), render = pageCommands }
     pages[#pages + 1] = { view = "about", label = "About", icon = theme:GetIcon("sparkles"), render = pageAbout }
     return pages
 end
@@ -597,13 +766,17 @@ local function createWindow()
         contentFluid = true,   -- content stretches to the window width (and grows when maximized)
         savedPos = managerDB().pos,
         onMovePos = function(p) managerDB().pos = p end,
+        -- "Menu scale": scale the whole /tap panel (text + chrome) proportionally. Per-frame, so it
+        -- never touches the scoreboard, combat-alert cues, or any other addon frame. Read live each
+        -- Refresh so a saved scale is re-applied on open.
+        onScale = function() return appearanceDB().menuScale or 1 end,
         pages = buildPages(),
         footer = {
             style    = "expanded",
             left     = "Twisteds Addon Platform",
             subtitle = "/tap",
             right    = "v" .. suiteVersion(),
-            socials  = { { brand = "discord", url = "https://discord.com/invite/pN5vYDrQ5j" } },
+            socials  = { { brand = "discord", url = "https://discord.gg/pN5vYDrQ5j" } },
         },
         defaultView = "overview",
     })
@@ -646,7 +819,15 @@ end)
 -- Slash command
 ----------------------------------------------------------------------
 SLASH_TAP1 = "/tap"
-SlashCmdList["TAP"] = function()
+SlashCmdList["TAP"] = function(msg)
+    msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if msg ~= "" then
+        local sub, rest = msg:match("^(%S+)%s*(.*)$")
+        if Suite:RunCommand(sub, rest) then return end
+        print("|cffa06cf0Twisteds Addon Platform|r: unknown command '" .. sub
+            .. "' - type |cffffffff/tap|r for the Manager, or open Help > Commands.")
+        return
+    end
     ensureWindow()
     win:Toggle()
 end

@@ -8,6 +8,10 @@ local ADDON, UIF = ...
 
 local FDIR = "Interface\\AddOns\\TAP\\assets\\fonts\\"
 
+-- The single global UI-font default. There is no per-theme / per-skin font: the selected font (set
+-- via UIF.SetGlobalFont from the appearance page) always wins and is shared by every theme.
+UIF.DEFAULT_FONT_KEY = "UBUNTU"
+
 UIF.DEFAULT_FONTS = {
     -- WoW built-ins (always available)
     { key = "FRIZQT",   label = "Friz Quadrata (default)", path = "Fonts\\FRIZQT__.TTF" },

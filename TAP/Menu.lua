@@ -115,7 +115,10 @@ function Mixin:_openLevel(level, anchor, items, getSel, onPick)
     else m._getSel, m._onPick = self._menus[1]._getSel, self._menus[1]._onPick end
     getSel, onPick = m._getSel, m._onPick
 
-    UIF.paint(m._brd, self.C.accent)
+    -- The menu frame is cached per level, so re-skin it on every open: this re-applies the live
+    -- palette (panel bg + accent border) AND the current shape, so a theme/skin swap sticks instead of
+    -- the popup keeping the colours it had when first created (e.g. a dark bg under a light theme).
+    self:StylePanel(m, self.C.panel, self.C.accent)
     for _, it in ipairs(m.items) do it:Hide() end
     local width = math.max((level == 1 and (anchor:GetWidth() or 150)) or 150, 160)
     local sel = getSel and getSel() or nil

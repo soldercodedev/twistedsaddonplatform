@@ -96,7 +96,7 @@ local DEFAULTS = {
     enabled     = true,
     channel     = "Master",
     accentColor  = { 0.04, 0.34, 0.79 },  -- UI theme accent (bootstrap primary, darker)
-    windowScale  = 1.0,       -- Cue Manager window scale
+    windowScale  = 1.0,       -- Alerts Manager window scale
     windowPos    = nil,       -- { point, x, y } for the manager window
     minimap      = { angle = 214, hide = false },  -- minimap button
     pollInterval = 0.25,      -- how often polling conditions are re-checked (sec)
@@ -263,20 +263,74 @@ function TCC.ListProfiles()
     return names
 end
 
--- Switch this character between the account profile and its own profile.
-function TCC.SetScope(useChar)
+-- Point this character at any existing (or newly created) profile and make it live.
+function TCC.SetActiveProfile(name)
+    if not name or name == "" then return end
     for _, st in pairs(ruleState) do
         if st.loop then st.loop:Cancel(); st.loop = nil end
     end
     wipe(ruleState)
     local root = TAP_CombatAlertsDB
     root.charChoice = root.charChoice or {}
-    if useChar then EnsureProfile(charKey()) end
-    root.charChoice[charKey()] = useChar and charKey() or ACCOUNT_KEY
+    EnsureProfile(name)
+    root.charChoice[charKey()] = name
     SelectActive()
     TCC.ApplySettings()
     if TCC.RefreshOptions then TCC.RefreshOptions() end
     print(PREFIX .. "Alerts profile: |cff33ff33" .. TCC.ProfileLabel(TCC.activeProfile) .. "|r")
+end
+
+-- Back-compat: the old binary Account <-> this-character switch.
+function TCC.SetScope(useChar)
+    TCC.SetActiveProfile(useChar and charKey() or ACCOUNT_KEY)
+end
+
+-- Create a new named profile (seeded by EnsureProfile). `activate` switches this character to it.
+-- Returns the name on success, or nil + reason ("empty" / "reserved" / "exists").
+function TCC.CreateProfile(name, activate)
+    name = name and name:gsub("^%s+", ""):gsub("%s+$", "") or ""
+    if name == "" then return nil, "empty" end
+    if name == ACCOUNT_KEY then return nil, "reserved" end
+    local root = TAP_CombatAlertsDB
+    root.profiles = root.profiles or {}
+    if root.profiles[name] then return nil, "exists" end
+    EnsureProfile(name)
+    if activate then TCC.SetActiveProfile(name)
+    elseif TCC.RefreshOptions then TCC.RefreshOptions() end
+    return name
+end
+
+-- Rename a profile (the Account profile can't be renamed). Repoints any character using it.
+-- Returns the new name, or nil + reason.
+function TCC.RenameProfile(oldName, newName)
+    newName = newName and newName:gsub("^%s+", ""):gsub("%s+$", "") or ""
+    if not oldName or oldName == ACCOUNT_KEY then return nil, "reserved" end
+    if newName == "" or newName == ACCOUNT_KEY then return nil, "invalid" end
+    local root = TAP_CombatAlertsDB
+    if not (root.profiles and root.profiles[oldName]) then return nil, "missing" end
+    if root.profiles[newName] then return nil, "exists" end
+    root.profiles[newName], root.profiles[oldName] = root.profiles[oldName], nil
+    root.charChoice = root.charChoice or {}
+    for ck, pn in pairs(root.charChoice) do if pn == oldName then root.charChoice[ck] = newName end end
+    SelectActive()
+    TCC.ApplySettings()
+    if TCC.RefreshOptions then TCC.RefreshOptions() end
+    return newName
+end
+
+-- Delete a profile (the Account profile can't be deleted). Any character using it falls back to
+-- Account-wide. Returns true, or nil + reason.
+function TCC.DeleteProfile(name)
+    if not name or name == ACCOUNT_KEY then return nil, "reserved" end
+    local root = TAP_CombatAlertsDB
+    if not (root.profiles and root.profiles[name]) then return nil, "missing" end
+    root.profiles[name] = nil
+    root.charChoice = root.charChoice or {}
+    for ck, pn in pairs(root.charChoice) do if pn == name then root.charChoice[ck] = ACCOUNT_KEY end end
+    SelectActive()
+    TCC.ApplySettings()
+    if TCC.RefreshOptions then TCC.RefreshOptions() end
+    return true
 end
 
 -- Rules in a profile, for the copy UI ({id, name}).
@@ -508,13 +562,13 @@ local function makeVisualFrame()
     local bg = f:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(); bg:SetColorTexture(0.1, 0.5, 0.95, 0.15); bg:Hide(); f.moverBg = bg
     local hint = f:CreateFontString(nil, "OVERLAY")
-    hint:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12)
+    hint:SetFont(TCC.ResolveFont(nil), 12)   -- themed UI font (follows the global font choice)
     hint:SetPoint("TOP", f, "BOTTOM", 0, -2); hint:SetTextColor(0.4, 0.7, 1); hint:Hide(); f.moverHint = hint
 
     -- Small identifier shown above each ghost while repositioning, so it's clear
     -- which alert is which (its icon + name).
     local idName = f:CreateFontString(nil, "OVERLAY")
-    idName:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 13)
+    idName:SetFont(TCC.ResolveFont(nil), 13)
     idName:SetPoint("BOTTOM", f, "TOP", 10, 4); idName:SetTextColor(0.55, 0.8, 1); idName:Hide(); f.moverLabel = idName
     local idIcon = f:CreateTexture(nil, "OVERLAY")
     idIcon:SetSize(20, 20); idIcon:SetPoint("RIGHT", idName, "LEFT", -6, 0); idIcon:SetTexCoord(0, 1, 0, 1); idIcon:Hide(); f.moverIcon = idIcon
@@ -1076,7 +1130,7 @@ local function HandleSlash(msg)
     elseif msg == "off" then
         TCC.SetEnabled(false)
     elseif msg == "test" then
-        print(PREFIX .. "Testing cue...")
+        print(PREFIX .. "Testing alert...")
         TCC.PlayKey("RAID_WARNING", db.channel)
         TCC.FlashVisual("TEST", 1.5)
     elseif msg == "move" then
@@ -1103,11 +1157,11 @@ local function HandleSlash(msg)
             print(PREFIX .. "Nothing to confirm. Type |cffffff00/tcc reset|r first.")
         end
     else
-        print(PREFIX .. "Commands:")
-        print("  |cffffff00/tcc|r - open the Cue Manager (alerts)")
+        print(PREFIX .. "Commands (|cffffff00/tcc|r or |cffffff00/tap alerts|r):")
+        print("  |cffffff00/tcc|r - open the Alerts Manager")
         print("  |cffffff00/tcc options|r - global options panel")
         print("  |cffffff00/tcc on|r / |cffffff00/tcc off|r - enable/disable")
-        print("  |cffffff00/tcc test|r - play a test cue")
+        print("  |cffffff00/tcc test|r - play a test alert")
         print("  |cffffff00/tcc move|r - reposition all on-screen alerts")
         print("  |cffffff00/tcc status|r - list alerts and state")
         print("  |cffffff00/tcc debug|r - live diagnostics (what the engine sees)")
@@ -1120,6 +1174,28 @@ end
 SLASH_TWISTEDSCOMBATCUES1 = "/tcc"
 SLASH_TWISTEDSCOMBATCUES2 = "/twistedscombatcues"
 SlashCmdList["TWISTEDSCOMBATCUES"] = HandleSlash
+
+-- Mirror the whole command set under the platform slash (/tap alerts ...) and list it on the
+-- Manager's Help > Commands page. The native /tcc keeps working alongside this.
+if _G.TAP and _G.TAP.RegisterCommand then
+    _G.TAP:RegisterCommand({
+        cmd = "/tap alerts", desc = "Combat Alerts manager & tools", owner = "Combat Alerts",
+        sub = "alerts", handler = HandleSlash,
+        subcommands = {
+            { "options",       "Global options panel" },
+            { "on",            "Enable Combat Alerts" },
+            { "off",           "Disable Combat Alerts" },
+            { "test",          "Play a test alert" },
+            { "move",          "Reposition all on-screen alerts" },
+            { "status",        "List alerts and state" },
+            { "debug",         "Live diagnostics (what the engine sees)" },
+            { "macros",        "Macro factory (focus / interrupt)" },
+            { "togglemarkers", "Show/hide the on-screen marker palette" },
+            { "reset",         "Reset everything (confirmation required)" },
+        },
+    })
+    _G.TAP:RegisterCommand({ cmd = "/tcc", desc = "Alias for /tap alerts (native slash)", owner = "Combat Alerts" })
+end
 
 ----------------------------------------------------------------------
 -- Events
