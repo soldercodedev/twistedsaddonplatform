@@ -151,6 +151,8 @@ _G.TAPMythicLedger = {
     NewRunId = function() return ML.DB.NewRunId() end,
     Rebuild  = function() ML.History.RebuildAll() end,
     Wipe     = function() ML.DB.WipeHistory() end,
+    -- DEV: remove ONLY generated mock runs (providerVersion == "mock"); returns the count removed.
+    WipeDummy = function() return ML.DB.WipeMockRuns() end,
     Refresh  = function() if _G.TAP and _G.TAP.RefreshWindow then _G.TAP:RefreshWindow() end end,
     STATUS   = ML.STATUS,
     Season   = function() return ML.API.GetCurrentSeason() end,

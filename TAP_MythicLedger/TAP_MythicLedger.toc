@@ -3,7 +3,7 @@
 ## Notes: Account-wide Mythic+ run, party, and performance history. A module of the Twisteds Addon Platform - configure with /tap.
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
 ## Author: Twistedfury-Zul'jin
-## Version: 1.0.0-beta.3
+## Version: 1.0.0-beta.4
 ## Category: Combat
 ## Dependencies: TAP
 ## SavedVariables: TAP_MythicLedgerDB

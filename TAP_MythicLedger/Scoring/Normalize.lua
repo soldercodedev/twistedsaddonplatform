@@ -37,6 +37,9 @@ function Norm.Player(run, member)
         -- Live talent-inspection verdict for a TALENT-GATED dispel (true/false/nil = has/not/unknown).
         -- Lets Categories.Dispel avoid docking a player for a dispel they never talented.
         dispelTalent = member.dispelTalent,
+        -- Same idea for a TALENT/PET-GATED interrupt (Warlock Spell Lock). nil today (Spell Lock is a pet
+        -- ability, not a readable talent node) - the gate falls back to "did they actually kick".
+        interruptTalent = member.interruptTalent,
 
         durationSeconds = num(run.duration),
         damageDone   = num(s.damage),

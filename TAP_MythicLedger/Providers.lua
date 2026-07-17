@@ -188,15 +188,30 @@ local function readMeterStats(ctx, sourceLabel)
             local g = keyOf(src)
             if g then local d = bucket(g); d.healing = ML.ReadNum(src.totalAmount); d.hps = ML.ReadNum(src.amountPerSecond) end
         end
-        -- Single-value metrics: one row per source, totalAmount = the value/count.
+        -- Single-value metrics: one row per source, totalAmount = the value/count. These key straight
+        -- by source and overwrite (one row per member).
         local single = {
             damageTaken = MT.DamageTaken, avoidableDamageTaken = MT.AvoidableDamageTaken,
-            absorbs = MT.Absorbs, interrupts = MT.Interrupts, dispels = MT.Dispels,
+            absorbs = MT.Absorbs,
         }
         for key, mt in pairs(single) do
             for _, src in ipairs(sourcesOf(mt) or {}) do
                 local g = keyOf(src)
                 if g then bucket(g)[key] = ML.ReadNum(src.totalAmount) end
+            end
+        end
+        -- Interrupts & dispels can come from a PET (Warlock Spell Lock / Devour Magic, ...) whose
+        -- sourceGUID isn't a group member, and a pet that died + resummoned appears as SEVERAL distinct
+        -- source rows over the run. So fold any pet source into its OWNER (ctx.petOwners, mapped live by
+        -- the Tracker) and ACCUMULATE across all rows for that owner, rather than overwrite/drop.
+        local petOwners = (ctx and ctx.petOwners) or nil
+        local folded = { interrupts = MT.Interrupts, dispels = MT.Dispels }
+        for key, mt in pairs(folded) do
+            for _, src in ipairs(sourcesOf(mt) or {}) do
+                local g = keyOf(src)
+                if g and petOwners and petOwners[g] then g = petOwners[g] end   -- pet -> owner
+                local v = g and ML.ReadNum(src.totalAmount)
+                if v then local d = bucket(g); d[key] = (d[key] or 0) + v end
             end
         end
         -- Deaths are DIFFERENT: the Deaths session is a LIST of death EVENTS (one row per death), not

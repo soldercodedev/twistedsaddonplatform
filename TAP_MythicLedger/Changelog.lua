@@ -5,6 +5,16 @@ local ADDON, ML = ...
 ML.CHANGELOG = [==[
 # Mythic Ledger - What's New
 
+## 1.0.0-beta.4
+
+- **[BUG FIX]** **Warlock interrupts now count.** Spell Lock fires from the Felhunter, so the meter
+  files those kicks under the **pet** - not the Warlock - and a pet that dies and resummons gets a
+  brand-new source id, so they were being dropped entirely (a Warlock's interrupts could read 0). The
+  ledger now maps each pet to its owner live during the run and folds pet interrupts / dispels (Spell
+  Lock, Devour Magic) back onto the player; a pet/talent-gated interrupt a player couldn't use (and
+  didn't land) is scored **N/A**, never a zero. *(Fix is in but not yet confirmed in a live key -
+  please report if a Warlock's kicks still read 0.)*
+
 ## 1.0.0-beta.3
 
 - **[NEW]** **Run details, rebuilt.** Opening a run now shows the party and boss splits as **hero

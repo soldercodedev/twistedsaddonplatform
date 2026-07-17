@@ -46,6 +46,23 @@ function Cat.Interrupt(norm, summary, groupInterruptTotal)
                  interrupt = prof.interrupt }
     end
 
+    -- Capability gate (talent/pet-gated interrupts only - e.g. Warlock Spell Lock via the Felhunter):
+    -- only expect a kick when we have EVIDENCE the player could do it - live inspection confirmed it
+    -- (norm.interruptTalent == true) OR they actually landed at least one interrupt this run (pet kicks
+    -- are attributed to the owner). Otherwise we DON'T dock them for a tool their pet/talent may not
+    -- provide: N/A, weight redistributed. Baseline interrupts skip this and are always expected.
+    if prof.interrupt and prof.interrupt.talentDependent then
+        local didKick = (type(norm.interrupts) == "number" and norm.interrupts >= 1)
+        if norm.interruptTalent ~= true and not didKick then
+            local ability = (prof.interrupt and prof.interrupt.spellName) or "an interrupt"
+            return { applicable = false, profile = profileKey, capabilityGated = true,
+                     talentMissing = (norm.interruptTalent == false), interrupt = prof.interrupt,
+                     reason = (norm.interruptTalent == false)
+                         and ("Could bring " .. ability .. " but didn't - no interrupt expected here.")
+                         or ("Interrupt not scored: couldn't confirm " .. ability .. " was available (pet/talent).") }
+        end
+    end
+
     local minutes = (norm.durationSeconds or 0) / 60
     -- Per-spec expected kicks/minute from this spec's real availability (CD + rotational extra stops),
     -- not a flat per-profile number. Fall back to the coarse profile rate only if there's no CD data.

@@ -336,6 +336,21 @@ function DB.WipeHistory()
     ML.Log("History wiped")
 end
 
+-- Dev-support cleanup: remove ONLY generated mock runs (the dev mock-data tool stamps every fake run
+-- with providerVersion == "mock"), leaving your real history intact. Rebuilds derived caches once and
+-- returns how many runs were removed. Used by /mldev wipe dummy to undo a mock-generate on a live DB.
+function DB.WipeMockRuns()
+    if not DB.root then return 0 end
+    local runs = DB.root.runs
+    local removed = 0
+    for i = #runs, 1, -1 do
+        if runs[i].providerVersion == "mock" then table.remove(runs, i); removed = removed + 1 end
+    end
+    if removed > 0 and ML.History and ML.History.RebuildAll then pcall(ML.History.RebuildAll) end
+    ML.Log("Wiped %d mock run(s)", removed)
+    return removed
+end
+
 ----------------------------------------------------------------------
 -- ADDON_LOADED bootstrap (file scope - runs regardless of module enable state, so the UI can
 -- always read history; tracking itself is gated by the module's OnEnable).

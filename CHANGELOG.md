@@ -3,12 +3,17 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
-## 1.0.0-beta.4
+## 1.0.1
 
-A big **Mythic Ledger** visual + scoring pass (module version 1.0.0-beta.3), plus a platform-wide
+A big **Mythic Ledger** visual + scoring pass (module version 1.0.0-beta.4), plus a platform-wide
 **per-module on/off** you can reach from any module's own Settings tab, and settings tidy-ups across
 the other modules.
 
+- **[BUG FIX]** **Mythic Ledger — Warlock interrupts now count.** Spell Lock fires from the Felhunter,
+  so the meter filed those kicks under the **pet** (and a resummoned pet gets a new source id), dropping
+  them — a Warlock's interrupts could read 0. Pet interrupts/dispels are now mapped back to the owner
+  live during the run, and a pet/talent-gated interrupt a player couldn't use is scored **N/A**, not a
+  zero. *(Fix is in but not yet confirmed in a live key.)*
 - **[NEW]** **Enable/disable any module from its own page.** Every module's **Settings** tab now has a
   master on/off switch, and a module you switch off shows a clear **MODULE DISABLED** overlay on its
   other tabs (with a jump straight back to Settings) instead of a dead page. **Rotation Assistant** and

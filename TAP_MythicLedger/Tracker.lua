@@ -28,6 +28,24 @@ local frame
 local runT0                -- GetTime() at run start, so boss kills can be stamped seconds-into-run
 local runStartScore        -- your M+ score at run start, to compute this run's score gain
 
+-- Pet -> owner GUID map, built LIVE across the whole run. C_DamageMeter attributes a pet's interrupts
+-- (and pet dispels like Devour Magic) to the PET's sourceGUID, not the player - and a pet that dies and
+-- resummons gets a NEW sourceGUID, so one end-of-run read would fragment a Warlock's kicks across
+-- several pet rows and drop them (a pet isn't a group member). We sample every pet as it appears (on
+-- UNIT_PET + at each stat read) and keep the mapping so finalize can fold each pet row into its owner.
+local petOwners = {}
+local PET_UNITS = { player = "pet", party1 = "partypet1", party2 = "partypet2",
+                    party3 = "partypet3", party4 = "partypet4" }
+local function samplePets()
+    for ownerUnit, petUnit in pairs(PET_UNITS) do
+        if UnitExists(petUnit) then
+            local pg = ML.ReadStr(UnitGUID(petUnit))
+            local og = ML.ReadStr(UnitGUID(ownerUnit))
+            if pg and og then petOwners[pg] = og end
+        end
+    end
+end
+
 local function setState(s)
     if state ~= s then ML.Log("state %s -> %s", state, s) end
     state = s
@@ -100,7 +118,8 @@ end
 -- player gets no stats and no per-boss DPS.
 local function runCtx()
     if not current then return nil end
-    return { player = current.character, party = current.party }
+    samplePets()   -- catch any current pets right before a stat read (cheap; <=5 units)
+    return { player = current.character, party = current.party, petOwners = petOwners }
 end
 
 local function sumDeaths(party)
@@ -227,6 +246,7 @@ function Tracker.BeginRun()
     runT0 = GetTime()
     runStartScore = API.MythicRating("player")
     encounters = {}
+    petOwners = {}; samplePets()   -- fresh pet->owner map for this run; seed with whatever's out now
     provider = Providers.Select()
     run.provider = provider:GetSource()
     run.providerVersion = provider:GetVersion()
@@ -636,6 +656,7 @@ local function restoreFromRecord(rec)
     run.seasonId  = rec.seasonId or run.seasonId
     current = run
     encounters = {}
+    petOwners = {}; samplePets()   -- pre-reload pet history is lost; seed from whatever's out now
     provider = Providers.Select()
     run.provider = provider:GetSource()
     Providers.Counters.SetParty(guidSet(run.party))
@@ -701,7 +722,7 @@ end
 local EVENTS = {
     "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED", "CHALLENGE_MODE_RESET",
     "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE", "ENCOUNTER_START", "ENCOUNTER_END",
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "UNIT_PET",
 }
 
 local function onEvent(_, event, a1, a2, a3, a4, a5)
@@ -709,6 +730,10 @@ local function onEvent(_, event, a1, a2, a3, a4, a5)
         Tracker.OnCombatChange(true)
     elseif event == "PLAYER_REGEN_ENABLED" then
         Tracker.OnCombatChange(false)
+    elseif event == "UNIT_PET" then
+        -- A group member's pet changed (summon / dismiss / death-resummon). Record the new pet's GUID
+        -- so its meter interrupts can be folded back to the owner, even after the pet later dies.
+        if state == STATE.ACTIVE then samplePets() end
     elseif event == "CHALLENGE_MODE_START" then
         Tracker.BeginRun()
     elseif event == "CHALLENGE_MODE_COMPLETED" then
