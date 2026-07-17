@@ -111,8 +111,12 @@ function Cat.Dispel(norm, summary, groupDispelTotal)
     -- Dungeon dispel DEMAND: scale expected by how dispel-heavy THIS dungeon is for the types this spec
     -- can address (max weight among its present types; 1.0 when unlisted). Magic-heavy dungeons expect
     -- more dispels, light ones fewer - so a quiet run in Skyreach isn't judged against a Magisters load.
-    local demand = Cfg.DungeonDispelDemand(norm.dungeonName, Cfg.DispelTypeSet(prof.dispel))
+    local specTypes = Cfg.DispelTypeSet(prof.dispel)
+    local demand = Cfg.DungeonDispelDemand(norm.dungeonName, specTypes)
     local expected = minutes * rate * compMod * demand
+    -- What this spec could have dispelled/purged here (specific effects with spell ids + Dispel/Purge/
+    -- Soothe action), so the run review can coach with the ability + target icons instead of "no dispels".
+    local dispelTargets = Cfg.DungeonDispelTargets(norm.dungeonName, prof.dispel)
     local cconf = Cfg.confidence.dispel
     local neutral = cconf.neutralScore
 
@@ -120,6 +124,7 @@ function Cat.Dispel(norm, summary, groupDispelTotal)
         return { applicable = true, profile = profileKey, score = neutral, rawScore = neutral,
                  confidence = 0, expected = expected, actual = nil, compModifier = compMod,
                  compDetail = compDetail, minutes = minutes, rate = rate, demand = demand,
+                 dispel = prof.dispel, dispelTargets = dispelTargets,
                  note = "No dispel data was recorded for this player." }
     end
 
@@ -133,7 +138,8 @@ function Cat.Dispel(norm, summary, groupDispelTotal)
     return { applicable = true, profile = profileKey, score = final, rawScore = raw, cappedScore = capped,
              confidence = confidence, expected = expected, actual = actual, ratio = ratio,
              compModifier = compMod, compDetail = compDetail, minutes = minutes, rate = rate,
-             demand = demand, neutral = neutral, groupTotal = groupDispelTotal }
+             demand = demand, dispel = prof.dispel, dispelTargets = dispelTargets,
+             neutral = neutral, groupTotal = groupDispelTotal }
 end
 
 ----------------------------------------------------------------------

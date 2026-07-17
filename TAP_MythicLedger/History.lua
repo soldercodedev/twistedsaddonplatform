@@ -120,7 +120,7 @@ local function playerSummaryFor(identityKey, member)
             lastKnownSpecId = member.specId, lastKnownRole = member.role, guildName = member.guildName,
             firstSeenAt = nil, lastSeenAt = nil,
             totals = emptyTotals(),
-            byRole = {}, byDungeon = {}, bySeason = {},
+            byRole = {}, bySpec = {}, byDungeon = {}, bySeason = {},
             highestTimed = nil, levelSum = 0, levelN = 0,
             stats = {},   -- role-agnostic accumulation (for quick counts like avg deaths)
             notes = meta.notes or "", tags = meta.tags or {}, favorite = meta.favorite and true or false,
@@ -161,6 +161,18 @@ local function ingestPlayers(run)
                     rec.byRole[role] = rec.byRole[role] or { totals = emptyTotals(), stats = {} }
                     bumpTotals(rec.byRole[role].totals, run.status)
                     accStats(rec.byRole[role].stats, m.stats)
+                end
+                -- Per-SPEC breakdown (a player who's switched specs gets one bucket per spec played).
+                if m.specId then
+                    rec.bySpec = rec.bySpec or {}
+                    local sb = rec.bySpec[m.specId]
+                        or { specId = m.specId, role = m.role, classFile = m.classFile, totals = emptyTotals(), stats = {} }
+                    if m.specIcon then sb.specIcon = m.specIcon end
+                    if m.role then sb.role = m.role end
+                    if m.classFile then sb.classFile = m.classFile end
+                    bumpTotals(sb.totals, run.status)
+                    accStats(sb.stats, m.stats)
+                    rec.bySpec[m.specId] = sb
                 end
                 if run.mapId then
                     rec.byDungeon[run.mapId] = rec.byDungeon[run.mapId] or { name = run.dungeonName, runs = 0, timed = 0 }
@@ -208,9 +220,11 @@ local function updateBests(run)
         end
     end
     if run.status ~= STATUS.ABANDONED then
-        if type(run.deaths) == "number" then
-            better("lowestDeaths", run.deaths, { runId = run.id, dungeon = run.dungeonName, level = run.level }, lt)
-        end
+        -- YOUR deaths (0 on a clean tracked run), not the whole party's - matches the sibling PBs (ps.*).
+        local myDeaths = (type(ps.deaths) == "number" and ps.deaths)
+            or (((type(ps.dps) == "number") or (type(ps.damage) == "number")
+                 or (type(ps.hps) == "number") or (type(ps.healing) == "number")) and 0) or nil
+        better("lowestDeaths", myDeaths, { runId = run.id, dungeon = run.dungeonName, level = run.level }, lt)
         better("highestDPS", ps.dps, { runId = run.id, dungeon = run.dungeonName, level = run.level }, gt)
         better("highestHPS", ps.hps, { runId = run.id, dungeon = run.dungeonName, level = run.level }, gt)
         better("mostInterrupts", ps.interrupts, { runId = run.id, dungeon = run.dungeonName, level = run.level }, gt)
@@ -242,6 +256,9 @@ end
 function History.OnRunSaved(run)
     History.IngestRun(run)
     updateBests(run)
+    -- Re-decide the crown (best-scoring run per dungeon+key+spec): a new higher-scoring run takes it and
+    -- the previous holder is un-flagged. The run was already scored at finalize, so its summary is ready.
+    if DB.MarkBestRuns then DB.MarkBestRuns() end
     -- New data shifts the learned throughput medians; invalidate so later scorings use them. Existing
     -- runs' cached scores are left as-is (a single new run barely moves a median) until a version bump
     -- or an explicit RescoreAll - see Scoring/Store.lua.
@@ -262,8 +279,9 @@ function History.RebuildAll()
         History.IngestRun(run)
         updateBests(run)
     end
-    if DB.MarkKeepers then DB.MarkKeepers() end   -- flag best-per-dungeon runs (crown + retention-safe)
+    if DB.MarkKeepers then DB.MarkKeepers() end   -- best-per-dungeon + top-10 (retention keepers)
     if ML.Scoring and ML.Scoring.Learned then ML.Scoring.Learned.Invalidate() end   -- run set changed
+    if DB.MarkBestRuns then DB.MarkBestRuns() end -- crown: best score per dungeon+key+spec (fresh medians)
     ML.Log("Rebuilt caches: %d character(s), %d player(s)", Util.count(root.characters), Util.count(root.playerIndex))
 end
 
@@ -334,9 +352,24 @@ function History.FilterRuns(opts)
     return out
 end
 
+-- Your OWN death count for a run, for averages. A clean run records NO death rows, so a tracked player
+-- who didn't die reads back `nil` - but that means ZERO deaths, not "no data". So: return the number if
+-- present; return 0 when the run clearly tracked your combat (you have real damage/healing numbers, i.e.
+-- the meter was live and simply logged no deaths); return nil only when the run genuinely wasn't tracked.
+-- Without this, clean runs are excluded and "avg deaths" is skewed toward only the runs you died in.
+local function playerDeaths(r)
+    local ps = r and r.playerStats
+    if not ps then return nil end
+    if type(ps.deaths) == "number" then return ps.deaths end
+    if type(ps.dps) == "number" or type(ps.damage) == "number"
+        or type(ps.hps) == "number" or type(ps.healing) == "number" then return 0 end
+    return nil
+end
+History.PlayerDeaths = playerDeaths   -- exposed so UI-side summaries use YOUR deaths, not the party's
+
 -- Overview stats for a season (nil = all seasons).
-function History.Overview(seasonId)
-    local runs = History.FilterRuns({ seasonId = seasonId })
+function History.Overview(seasonId, character)
+    local runs = History.FilterRuns({ seasonId = seasonId, character = character })
     local o = {
         runs = #runs, timed = 0, completed = 0, depleted = 0, abandoned = 0,
         highestTimed = nil, highestTimedDungeon = nil, levelSum = 0, levelN = 0,
@@ -368,13 +401,26 @@ function History.Overview(seasonId)
             end
         end
         -- AVG DEATHS reflects YOUR OWN deaths per run (from your combat stats), not the whole party.
-        local myDeaths = r.playerStats and r.playerStats.deaths
+        -- Clean runs count as 0 (not skipped) - see playerDeaths - so the average isn't skewed high.
+        local myDeaths = playerDeaths(r)
         if type(myDeaths) == "number" then o.deathsSum = o.deathsSum + myDeaths; o.deathsN = o.deathsN + 1 end
         if (r.completedAt or r.startedAt or 0) >= weekAgo then o.thisWeekRuns = o.thisWeekRuns + 1 end
-        if r.mapId then o.dungeonCount[r.mapId] = (o.dungeonCount[r.mapId] or { name = r.dungeonName, n = 0 }) end
-        if r.mapId then o.dungeonCount[r.mapId].n = o.dungeonCount[r.mapId].n + 1 end
-        local ck = r.character and r.character.fullName
-        if ck then o.charCount[ck] = (o.charCount[ck] or 0) + 1 end
+        if r.mapId then
+            local d = o.dungeonCount[r.mapId] or { name = r.dungeonName, mapId = r.mapId, n = 0, highestTimed = nil }
+            d.n = d.n + 1
+            if r.dungeonName then d.name = r.dungeonName end
+            if r.status == STATUS.TIMED and type(r.level) == "number"
+                and (not d.highestTimed or r.level > d.highestTimed) then d.highestTimed = r.level end
+            o.dungeonCount[r.mapId] = d
+        end
+        local cc = r.character
+        local ck = cc and cc.fullName
+        if ck then
+            local c = o.charCount[ck] or { n = 0, fullName = ck, name = cc.name, realm = cc.realm, classFile = cc.classFile }
+            c.n = c.n + 1
+            if cc.classFile then c.classFile = cc.classFile end
+            o.charCount[ck] = c
+        end
         for _, m in ipairs(r.party or {}) do
             if not m.isPlayer then
                 local k = API.IdentityKey(m)
@@ -392,26 +438,31 @@ function History.Overview(seasonId)
     for i = 1, math.min(10, #recent) do
         local r = recent[i]; n10 = n10 + 1
         if r.status == STATUS.TIMED then timed10 = timed10 + 1 end
-        local md = r.playerStats and r.playerStats.deaths
+        local md = playerDeaths(r)   -- clean run = 0, not "no data"
         if type(md) == "number" then dSum10 = dSum10 + md; dN10 = dN10 + 1 end
     end
     o.last10 = { n = n10, timedPct = Util.safeDiv(timed10, n10), avgDeaths = Util.safeDiv(dSum10, dN10) }
     -- Returning players = distinct party members seen more than once (in scope).
-    for _, n in pairs(seen) do if n > 1 then o.returning = o.returning + 1 end end
-    -- Most-played dungeon / character.
+    -- Players met = distinct party members seen at all (in scope).
+    o.playersMet = 0
+    for _, n in pairs(seen) do o.playersMet = o.playersMet + 1; if n > 1 then o.returning = o.returning + 1 end end
+    -- Most-played dungeon / character. Keep the rich record (name, mapId, runs, highest timed key /
+    -- class) for the Overview hero cards, plus a plain string for anything that just wants a label.
     local bestD, bestDN
-    for _, d in pairs(o.dungeonCount) do if not bestDN or d.n > bestDN then bestDN = d.n; bestD = d.name end end
-    o.topDungeon = bestD
+    for _, d in pairs(o.dungeonCount) do if not bestDN or d.n > bestDN then bestDN = d.n; bestD = d end end
+    o.topDungeonInfo = bestD
+    o.topDungeon = bestD and bestD.name
     local bestC, bestCN
-    for ck, n in pairs(o.charCount) do if not bestCN or n > bestCN then bestCN = n; bestC = ck end end
-    o.topCharacter = bestC
+    for _, c in pairs(o.charCount) do if not bestCN or c.n > bestCN then bestCN = c.n; bestC = c end end
+    o.topCharInfo = bestC
+    o.topCharacter = bestC and (bestC.name or bestC.fullName)
     return o
 end
 
 -- Per-dungeon aggregates for a season.
-function History.DungeonStats(seasonId)
+function History.DungeonStats(seasonId, character)
     local map = {}
-    for _, r in ipairs(History.FilterRuns({ seasonId = seasonId })) do
+    for _, r in ipairs(History.FilterRuns({ seasonId = seasonId, character = character })) do
         if r.mapId then
             local d = map[r.mapId]
             if not d then
@@ -430,7 +481,8 @@ function History.DungeonStats(seasonId)
                 if not d.bestTime or r.duration < d.bestTime then d.bestTime = r.duration end
                 d.timeSum = d.timeSum + r.duration; d.timeN = d.timeN + 1
             end
-            if type(r.deaths) == "number" then d.deathsSum = d.deathsSum + r.deaths; d.deathsN = d.deathsN + 1 end
+            local myDeaths = playerDeaths(r)   -- YOUR deaths per run for the average, not the whole party's
+            if type(myDeaths) == "number" then d.deathsSum = d.deathsSum + myDeaths; d.deathsN = d.deathsN + 1 end
             -- Your own best/worst performance in this dungeon (from your own stats).
             if r.status ~= STATUS.ABANDONED then
                 local ps = r.playerStats
@@ -476,10 +528,10 @@ end
 -- Per-boss aggregates for one dungeon across all its runs in scope. For each encounter: how many
 -- times pulled (engaged), killed, wiped, party deaths on it, and your kill DPS spread (best / low /
 -- avg) plus kill-time (best / avg). Sorted by the boss's typical position in the dungeon.
-function History.DungeonBosses(mapId, seasonId)
+function History.DungeonBosses(mapId, seasonId, character)
     if not mapId then return {} end
     local map, order = {}, {}
-    for _, r in ipairs(History.FilterRuns({ mapId = mapId, seasonId = seasonId })) do
+    for _, r in ipairs(History.FilterRuns({ mapId = mapId, seasonId = seasonId, character = character })) do
         for _, e in ipairs(r.bosses or {}) do
             local key = e.id or e.name
             if key then
@@ -567,6 +619,7 @@ function History.CharacterDetail(fullName, seasonId)
             o.firstSeenAt = o.firstSeenAt and math.min(o.firstSeenAt, at) or at
             bumpTotals(o.totals, r.status)
             local ps = r.playerStats or {}
+            local myDeaths = playerDeaths(r)   -- YOUR deaths for the averages below, not the whole party's
             accStats(o.stats, ps)
             if r.status ~= STATUS.ABANDONED then
                 if type(r.level) == "number" then
@@ -580,7 +633,7 @@ function History.CharacterDetail(fullName, seasonId)
                 end
                 if type(ps.hps) == "number" and (not o.bestHps or ps.hps > o.bestHps) then o.bestHps = ps.hps end
             end
-            if type(r.deaths) == "number" then o.deathsSum = o.deathsSum + r.deaths; o.deathsN = o.deathsN + 1 end
+            if type(myDeaths) == "number" then o.deathsSum = o.deathsSum + myDeaths; o.deathsN = o.deathsN + 1 end
 
             -- Per spec (role-appropriate averages let you compare specs on the same toon).
             local sid = c.specId or 0
@@ -597,7 +650,7 @@ function History.CharacterDetail(fullName, seasonId)
                 sp.levelSum = sp.levelSum + r.level; sp.levelN = sp.levelN + 1
                 if r.status == STATUS.TIMED and (not sp.highestTimed or r.level > sp.highestTimed) then sp.highestTimed = r.level end
             end
-            if type(r.deaths) == "number" then sp.deathsSum = sp.deathsSum + r.deaths; sp.deathsN = sp.deathsN + 1 end
+            if type(myDeaths) == "number" then sp.deathsSum = sp.deathsSum + myDeaths; sp.deathsN = sp.deathsN + 1 end
 
             -- Per dungeon.
             if r.mapId then
@@ -613,7 +666,7 @@ function History.CharacterDetail(fullName, seasonId)
                     if not dd.bestTime or r.duration < dd.bestTime then dd.bestTime = r.duration end
                     dd.timeSum = dd.timeSum + r.duration; dd.timeN = dd.timeN + 1
                 end
-                if type(r.deaths) == "number" then dd.deathsSum = dd.deathsSum + r.deaths; dd.deathsN = dd.deathsN + 1 end
+                if type(myDeaths) == "number" then dd.deathsSum = dd.deathsSum + myDeaths; dd.deathsN = dd.deathsN + 1 end
             end
         end
     end

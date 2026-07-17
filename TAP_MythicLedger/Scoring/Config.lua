@@ -215,6 +215,97 @@ function Config.DungeonDispelDemand(dungeonName, specTypes)
 end
 
 ----------------------------------------------------------------------
+-- Per-dungeon dispellable effects, keyed by normalised dungeon name -> dispel type -> list of
+-- { name, id, kind }. This is the granular half of the seasonal dispel DB (presence/demand is
+-- Config.dungeonDispelTypes above). It lets the run-review coach a player with the exact ability icons
+-- (via `id`, the real spell id -> Blizzard tooltip) and split them into what they'd DISPEL vs PURGE:
+--   kind = "debuff" -> a harmful aura ON A PLAYER, removed by a DEFENSIVE dispel (Dispel)
+--   kind = "buff"   -> a beneficial aura ON AN ENEMY, removed by an OFFENSIVE dispel (Purge; enrage = Soothe)
+--
+-- Names + spell ids sourced 2026-07 from gerritalex.de's full S1 debuff list (its JSON exposes ids).
+-- The buff/debuff split is OUR classification from the mechanic: enrage is always an enemy buff; magic
+-- "Ward / Shield / Barrier / Bolstering / Enhancement / Bloodlust" effects are enemy buffs you Purge;
+-- everything else (CC, DoTs, curses, poisons, diseases) is a player debuff you Dispel. A handful are
+-- best-guesses (Oversurge, Necromantic Infusion, Rushing Winds) - the Blizzard tooltip shows the truth
+-- on hover regardless. Keep in sync with the type presence in Config.dungeonDispelTypes each season.
+----------------------------------------------------------------------
+local function dbf(name, id, buff) return { name = name, id = id, kind = buff and "buff" or "debuff" } end
+Config.dungeonDispelDebuffs = {
+    ["algetharacademy"] = {
+        magic  = { dbf("Energy Bomb", 374350), dbf("Monotonous Lecture", 388392), dbf("Oversurge", 391977, true) },
+        poison = { dbf("Lasher Toxin", 389033) },
+        enrage = { dbf("Agitation", 390938, true), dbf("Raging Screech", 377389, true) },
+    },
+    ["magistersterrace"] = {
+        magic = { dbf("Polymorph", 468966), dbf("Holy Fire", 1255187), dbf("Umbral Splinters", 1284627),
+                  dbf("Void Torrent", 1214714), dbf("Arcane Blade", 1252909), dbf("Consuming Void", 1245068),
+                  dbf("Devouring Entropy", 1215897), dbf("Ethereal Shackles", 1214038), dbf("Void Surge", 1264693),
+                  dbf("Hastening Ward", 1248689, true), dbf("Power Word: Shield", 1254306, true) },
+    },
+    ["maisaracaverns"] = {
+        magic   = { dbf("Hex", 1256008), dbf("Spirit Rend", 1259255), dbf("Frost Nova", 1271623),
+                    dbf("Cries of the Fallen", 1254175), dbf("Ritual Firebrand", 1262411), dbf("Vilebranch Sting", 1260709),
+                    dbf("Grim Ward", 1270079, true) },
+        disease = { dbf("Infected Pinions", 1246666) },
+        enrage  = { dbf("Blood Frenzy", 1255765, true) },
+    },
+    ["nexuspointxenas"] = {
+        magic = { dbf("Burning Radiance", 1277557), dbf("Holy Echo", 1263783), dbf("Transference", 1249815) },
+        curse = { dbf("Bad Omens", 1217882), dbf("Creeping Void", 1281636) },
+    },
+    ["windrunnerspire"] = {
+        magic  = { dbf("Soul Torment", 1216298), dbf("Bolstering Flames", 1216860, true) },
+        curse  = { dbf("Curse of Darkness", 1215803) },
+        poison = { dbf("Poison Blades", 473795), dbf("Poison Spray", 1216825) },
+        enrage = { dbf("Ephemeral Bloodlust", 1216459, true) },
+    },
+    ["pitofsaron"] = {
+        magic   = { dbf("Permeating Cold", 1258437), dbf("Cryoshards", 1261921), dbf("Immolate", 157736),
+                    dbf("Torrent of Misery", 1258826), dbf("Necromantic Infusion", 1258448, true) },
+        curse   = { dbf("Curse of Torment", 1258434), dbf("Shadowbind", 1264186) },
+        disease = { dbf("Rotting Strikes", 1258459) },
+        enrage  = { dbf("Plague Frenzy", 1259132, true) },
+    },
+    ["seatofthetriumvirate"] = {
+        magic  = { dbf("Rift Essence", 1280330), dbf("Corrupting Touch", 245748), dbf("Howling Dark", 244751),
+                   dbf("Abyssal Enhancement", 1262526, true) },
+        enrage = { dbf("Battle Rage", 1264036, true) },
+    },
+    ["skyreach"] = {
+        magic  = { dbf("Rushing Winds", 1254670, true), dbf("Solar Barrier", 1273356, true) },
+        enrage = { dbf("Wrathful Wind", 1254678, true) },
+    },
+}
+
+-- What a spec could have dispelled in this dungeon, matched precisely against its DEFENSIVE (dispel) and
+-- OFFENSIVE (purge/soothe) capability: a player debuff needs the spec's defensive type; an enemy buff
+-- needs its offensive type. Returns a flat list of { name, id, type, action } where action is
+-- "Dispel" | "Purge" | "Soothe". `dispel` is the spec's capability dispel record. Empty when the dungeon
+-- is unlisted or nothing overlaps. Drives the run-review coaching callout.
+local DISPEL_TYPE_ORDER = { "magic", "curse", "poison", "disease", "enrage" }
+function Config.DungeonDispelTargets(dungeonName, dispel)
+    local out = {}
+    if type(dispel) ~= "table" then return out end
+    local nk = Config.NormDungeon(dungeonName)
+    local entry = nk and Config.dungeonDispelTypes[nk]
+    if not entry then return out end             -- unlisted dungeon: no known targets
+    local byType = (nk and Config.dungeonDispelDebuffs[nk]) or {}
+    local defensive, offensive = dispel.defensive or {}, dispel.offensive or {}
+    for _, t in ipairs(DISPEL_TYPE_ORDER) do
+        if entry[t] ~= false then                 -- type present in this dungeon
+            for _, e in ipairs(byType[t] or {}) do
+                if e.kind == "buff" and offensive[t] then
+                    out[#out + 1] = { name = e.name, id = e.id, type = t, action = (t == "enrage") and "Soothe" or "Purge" }
+                elseif e.kind ~= "buff" and defensive[t] then
+                    out[#out + 1] = { name = e.name, id = e.id, type = t, action = "Dispel" }
+                end
+            end
+        end
+    end
+    return out
+end
+
+----------------------------------------------------------------------
 -- Contribution scoring curve. Maps ratio (actual / expected) -> score via linear interpolation.
 -- SOFT-CAPPED at 1.0, exactly like throughput: MEETING your expected count = full marks (100), and
 -- doing MORE plateaus at 100 (the curve clamps to the last point) - it never helps or hurts. This

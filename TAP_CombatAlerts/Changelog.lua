@@ -4,6 +4,14 @@ local _, TCC = ...
 TCC.CHANGELOG = [==[
 # Twisteds Combat Alerts - What's New
 
+## 1.0.0-beta.3
+
+- **[CHANGE]** **Tabbed layout.** The page is now split into tabs - **Alerts**, **Profiles**, and
+  **Settings** - docked under the title bar, instead of one long scrolling page. Everything's in the
+  same place, just quicker to get to.
+- **[BUG FIX]** Picks up the latest shared appearance fixes - custom theme colours now save correctly
+  from the colour picker, and the **Menu scale** slider is smoother to drag.
+
 ## 1.0.0-beta.2
 
 - **[BUG FIX]** Alerts can now be **per-character**. The **Profile** section at the top of the page

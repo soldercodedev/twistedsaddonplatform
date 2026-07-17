@@ -3,6 +3,37 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
+## 1.0.0-beta.3
+
+Third beta. A big visual + accuracy pass on **Mythic Ledger**, plus a round of platform appearance
+fixes that every module inherits. Each module also lists its own changes in its in-game **What's
+New** (`/tap` → module → *What's New*).
+
+- **[CHANGE]** **Mythic Ledger — hero-card pages.** The character overview's **By Spec** and **By
+  Dungeon** breakdowns are now rich hero cards (class-coloured spec cards with spec icons; dungeon
+  cards fronted by their own art), the headline stats are large-icon tiles, and the **Dungeons** tab
+  is a hero-card grid with a **type-to-filter** box (3+ letters) beside the season selector.
+- **[BUG FIX]** **Mythic Ledger — boss icons** now load on the post-run scoreboard and on
+  previously-recorded runs (they were blank until the Encounter Journal was queried correctly), and
+  the dungeon background art now covers the whole scoreboard.
+- **[BUG FIX]** **Mythic Ledger — average deaths** now count only **your** deaths per run (it was
+  averaging the entire party). The Runs page still reports total party deaths.
+- **[CHANGE]** **Mythic Ledger — scoring.** Interrupts and dispels were rescored for Midnight:
+  per-spec interrupt cooldowns corrected, and DPS/tanks are now credited for the dispels they bring
+  (healers aren't the only ones expected to dispel).
+- **[BUG FIX]** **Appearance.** Custom theme colours now save correctly from the colour picker; the
+  **Menu scale** slider is smoother to drag (it applies when you release it); table tooltips render at
+  the cursor; there's more room under the per-page dropdown; and check-box labels no longer wrap.
+- **[BUG FIX]** Fixed a Lua error when opening a run's player scores, and fixed party cards
+  overlapping their section header.
+
+### Modules
+
+- **[CHANGE]** **Tabbed layouts.** **Combat Alerts**, **Focus Target Interrupt**, and **Rotation
+  Assistant** each moved from one long scrolling page to a docked **tab strip** under the title bar
+  (e.g. Combat Alerts → Alerts / Profiles / Settings), matching Mythic Ledger. Same options, faster to
+  navigate. All three also pick up the shared appearance fixes above.
+
 ## 1.0.0-beta.2
 
 Second beta. A brand-new module (Mythic Ledger), a platform look & feel overhaul, and a round of

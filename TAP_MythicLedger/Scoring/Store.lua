@@ -79,6 +79,8 @@ function Store.RescoreAll()
         local result = Score.ScoreRun(run)
         if result and run.id and sc then sc.runs[run.id] = compact(result); n = n + 1 end
     end
+    -- Scores just changed, so the crown may move: re-flag the best-scoring run per dungeon+key+spec.
+    if DB.MarkBestRuns then DB.MarkBestRuns() end
     if ML.Log then ML.Log("Scoring: rescored %d run(s) at v%d", n, Cfg.version) end
     return n, Cfg.version
 end

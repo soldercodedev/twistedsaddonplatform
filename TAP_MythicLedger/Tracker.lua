@@ -187,6 +187,7 @@ local function buildRun()
         affixes       = ks.affixes or {},
         affixNames    = API.GetAffixNames(ks.affixes or {}),
         seasonId      = API.GetCurrentSeason(),
+        expansionId   = API.GetExpansionLevel(),
         startedAt     = time(),
         character     = API.PlayerContext(),
         party         = party,
@@ -475,11 +476,27 @@ local function finalizeRun(stats)
     end
 
     run.party           = mergePartyStats(run.party, stats)
+    -- Clean-run deaths: the meter records no death rows for someone who didn't die, so their count comes
+    -- back nil. For a player the meter actually TRACKED (real combat numbers), that means ZERO deaths,
+    -- not "no data" - store 0 so scoring reads "no deaths" (a confident zero) everywhere instead of "no
+    -- death data recorded". Untracked members (no combat stats) stay nil = genuinely unknown.
+    for _, m in ipairs(run.party or {}) do
+        local s = m.stats
+        if s and s.deaths == nil and (type(s.dps) == "number" or type(s.damage) == "number"
+            or type(s.hps) == "number" or type(s.healing) == "number") then
+            s.deaths = 0
+        end
+    end
     run.provider        = (stats and stats.source) or run.provider
     run.providerVersion = (stats and stats.sourceVersion) or run.providerVersion
-    run.playerStats     = playerStatsOf(run.party)
+    run.playerStats     = playerStatsOf(run.party)   -- reflects the normalised 0s
     -- Prefer the game's authoritative M+ death total (reliable); fall back to the meter sum.
     run.deaths          = (Providers.ChallengeModeDeaths and Providers.ChallengeModeDeaths()) or sumDeaths(run.party)
+    -- The LAST boss's kill completes the key, which flips state out of ACTIVE before combat drops - so
+    -- its combat-end settle is skipped and it would finalize with no per-boss totals. Finalization runs
+    -- ~1.5s later (out of combat, meter readable), so settle any still-pending boss here before we bake
+    -- the boss list.
+    settleBossesAtCombatEnd()
     run.bosses          = finalizeBosses()
     run.confidence      = "full"
 

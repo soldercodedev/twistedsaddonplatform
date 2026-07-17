@@ -131,7 +131,7 @@ local function addonVersion(addonName)
 end
 
 -- The suite's own version, with a sane fallback if the .toc metadata isn't ready yet.
-local function suiteVersion() return addonVersion("TAP") or "1.0.0-beta.2" end
+local function suiteVersion() return addonVersion("TAP") or "1.0.0-beta.3" end
 
 local function moduleNavIcon(spec)
     if spec.icon then return theme:ResolveIcon(spec.icon) end
@@ -270,14 +270,14 @@ local function pageOverview(b, win)
     y = y - 80
 
     if total == 0 then
-        b:Section("NO PLUGINS INSTALLED", x, y); y = y - 34
+        y = b:Section("NO PLUGINS INSTALLED", x, y); y = y - 34
         b:Wrap("No sidecar modules are registered yet. Install a platform plugin addon (one that "
             .. "lists TAP as a dependency) and it will appear here automatically.",
             x, y, w - 44, C.subtext, 12)
         return y - 60
     end
 
-    b:Section("MODULES", x, y); y = y - 30
+    y = b:Section("MODULES", x, y); y = y - 30
     local rowW = w - 48
     local rpad = 14   -- inset for the right-aligned controls, so they don't sit flush to the row edge
     for _, mod in ipairs(Suite.modules) do
@@ -321,7 +321,10 @@ local function pageModule(b, win, mod)
     -- toggle + status live on the Overview and Installed pages. This page is just the module's settings -
     -- it renders straight into its own sections with no redundant "SETTINGS" band on top.
 
-    if not mod:IsEnabled() then
+    -- A disabled module normally shows a short "turned off" note here. Modules that own a full tabbed
+    -- page (rendersWhenDisabled) instead render themselves even when off, so their Settings tab stays
+    -- reachable to re-enable them and the other tabs show the shared MODULE DISABLED overlay.
+    if not mod:IsEnabled() and not spec.rendersWhenDisabled then
         b:Wrap("This module is turned off. Switch it on from the Overview page to configure it.",
             x, y, w - 44, C.subtext, 12)
         return y - 40
@@ -395,7 +398,7 @@ local function pageSettings(b, win)
     y = y - (hh + 16)
 
     -- SHAPE - buttons: square/sharp vs rounded corners & borders.
-    b:Section("SHAPE", x, y); y = y - 30
+    y = b:Section("SHAPE", x, y); y = y - 30
     local sx = x
     for _, name in ipairs(theme:ShapeList()) do
         local active = a.shape == name
@@ -409,7 +412,7 @@ local function pageSettings(b, win)
     y = y - 42
 
     -- COLOURS - a scheme dropdown (all palettes), plus a Custom entry.
-    b:Section("COLOURS", x, y); y = y - 30
+    y = b:Section("COLOURS", x, y); y = y - 30
     b:Label("Scheme", x, y - 2, C.subtext)
     -- Grouped menu: Neutral / Light / Styled / Expansion sections, plus a Custom entry at the end.
     local function schemeItems()
@@ -458,7 +461,7 @@ local function pageSettings(b, win)
         y = rowTop - math.ceil(#UIF.PALETTE_KEYS / 2) * 30 - 10
     else
         -- Accent override, layered on top of the chosen scheme.
-        b:Section("ACCENT", x, y); y = y - 30
+        y = b:Section("ACCENT", x, y); y = y - 30
         b:Swatch(x, y - 2, a.accent, function(r, g, b2)
             theme:ApplyAccent({ r, g, b2 })
             win:Refresh()
@@ -468,7 +471,7 @@ local function pageSettings(b, win)
     end
 
     -- Font.
-    b:Section("FONT", x, y); y = y - 30
+    y = b:Section("FONT", x, y); y = y - 30
     b:FontSelect(x, y, { width = 220, value = a.font or "UBUNTU", onChange = function(key)
         a.font = key
         applyFont()
@@ -479,7 +482,7 @@ local function pageSettings(b, win)
     -- Menu scale - its own subsection. Scales the whole /tap panel (text + chrome) proportionally.
     -- Applied on RELEASE (not per drag tick) via applyMenuScaleWhenReleased, because the slider sits
     -- inside the window it scales.
-    b:Section("MENU SCALE", x, y); y = y - 36
+    y = b:Section("MENU SCALE", x, y); y = y - 36
     theme:SetTip(b:Slider(x, y):Configure(300, 0.8, 1.5, 0.05,
         function() return a.menuScale or 1 end,
         function(v) a.menuScale = v; applyMenuScaleWhenReleased(win) end, "%.2fx"),
@@ -488,6 +491,15 @@ local function pageSettings(b, win)
     local _, mh = b:Wrap("Only affects this /tap window - the scoreboard and on-screen combat cues keep "
         .. "their own size.", x, y, w - 44, C.subtext, 10)
     y = y - (mh + 14)
+
+    -- Minimap button (the platform's own; each module toggles its own icon in the module's settings).
+    y = b:Section("MINIMAP", x, y); y = y - 30
+    theme:SetTip(b:Toggle(x, y - 8, Suite:IsMinimapButtonShown("TAP"),
+        function(v) Suite:SetMinimapButtonShown("TAP", v) end, { color = C.accent }),
+        "Minimap button", "Show the Twisteds Addon Platform button on the minimap. Left-click opens /tap, "
+        .. "drag to move it around the edge, right-click to hide it.")
+    b:Label("Show the platform button on the minimap", x + 42, y - 12, C.text, 12)
+    y = y - 36
 
     -- Reset.
     b:Button(x, y, 150, "Reset Appearance", "danger", function()
@@ -546,7 +558,7 @@ local function pageInstalled(b, win)
     y = y - (hh + 16)
 
     local list = scanSidecars()
-    b:Section("PLATFORM ADD-ONS", x, y); y = y - 30
+    y = b:Section("PLATFORM ADD-ONS", x, y); y = y - 30
 
     if #list == 0 then
         b:Wrap("No platform plugin add-ons found in your AddOns folder yet.", x, y, w - 44, C.subtext, 12)
@@ -612,7 +624,7 @@ local function pageAbout(b, win)
     y = y - (hh + 16)
 
     -- Getting around (what the sidebar pages do)
-    b:Section("GETTING AROUND", x, y); y = y - 30
+    y = b:Section("GETTING AROUND", x, y); y = y - 30
     for _, line in ipairs({
         { "Overview",    "See all your modules at a glance and jump to any one." },
         { "Settings",    "Change the platform's look - theme, accent colour and font." },
@@ -626,7 +638,7 @@ local function pageAbout(b, win)
     y = y - 8
 
     -- Your modules (details for everything currently loaded)
-    b:Section("YOUR MODULES", x, y); y = y - 30
+    y = b:Section("YOUR MODULES", x, y); y = y - 30
     if #Suite.modules == 0 then
         b:Wrap("No modules installed yet. Add one of Twisted's plug-in add-ons and it'll appear here "
             .. "(and in the sidebar) automatically.", x, y, w - 44, C.subtext, 11)
@@ -656,7 +668,7 @@ local function pageAbout(b, win)
     y = y - 6
 
     -- Community
-    b:Section("COMMUNITY", x, y); y = y - 30
+    y = b:Section("COMMUNITY", x, y); y = y - 30
     local _, ch = b:Wrap("Questions, bug reports, or ideas? Come hang out - click to copy the invite.",
         x, y, w - 44, C.subtext, 11)
     y = y - (ch + 8)
@@ -694,7 +706,7 @@ local function pageCommands(b, win)
     end
 
     for _, o in ipairs(order) do
-        b:Section(o:upper(), x, y); y = y - 30
+        y = b:Section(o:upper(), x, y); y = y - 30
         for _, c in ipairs(byOwner[o]) do
             b:Label(c.cmd, x, y - 2, C.accent, 12)
             if c.desc then b:Label(c.desc, x + 210, y - 2, C.subtext, 12) end
@@ -842,6 +854,128 @@ end
 function Suite:CloseWindow() if win and win.frame then win.frame:Hide() end end
 function Suite:IsWindowOpen() return win and win:IsShown() and true or false end
 
+----------------------------------------------------------------------
+-- Minimap buttons - one for the PLATFORM (shown by default) plus an optional one per MODULE (each
+-- registers its own via Suite:RegisterMinimapButton, hidden by default). Every button is draggable
+-- around the minimap edge; its angle + hidden state persist in TAPDB.minimap[id].
+----------------------------------------------------------------------
+local minimapButtons = {}   -- id -> { id, icon, title, action, onClick, defaultHidden, defaultAngle, frame }
+local minimapReady = false
+local minimapOrder = 0      -- stagger default angles so newly-shown buttons don't stack
+
+local function minimapDB(id)
+    local db = Suite:DB()
+    db.minimap = db.minimap or {}
+    -- Migrate the old single-button format ({ angle, hide }) into the platform's entry.
+    if db.minimap.angle ~= nil or db.minimap.hide ~= nil then
+        db.minimap.TAP = db.minimap.TAP or { angle = db.minimap.angle, hide = db.minimap.hide }
+        db.minimap.angle, db.minimap.hide = nil, nil
+    end
+    db.minimap[id] = db.minimap[id] or {}
+    return db.minimap[id]
+end
+
+local function positionMinimapBtn(rec)
+    if not (rec.frame and _G.Minimap) then return end
+    local a = math.rad(minimapDB(rec.id).angle or rec.defaultAngle or 205)
+    rec.frame:SetPoint("CENTER", _G.Minimap, "CENTER", 80 * math.cos(a), 80 * math.sin(a))
+end
+
+local function createMinimapFrame(rec)
+    if rec.frame or not _G.Minimap then return end
+    local d = minimapDB(rec.id)
+    if d.hide == nil then d.hide = rec.defaultHidden and true or false end
+    local b = CreateFrame("Button", "TAPMinimap_" .. rec.id, _G.Minimap)
+    rec.frame = b
+    b:SetSize(31, 31); b:SetFrameStrata("MEDIUM"); b:SetFrameLevel(8)
+    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    b:RegisterForDrag("LeftButton"); b:SetMovable(true)
+
+    local icon = b:CreateTexture(nil, "BACKGROUND")
+    icon:SetSize(19, 19); icon:SetTexture(rec.icon); icon:SetPoint("CENTER", 0, 1)
+
+    local ring = b:CreateTexture(nil, "OVERLAY")
+    ring:SetSize(53, 53); ring:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder"); ring:SetPoint("TOPLEFT")
+
+    b:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+    local function dragUpdate()
+        local mx, my = _G.Minimap:GetCenter()
+        local scale = _G.Minimap:GetEffectiveScale()
+        local cx, cy = GetCursorPosition()
+        if not (mx and my and cx and cy and scale and scale > 0) then return end
+        minimapDB(rec.id).angle = math.deg(math.atan2(cy / scale - my, cx / scale - mx)) % 360
+        positionMinimapBtn(rec)
+    end
+    b:SetScript("OnDragStart", function() b:SetScript("OnUpdate", dragUpdate) end)
+    b:SetScript("OnDragStop", function() b:SetScript("OnUpdate", nil) end)
+
+    b:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then
+            Suite:SetMinimapButtonShown(rec.id, false)
+            print("|cffa06cf0Twisteds Addon Platform|r: minimap button hidden - re-enable it in its settings (Platform: |cffffffff/tap minimap|r).")
+        else
+            rec.onClick()
+        end
+    end)
+    b:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine(rec.title or "|cffa06cf0Twisted's Addon Platform|r")
+        GameTooltip:AddLine("Left-click: " .. (rec.action or "open"), 1, 1, 1)
+        GameTooltip:AddLine("Right-click: hide  -  Drag: move", 0.7, 0.7, 0.7)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    positionMinimapBtn(rec)
+    if d.hide then b:Hide() end
+end
+
+-- Register (or update) a minimap button. Records the spec; the frame is built at login (or immediately
+-- if we're already past login). spec = { icon, title, action, onClick, defaultHidden, defaultAngle }.
+function Suite:RegisterMinimapButton(id, spec)
+    if type(id) ~= "string" or type(spec) ~= "table" or not spec.icon or type(spec.onClick) ~= "function" then return end
+    local rec = minimapButtons[id]
+    if not rec then
+        minimapOrder = minimapOrder + 1
+        rec = { id = id, defaultAngle = spec.defaultAngle or (225 - minimapOrder * 22) }
+        minimapButtons[id] = rec
+    end
+    rec.icon, rec.title, rec.action, rec.onClick = spec.icon, spec.title, spec.action, spec.onClick
+    rec.defaultHidden = spec.defaultHidden and true or false
+    if minimapReady then createMinimapFrame(rec) end
+    return rec
+end
+
+function Suite:SetMinimapButtonShown(id, shown)
+    minimapDB(id).hide = not shown
+    local rec = minimapButtons[id]
+    if rec then
+        if not rec.frame then createMinimapFrame(rec) end
+        if rec.frame then if shown then rec.frame:Show() else rec.frame:Hide() end end
+    end
+end
+function Suite:IsMinimapButtonShown(id) return not minimapDB(id).hide end
+
+-- Build every registered button (called once at login, when the SavedVariables + Minimap exist).
+local function createAllMinimapButtons()
+    minimapReady = true
+    for _, rec in pairs(minimapButtons) do createMinimapFrame(rec) end
+end
+
+-- The platform's own button - shown by default, opens the Manager.
+Suite:RegisterMinimapButton("TAP", {
+    icon = "Interface\\AddOns\\TAP\\assets\\images\\TAP_icon.tga",
+    title = "|cffa06cf0Twisted's Addon Platform|r", action = "open the Manager",
+    onClick = function() ensureWindow(); win:Toggle() end,
+    defaultHidden = false, defaultAngle = 205,
+})
+
+Suite:RegisterCommand({
+    cmd = "/tap minimap", desc = "Show or hide the platform minimap button", owner = "Platform", sub = "minimap",
+    handler = function() Suite:SetMinimapButtonShown("TAP", not Suite:IsMinimapButtonShown("TAP")) end,
+})
+
 -- First-run hint + a font re-apply. Bundled TTFs often aren't loadable yet during the initial
 -- addon load (WoW only indexes font files at client launch), so applySavedAppearance() at file
 -- scope can fall back to the default font. Re-applying once we're logged in (and again a moment
@@ -851,6 +985,7 @@ hint:SetScript("OnEvent", function()
     local total = Suite:Stats()
     print(("|cffa06cf0Twisteds Addon Platform|r loaded - |cffffffff/tap|r to manage %d module%s.")
         :format(total, total == 1 and "" or "s"))
+    createAllMinimapButtons()
 
     -- Re-assert the full saved appearance now that bundled fonts are loadable (and again a moment
     -- later, since indexing can lag), then refresh the window if it's open.

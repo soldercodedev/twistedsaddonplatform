@@ -7,7 +7,7 @@
 --   local b = theme:Builder(contentFrame, { contentWidth = 660 })
 --   -- inside a render:
 --   b:Reset()
---   b:Section("GENERAL", 24, -20)
+--   local y = b:Section("GENERAL", 24, -20)   -- Section applies a top margin; continue from its return
 --   b:Toggle(24, -54, db.enabled, function(v) db.enabled = v end)
 --   b:Label("Enable addon", 70, -56, theme.C.text)
 --   b:Button(24, -100, 120, "Save", "primary", function() end)
@@ -75,9 +75,13 @@ function BuilderMixin:Wrap(text, x, y, w, color, size)
     return fs, (fs:GetStringHeight() or 14)
 end
 
--- Section header: accent label + a full-width divider under it.
+-- Section header: accent label + a full-width divider under it. Applies a 20px TOP MARGIN so a
+-- header never butts up against the block above it, giving the page breathing room. The header is
+-- drawn from that lowered baseline and the (already lowered) y is returned - callers should continue
+-- their layout from the return value:  y = b:Section("GENERAL", x, y);  y = y - 30
 function BuilderMixin:Section(text, x, y, w)
     local theme = self.theme
+    y = y - 20                                     -- top margin (breathing room above the header)
     self:Label(text, x, y, theme.C.accent, 12)
     local d = acq(self.pool, "divider", function() return self.content:CreateTexture(nil, "ARTWORK") end)
     d:SetColorTexture(theme.C.border[1], theme.C.border[2], theme.C.border[3], 0.8); d:SetHeight(1)
@@ -85,6 +89,7 @@ function BuilderMixin:Section(text, x, y, w)
     -- underline ends the same distance from the right edge as it starts from the left.
     d:ClearAllPoints(); d:SetPoint("TOPLEFT", self.content, "TOPLEFT", x, y - 18)
     d:SetWidth(w or (self.contentWidth - 2 * (x or 0))); d:Show()
+    return y
 end
 
 -- Lighter sub-header used inside a section.
@@ -95,6 +100,62 @@ function BuilderMixin:Sub(text, x, y, w)
     d:SetColorTexture(theme.C.border[1], theme.C.border[2], theme.C.border[3], 0.45); d:SetHeight(1)
     d:ClearAllPoints(); d:SetPoint("TOPLEFT", self.content, "TOPLEFT", x, y - 15)
     d:SetWidth(w or (self.contentWidth - 2 * (x or 0))); d:Show()
+end
+
+----------------------------------------------------------------------
+-- Module enable/disable (shared across every suite module's Settings tab)
+----------------------------------------------------------------------
+-- The standard "MODULE" enable/disable block for a suite module's Settings tab: a Sub header, an
+-- on/off toggle bound to the platform module handle, and a status line. Kept here (not per-module)
+-- so every module reads and behaves identically. `mod` is the handle passed to Settings; pass
+-- opts.onToggle to react after the enable flips (typically `function() win:Refresh() end` so the
+-- disabled overlay on the other tabs appears/clears at once). Returns the y below the block.
+function BuilderMixin:ModuleToggle(x, y, w, mod, opts)
+    opts = opts or {}
+    local C = self.theme.C
+    local on = mod and mod.IsEnabled and mod:IsEnabled() and true or false
+    self:Sub("MODULE", x, y, w and (w - 8) or nil); y = y - 30
+    local tg = self:Toggle(x, y, on, function(v)
+        if mod and mod.SetEnabled then mod:SetEnabled(v) end
+        if opts.onToggle then opts.onToggle(v) end
+    end)
+    if self.theme.SetTip then
+        self.theme:SetTip(tg, "Enable module",
+            opts.tip or "Turn this whole module on or off. Off stops its background work; your settings are kept.")
+    end
+    self:Label(on and "Enabled" or "|cffe0655aDisabled|r", x + 46, y - 2, on and C.text or C.subtext, 13)
+    self:Label(opts.sub or "When off, this module does nothing until you switch it back on.",
+        x + 46, y - 20, C.subtext, 10)
+    return y - 44
+end
+
+-- A centered "MODULE DISABLED" overlay notice, drawn in place of a tab's content when the module
+-- that owns the page is switched off. A dark scrim panel with a red hairline frame, a lock glyph, a
+-- red heading and a subtext line, plus an optional "Go to Settings" button (opts.onSettings). Every
+-- suite module shows the exact same block, so a disabled module reads consistently. Returns the y
+-- below the panel. opts: height (default 300), title, subtitle, icon (bundled slug), onSettings.
+function BuilderMixin:DisabledOverlay(x, y, w, opts)
+    opts = opts or {}
+    local C = self.theme.C
+    local h = opts.height or 300
+    local RED, REDDIM = { 0.93, 0.34, 0.34 }, { 0.5, 0.15, 0.15 }
+    -- Dark scrim + a red hairline frame so it clearly reads as a blocked state, not an empty panel.
+    self:Box(x, y, w, h, 0.68, 0, { 0, 0, 0 })
+    self:Box(x, y, w, 2, 0.9, 1, REDDIM)                  -- top
+    self:Box(x, y - h + 2, w, 2, 0.9, 1, REDDIM)          -- bottom
+    self:Box(x, y, 2, h, 0.9, 1, REDDIM)                  -- left
+    self:Box(x + w - 2, y, 2, h, 0.9, 1, REDDIM)          -- right
+    local cx, cy = x + w / 2, y - h / 2
+    local isz = 48
+    self:Tex(cx - isz / 2, cy + 58, isz, isz, opts.icon or "lock", nil, RED, 2)
+    local t = self:Label(opts.title or "MODULE DISABLED", x, cy + 2, RED, 22)
+    t:SetWidth(w); t:SetJustifyH("CENTER")
+    local s = self:Label(opts.subtitle or "Go to the Settings tab to enable it.", x, cy - 28, C.subtext, 13)
+    s:SetWidth(w); s:SetJustifyH("CENTER")
+    if opts.onSettings then
+        self:Button(cx - 78, cy - 70, 156, "Go to Settings", "primary", opts.onSettings, { icon = "settings", iconSize = 13 })
+    end
+    return y - h - 12
 end
 
 ----------------------------------------------------------------------
@@ -110,6 +171,14 @@ end
 function BuilderMixin:Button(x, y, w_, text, kind, cb, opts)
     local b = acq(self.pool, "button", function() return self.theme:Button(self.content) end)
     b:Configure(text, w_, (opts and opts.height) or 26, kind, cb, opts); return self:put(b, x, y)
+end
+
+-- Horizontal nav strip (segmented buttons, optional icon+label each, one active). opts as for
+-- theme:NavBar (items/active/width/gap/height/onSelect/tip). Returns the frame; use :GetHeight()
+-- to lay out content below it. Docks nicely across the top of a page.
+function BuilderMixin:NavBar(x, y, opts)
+    local n = acq(self.pool, "navbar", function() return self.theme:NavBar(self.content) end)
+    n:Configure(opts); return self:put(n, x, y)
 end
 
 function BuilderMixin:Dropdown(x, y)
@@ -314,7 +383,7 @@ end
 
 -- Draw-at-(x,y) wrappers for the transient rich components. Return the live component.
 local RICH = {
-    "ProgressBar", "Spinner", "Badge", "Card", "StatTile", "Separator", "Avatar",
+    "ProgressBar", "Spinner", "Badge", "Card", "StatTile", "HeroRow", "Separator", "Avatar",
     "RadioGroup", "SegmentedControl", "Stepper", "SearchBox", "TextArea",
     "TabBar", "Accordion", "SocialButton", "Glyph",
     "RangeSlider", "ComboBox", "FontSelect", "TooltipPreview", "ClassSpecButton",

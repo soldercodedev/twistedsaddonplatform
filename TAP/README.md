@@ -331,7 +331,7 @@ local function render()
   b:Reset()
   local x, y = 24, -20
   b:Heading("Settings", x, y, "h1");                    y = y - 34
-  b:Section("GENERAL", x, y);                           y = y - 34
+  y = b:Section("GENERAL", x, y);                       y = y - 34   -- Section adds a top margin; use its return
   b:Toggle(x, y, db.enabled, function(v) db.enabled = v end)
   b:Label("Enable addon", x + 46, y - 2, theme.C.text); y = y - 40
   b:ProgressBar(x, y, { width = 300, value = 62, showText = true }); y = y - 28

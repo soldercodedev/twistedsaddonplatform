@@ -337,6 +337,106 @@ function Mixin:StatTile(parent, opts)
 end
 
 ----------------------------------------------------------------------
+-- HeroRow: a wide "hero" row card - a large lead icon (square or a 2:1 banner), a title + optional
+-- subtitle, then a row of labelled stat cells with large values. Meant to replace cramped table rows
+-- with something bolder and more readable (per-boss breakdowns, top runs, leaderboard entries, ...).
+-- Fully generic: the caller supplies the icon texture and the stat cells, so nothing here is tied to
+-- any one dataset. Reserves the icon column even when no icon is given, so stacked rows stay aligned.
+--   theme:HeroRow(parent, {
+--       width=700, height=64, accent="e0872f",
+--       icon=bossTex, iconWide=true, iconWidth=108, iconColor={1,1,1},
+--       title="Boss Name", subtitle="83% kill rate", titleWidth=150,
+--       stats = { {label="KILLS", value="3", color="33dd66"},
+--                 {label="YOUR DPS", value="128K", sub="avg 96K"} },
+--       statWidth=74, valueRole="h4", tipData=..., onClick=function() end })
+----------------------------------------------------------------------
+function Mixin:HeroRow(parent, opts)
+    opts = opts or {}
+    local theme, C = self, self.C
+    local accent = UIF.toColor(opts.accent, C.accent)
+    local w, h = opts.width or 600, opts.height or 64
+    local pad = opts.padding or 10
+
+    -- Always a Button so the whole row gets a free hover highlight (and a click target when wired).
+    local f = CreateFrame("Button", nil, parent); f:SetSize(w, h)
+    theme:StylePanel(f, UIF.mix(C.card, accent, 0.05), UIF.mix(C.border, accent, 0.35))
+    theme:StyleFrame(f, opts)
+    local hl = f:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.05)
+
+    -- Accent left bar (inset for rounded corners, same as Card).
+    do
+        local bs = theme.borderSize or 1
+        local rInset = (theme.radius and theme.radius > 0) and theme.radius or 0
+        local bar = f:CreateTexture(nil, "ARTWORK", nil, 2); bar:SetWidth(opts.accentWidth or 3)
+        bar:SetPoint("TOPLEFT", bs, -rInset); bar:SetPoint("BOTTOMLEFT", bs, rInset)
+        UIF.paint(bar, accent); f.accentBar = bar
+    end
+
+    -- Lead icon column (reserved even when empty, so stacked rows keep their columns aligned).
+    local reserve = (opts.icon ~= nil) or opts.reserveIcon
+    local textX = pad + 8
+    if reserve then
+        local iw = opts.iconWidth or (opts.iconWide and 108 or (h - 2 * pad))
+        local ih = opts.iconWide and math.floor(iw / 2) or iw   -- 2:1 banner, or square
+        if opts.icon ~= nil then
+            local tex = f:CreateTexture(nil, "ARTWORK", nil, 1)
+            tex:SetTexture((theme.IconPath and theme:IconPath(opts.icon)) or opts.icon)
+            if opts.iconCoords then tex:SetTexCoord(unpack(opts.iconCoords)) else tex:SetTexCoord(0, 1, 0, 1) end
+            if opts.iconColor then local c = UIF.toColor(opts.iconColor); tex:SetVertexColor(c[1], c[2], c[3], c[4] or 1) end
+            tex:SetSize(iw, ih); tex:SetPoint("LEFT", pad + 6, 0); f.icon = tex
+        else
+            local ph = f:CreateTexture(nil, "ARTWORK", nil, 1)
+            ph:SetSize(iw, ih); ph:SetPoint("LEFT", pad + 6, 0)
+            UIF.paint(ph, UIF.mix(C.card, accent, 0.18)); f.iconPlaceholder = ph
+        end
+        textX = pad + 6 + iw + 12
+    end
+
+    -- Title (+ optional subtitle stacked under it), vertically centered in the row.
+    local titleW = opts.titleWidth or 150
+    local title = theme:Heading(f, { text = opts.title or "", role = opts.titleRole or "h3", textColor = opts.titleColor })
+    title:SetWidth(titleW); title:SetJustifyH("LEFT"); title:SetWordWrap(false)
+    if opts.subtitle then
+        title:SetPoint("LEFT", textX, 9)
+        local sub = theme:Heading(f, { text = opts.subtitle, role = "caption", textColor = C.subtext })
+        sub:SetPoint("LEFT", textX, -9); sub:SetWidth(titleW); sub:SetJustifyH("LEFT"); sub:SetWordWrap(false); f.subtitleFS = sub
+    else
+        title:SetPoint("LEFT", textX, 0)
+    end
+    f.titleFS = title
+
+    -- Stat cells: label (overline) above a large value, optional sub line beneath. Laid left-to-right
+    -- from a fixed x so the columns line up across a stack of rows.
+    local statX = textX + titleW + (opts.titleGap or 12)
+    local sw = opts.statWidth or 74
+    f.statFS = {}
+    for i, st in ipairs(opts.stats or {}) do
+        local cx = statX + (i - 1) * sw
+        local lbl = theme:Heading(f, { text = st.label or "", role = "overline", textColor = C.subtext })
+        lbl:SetPoint("TOPLEFT", cx, -pad); lbl:SetWidth(sw - 4); lbl:SetJustifyH("LEFT"); lbl:SetWordWrap(false)
+        local valCol = st.color and theme:Color(st.color, C.text) or UIF.toColor(st.colorRGB, C.text)
+        local val = theme:Heading(f, { text = tostring(st.value ~= nil and st.value or "-"),
+            role = opts.valueRole or "h4", textColor = valCol })
+        val:SetPoint("TOPLEFT", cx, -pad - 16); val:SetWidth(sw - 4); val:SetJustifyH("LEFT"); val:SetWordWrap(false)
+        if st.sub then
+            local sfs = theme:Heading(f, { text = st.sub, role = "caption", textColor = C.subtext })
+            sfs:SetPoint("TOPLEFT", cx, -pad - 36); sfs:SetWidth(sw - 4); sfs:SetJustifyH("LEFT"); sfs:SetWordWrap(false)
+        end
+        f.statFS[i] = val
+    end
+
+    -- Tooltip + click.
+    if opts.onClick then f:SetScript("OnClick", opts.onClick) end
+    if opts.tipData or opts.tip then
+        if opts.tipData then theme:SetTipData(f, opts.tipData)
+        else theme:SetTip(f, opts.tip.title, opts.tip.body, opts.tip.anchor) end
+        f:SetScript("OnEnter", function(s) theme:_showTip(s) end)
+        f:SetScript("OnLeave", function() GameTooltip_Hide() end)
+    end
+    return f
+end
+
+----------------------------------------------------------------------
 -- Separator: a line, horizontal (default) or vertical, with an optional centered label.
 --   theme:Separator(parent, { width=400, label="OR", color="2E3440" })
 --   theme:Separator(parent, { vertical=true, height=40 })

@@ -5,6 +5,36 @@ local ADDON, ML = ...
 ML.CHANGELOG = [==[
 # Mythic Ledger - What's New
 
+## 1.0.0-beta.2
+
+- **[NEW]** **Hero-card pages.** The character overview's **By Spec** and **By Dungeon** breakdowns
+  are now rich hero cards - class-coloured spec cards with spec icons, and dungeon cards fronted by
+  their own art - and the headline stats are large-icon tiles.
+- **[NEW]** The **Dungeons** tab is a hero-card grid with a **type-to-filter** box (start typing 3+
+  letters) next to the season selector.
+- **[BUG FIX]** **Boss icons** now load on the post-run scoreboard and on runs you recorded earlier
+  (they stayed blank until the Encounter Journal was queried correctly), and the dungeon background
+  art now covers the whole scoreboard.
+- **[BUG FIX]** **Average deaths** now count only **your** deaths per run - it was averaging the
+  whole party. The Runs page still shows total party deaths.
+- **[CHANGE]** **Interrupts & dispels rescored for Midnight:** per-spec interrupt cooldowns were
+  corrected, and DPS/tanks now get credit for the dispels they bring (healers aren't the only ones
+  expected to dispel).
+- **[CHANGE]** The performance tooltip's score breakdown is easier to read.
+- **[BUG FIX]** Fixed a Lua error when opening a run's player scores, and fixed party cards
+  overlapping their section header.
+- **[NEW]** Data retention is now a policy: keep **All seasons**, the **current season**, or the
+  **current expansion**, with an optional cap on the newest N runs (0-10000). "**Never remove a top
+  run**" protects your best key per dungeon, your top 10, and your crowned runs. Nothing is deleted
+  until you click **Apply**, and Settings shows how many runs you currently have stored.
+- **[NEW]** Settings previews: a live **stat-tile** preview in your chosen style, an in-window
+  **recap preview**, and a **Launch test scoreboard** button so you can see your scale, font, tile
+  style and sound without waiting for a real run.
+- **[NEW]** Pick the **sound channel** (Master / Sound FX / Music / Ambience / Dialog) separately for
+  the scoreboard sound and the recap sound.
+- **[CHANGED]** Export / Import were removed from Settings - the dataset is large enough that pasting
+  export strings around risked instability. Use Data Retention and Delete All History to manage data.
+
 ## 1.0.0-beta.1
 
 - **[NEW]** First beta of Mythic Ledger - a private, account-wide Mythic+ journal. Every timed,

@@ -281,3 +281,21 @@ function Cap.IsHighControl(specID, role)
     local p = Cap.Get(specID, role)
     return p.highControl and true or false
 end
+
+-- The OFFENSIVE dispel ability (Purge / Soothe / Spellsteal / ...) per class - the spell used to strip a
+-- BUFF off an enemy or Soothe an enrage, as opposed to the per-spec DEFENSIVE dispel in the record
+-- (dispel.spellName). Class-level because a class's offensive tool is the same across its specs. Used by
+-- the run-review coaching so a Purge/Soothe target names the right ability + Blizzard icon/tooltip.
+Cap.OFFENSIVE_ABILITIES = {
+    SHAMAN      = { spellID = 370,    spellName = "Purge" },
+    PRIEST      = { spellID = 528,    spellName = "Dispel Magic" },
+    MAGE        = { spellID = 30449,  spellName = "Spellsteal" },
+    DRUID       = { spellID = 2908,   spellName = "Soothe" },
+    HUNTER      = { spellID = 19801,  spellName = "Tranquilizing Shot" },
+    ROGUE       = { spellID = 5938,   spellName = "Shiv" },
+    DEMONHUNTER = { spellID = 278326, spellName = "Consume Magic" },
+    WARLOCK     = { spellID = 19505,  spellName = "Devour Magic" },
+}
+function Cap.OffensiveAbility(classFile)
+    return classFile and Cap.OFFENSIVE_ABILITIES[classFile] or nil
+end

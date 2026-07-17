@@ -3,7 +3,7 @@
 ## Notes: Load-on-demand spell & item name databases, shared by any Twisteds Addon Platform module (loaded centrally by the suite when a search needs it).
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
 ## Author: Twistedfury-Zul'jin
-## Version: 1.0.0-beta.2
+## Version: 1.0.0-beta.3
 ## Category: Twisteds Addon Platform
 ## Dependencies: TAP
 ## LoadOnDemand: 1

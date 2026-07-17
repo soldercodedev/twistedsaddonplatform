@@ -17,13 +17,18 @@ local DEFAULTS = {
     settings = {
         trackAbandoned     = true,
         postRunSummary     = true,
+        postRunAfterLoot   = false,     -- true = wait to pop the summary until you loot the run-end chest
+        postRunDelay       = 5,         -- seconds to wait after the trigger before the summary pops (0 = instant)
         confirmAbandonSave = true,
-        retentionRuns      = 0,        -- 0 = keep everything; otherwise cap newest N
+        retentionScope     = "ALL",    -- retention window: ALL / SEASON (current) / EXPANSION (current)
+        retentionRuns      = 0,        -- 0 = no numeric cap; otherwise keep only the newest N
+        retentionKeepTop   = true,     -- never prune a protected top run (best-per-dungeon, top 10, crowns)
         cardStyle          = "COMPACT", -- Overview stat cards: CLEAN / PANEL / COMPACT
         scoreboardScale    = 1.05,      -- end-of-run scoreboard size (capped to fit the screen)
         scoreboardFont     = "",        -- font key for the scoreboard ("" = use the UI font)
         scoreboardSound    = true,      -- play a sound when the scoreboard opens
         scoreboardSoundKey = "VictoryFanfare", -- which sound (see UIF.SOUNDS)
+        scoreboardSoundChannel = "Master",     -- sound channel for the scoreboard sound
         scoreboardSoundWhen = "END",    -- END = end-of-run popup only; ALWAYS = every time it's viewed
         debug              = false,
         recap = {
@@ -39,6 +44,7 @@ local DEFAULTS = {
             joinDelay         = 3,          -- seconds after joining before recaps may fire
             sound             = true,       -- play a sound (once) when returning players are found
             soundKey          = "Applause", -- which sound (see UIF.SOUNDS)
+            soundChannel      = "Master",   -- sound channel for the recap sound
         },
     },
     runs          = {},   -- array of finalized run records (raw-ish, but no combat events)
@@ -132,6 +138,7 @@ function DB.Ready() return ML._initialized and DB.root ~= nil end
 function DB.Settings() return DB.root and DB.root.settings or DEFAULTS.settings end
 function DB.Recap() return DB.Settings().recap end
 function DB.Runs() return DB.root and DB.root.runs or {} end
+function DB.CountRuns() return DB.root and #DB.root.runs or 0 end
 function DB.Characters() return DB.root and DB.root.characters or {} end
 function DB.PlayerIndex() return DB.root and DB.root.playerIndex or {} end
 function DB.PlayerMeta()  return DB.root and DB.root.playerMeta or {} end
@@ -222,24 +229,96 @@ function DB.MarkKeepers()
     for i = 1, math.min(DB.TOP_KEEP, #timed) do timed[i].pinned = true end
 end
 
--- Trim to the newest `cap` runs - but NEVER drop a pinned keeper (best-per-dungeon). Only
--- un-pinned runs are destroyed, oldest first; if keepers alone exceed the cap, they all stay.
-function DB.ApplyRetention()
-    local cap = tonumber(DB.Settings().retentionRuns) or 0
-    if cap <= 0 then return end
-    local runs = DB.root.runs
-    if #runs <= cap then return end
-    DB.MarkKeepers()
-    table.sort(runs, function(a, b)
-        return (a.completedAt or a.startedAt or 0) < (b.completedAt or b.startedAt or 0)
-    end)
-    local removeCount, i = #runs - cap, 1
-    while removeCount > 0 and i <= #runs do
-        if not runs[i].pinned then table.remove(runs, i); removeCount = removeCount - 1
-        else i = i + 1 end   -- keepers survive; step over them
+-- Flag the single BEST run per (dungeon + key level + player's class/spec) by the PLAYER's overall
+-- performance SCORE, so exactly one crown shows for each such combo. Spec id already implies the class
+-- (1:1), so grouping by spec covers "class + spec". Score comes from the Scoring Store's cached
+-- summaries; ties break toward the faster run, then the more recent. TIMED runs only (a crown means a
+-- clean best). Sets run.bestOfKind on each group's winner, clears it everywhere else. Recomputed on
+-- every save, cache rebuild, and rescore, so a new higher-scoring run steals the crown from the old one.
+function DB.MarkBestRuns()
+    if not DB.root then return end
+    local Store = ML.Scoring and ML.Scoring.Store
+    local best = {}   -- "mapId|level|specID" -> { run, score, duration, at }
+    for _, r in ipairs(DB.root.runs) do
+        r.bestOfKind = nil
+        local pg = r.character and r.character.guid
+        if Store and pg and r.status == ML.STATUS.TIMED and type(r.level) == "number" and r.mapId then
+            local ps = Store.Summary(r)[pg]        -- { overall, grade, role, specID } for the player
+            local spec, score = ps and ps.specID, ps and ps.overall
+            if spec and type(score) == "number" then
+                local key = r.mapId .. "|" .. r.level .. "|" .. spec
+                local cur = best[key]
+                local dur, at = r.duration or math.huge, r.completedAt or r.startedAt or 0
+                local wins = (not cur) or score > cur.score
+                    or (score == cur.score and (dur < cur.duration or (dur == cur.duration and at > cur.at)))
+                if wins then best[key] = { run = r, score = score, duration = dur, at = at } end
+            end
+        end
     end
-    if ML.History and ML.History.RebuildAll then pcall(ML.History.RebuildAll) end
-    ML.Log("Retention applied: %d run(s) kept (cap %d, keepers protected)", #runs, cap)
+    for _, v in pairs(best) do v.run.bestOfKind = true end
+end
+
+-- Enforce the retention policy. Two independent phases run in order:
+--   1. SCOPE prune - drop runs that fall OUTSIDE the retained window (SEASON = current season only,
+--      EXPANSION = current expansion only, ALL = keep every season/expansion).
+--   2. numeric CAP - if retentionRuns > 0, trim oldest runs until at most that many remain.
+-- While Keep-Top is on (the default) protected "top" runs (best key per dungeon, the top 10, and
+-- crowned best-of-kind) are never dropped by either phase. Runs we can't classify (missing seasonId
+-- or expansionId - e.g. history recorded before the tag existed) are KEPT, never pruned on a guess.
+-- Called on every save and from the Settings "Apply" button. Destructive: only ever removes runs.
+function DB.ApplyRetention()
+    if not DB.root then return end
+    local st = DB.Settings()
+    local scope   = st.retentionScope or "ALL"
+    local cap     = tonumber(st.retentionRuns) or 0
+    local keepTop = st.retentionKeepTop ~= false   -- default true
+    if scope == "ALL" and cap <= 0 then return end  -- nothing to enforce
+
+    local runs = DB.root.runs
+    -- Refresh keeper flags so the top-run guard is accurate before we prune anything.
+    DB.MarkKeepers()
+    DB.MarkBestRuns()   -- crowned best-per-(dungeon+key+spec) runs are keepers too
+    local function protected(r) return keepTop and (r.pinned or r.bestOfKind) end
+    local removed = 0
+
+    -- Phase 1: SCOPE prune. Reverse iteration so table.remove is index-safe.
+    if scope == "SEASON" then
+        local cur = ML.API and ML.API.GetCurrentSeason and ML.API.GetCurrentSeason()
+        if cur then
+            for i = #runs, 1, -1 do
+                local r = runs[i]
+                if r.seasonId ~= nil and r.seasonId ~= cur and not protected(r) then
+                    table.remove(runs, i); removed = removed + 1
+                end
+            end
+        end
+    elseif scope == "EXPANSION" then
+        local cur = ML.API and ML.API.GetExpansionLevel and ML.API.GetExpansionLevel()
+        if cur then
+            for i = #runs, 1, -1 do
+                local r = runs[i]
+                if r.expansionId ~= nil and r.expansionId ~= cur and not protected(r) then
+                    table.remove(runs, i); removed = removed + 1
+                end
+            end
+        end
+    end
+
+    -- Phase 2: numeric CAP - oldest un-protected runs first.
+    if cap > 0 and #runs > cap then
+        table.sort(runs, function(a, b)
+            return (a.completedAt or a.startedAt or 0) < (b.completedAt or b.startedAt or 0)
+        end)
+        local removeCount, i = #runs - cap, 1
+        while removeCount > 0 and i <= #runs do
+            if not protected(runs[i]) then table.remove(runs, i); removeCount = removeCount - 1; removed = removed + 1
+            else i = i + 1 end   -- keepers survive; step over them
+        end
+    end
+
+    if removed > 0 and ML.History and ML.History.RebuildAll then pcall(ML.History.RebuildAll) end
+    ML.Log("Retention applied: scope=%s cap=%d keepTop=%s -> %d kept, %d removed",
+        scope, cap, tostring(keepTop), #runs, removed)
 end
 
 function DB.WipeHistory()

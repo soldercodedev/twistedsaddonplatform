@@ -338,6 +338,16 @@ function API.GetCurrentSeason()
     return id
 end
 
+-- Current expansion level (0 = Classic ... rising per expansion). Stamped on new runs so retention
+-- can scope by expansion; nil when the API is unavailable (older/edge clients) so runs recorded then
+-- stay unclassified and are never pruned on a guess.
+function API.GetExpansionLevel()
+    if type(_G.GetExpansionLevel) ~= "function" then return nil end
+    local lvl = ML.ReadNum(safe("GetExpansionLevel", _G.GetExpansionLevel))
+    if lvl == nil or lvl < 0 then return nil end
+    return lvl
+end
+
 -- The current season's dungeon map-id pool (for the Dungeons page). Empty table if unavailable.
 function API.GetSeasonMapPool()
     local out = {}

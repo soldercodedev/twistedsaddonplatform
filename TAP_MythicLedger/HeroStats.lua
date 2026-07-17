@@ -14,16 +14,50 @@ local Util = ML.Util
 -- Palette (WoW item-quality inspired). Hex strings; the UI kit's colour
 -- helpers accept "RRGGBB" anywhere a colour is expected.
 ----------------------------------------------------------------------
+-- Canonical metric colour scale: F (worst) -> D -> C -> B -> A -> S (best), plus N (neutral/unrated).
+-- ASIDE FROM M+ SCORE (which keeps Blizzard's own rarity colour), EVERY metric/grade colour in the
+-- module resolves through here. Two variants keep both themes legible - bright green/orange and mid-grey
+-- wash out on the wrong background - picked per render by TierColor() from the live theme's bg luminance.
+local TIER_DARK = {   -- the requested scale, as-is (designed for a dark bg)
+    F = "666666",  -- grey
+    D = "1eff00",  -- green
+    C = "0070ff",  -- blue
+    B = "a335ee",  -- purple
+    A = "ff8000",  -- orange
+    S = "e268a8",  -- pink
+    N = "8a8f99",  -- neutral / unrated (a touch lighter than F so avg-time stays legible)
+}
+local TIER_LIGHT = {  -- same hues, darkened where the dark values wash out on a light bg
+    F = "555a63",  -- grey
+    D = "12930b",  -- darker green (bright green is unreadable on light)
+    C = "0a5fd0",  -- blue
+    B = "8626c9",  -- purple
+    A = "cf6800",  -- orange
+    S = "c0417f",  -- pink
+    N = "555a63",  -- neutral / unrated
+}
+
+-- Light mode when the theme's background is bright (daylight / parchment palettes).
+local function isLightTheme()
+    local theme = _G.TAP and _G.TAP.uiTheme
+    local bg = theme and theme.C and theme.C.bg
+    if type(bg) ~= "table" then return false end
+    return (0.299 * (bg[1] or 0) + 0.587 * (bg[2] or 0) + 0.114 * (bg[3] or 0)) > 0.55
+end
+ML.IsLightTheme = isLightTheme
+
+-- tier: "F"/"D"/"C"/"B"/"A"/"S"/"N". Returns a "RRGGBB" hex for the CURRENT theme (light or dark).
+-- forceDark = always use the bright dark-theme variant (for text over the forced-dark dungeon-art cards).
+function ML.TierColor(tier, forceDark)
+    local t = (not forceDark and isLightTheme()) and TIER_LIGHT or TIER_DARK
+    return t[tier] or t.F
+end
+
+-- Quality name -> tier letter. The stat scales below still read Q.<name>; these values remap every
+-- scale onto the F..S ramp at once (each resolved to a theme hex by TierColor at eval time).
 local Q = {
-    poor      = "9D9D9D",   -- gray   - low / inactive
-    common    = "FFFFFF",   -- white  - neutral baseline
-    uncommon  = "1EFF00",   -- green  - good
-    rare      = "0070DD",   -- blue   - very good
-    epic      = "A335EE",   -- purple - excellent
-    legendary = "FF8000",   -- orange - exceptional
-    artifact  = "E6CC80",   -- gold   - special / elite
-    danger    = "E74C3C",   -- red    - concerning
-    neutral   = "AAB6CC",   -- blue-gray - unrated / neutral
+    poor = "F", common = "F", uncommon = "D", rare = "C", epic = "B",
+    legendary = "A", artifact = "S", danger = "F", neutral = "N",
 }
 ML.QUALITY_COLORS = Q
 
@@ -78,18 +112,18 @@ local HERO_STATS = {}
 
 local function descStat(cfg)
     cfg.eval = function(value)
-        if type(value) ~= "number" then return Q.poor, R.none, nil end
+        if type(value) ~= "number" then return ML.TierColor(Q.poor), R.none, nil end
         local t = evalDesc(cfg.scale, value)
-        return t.color, t.rating, t
+        return ML.TierColor(t.color), t.rating, t
     end
     return cfg
 end
 
 local function ascStat(cfg)
     cfg.eval = function(value)
-        if type(value) ~= "number" then return Q.poor, R.none, nil end
+        if type(value) ~= "number" then return ML.TierColor(Q.poor), R.none, nil end
         local t = evalAsc(cfg.scale, value)
-        return t.color, t.rating, t
+        return ML.TierColor(t.color), t.rating, t
     end
     return cfg
 end
@@ -170,7 +204,7 @@ HERO_STATS.averageTime = {
     note = "Not rated - dungeon timers differ, so raw time isn't good or bad on its own.",
     neutralValue = true,
     eval = function(value)
-        return Q.neutral, R.neutral, nil
+        return ML.TierColor(Q.neutral), R.neutral, nil
     end,
 }
 
@@ -191,7 +225,7 @@ HERO_STATS.averageDeaths = ascStat({
 })
 
 HERO_STATS.returning = descStat({
-    key = "returning", label = "Returning", icon = "users",
+    key = "returning", label = "Regulars", icon = "users",
     desc = "Party members you've grouped with more than once.",
     scale = {
         { min = 40, color = Q.legendary, rating = R.exceptional, text = "40+" },
@@ -200,6 +234,19 @@ HERO_STATS.returning = descStat({
         { min = 5,  color = Q.uncommon,  rating = R.good,        text = "5-9" },
         { min = 1,  color = Q.common,    rating = R.neutral,     text = "1-4" },
         { min = 0,  color = Q.poor,      rating = R.poor,        text = "0" },
+    },
+})
+
+HERO_STATS.playersMet = descStat({
+    key = "playersMet", label = "Players Met", icon = "user-plus",
+    desc = "Distinct party members you've grouped with in scope.",
+    scale = {
+        { min = 200, color = Q.legendary, rating = R.exceptional, text = "200+" },
+        { min = 100, color = Q.epic,      rating = R.excellent,   text = "100-199" },
+        { min = 50,  color = Q.rare,      rating = R.veryGood,    text = "50-99" },
+        { min = 20,  color = Q.uncommon,  rating = R.good,        text = "20-49" },
+        { min = 1,   color = Q.common,    rating = R.neutral,     text = "1-19" },
+        { min = 0,   color = Q.poor,      rating = R.poor,        text = "0" },
     },
 })
 
@@ -252,7 +299,10 @@ function ML.HeroStatSubtext(key, o, scopeLabel)
         return { sub = line, footer = { line } }
 
     elseif key == "returning" then
-        return { sub = "Players seen before", footer = { "Players seen before" } }
+        return { sub = "Grouped with 2+ times", footer = { "Grouped with 2+ times" } }
+
+    elseif key == "playersMet" then
+        return { sub = "Unique teammates", footer = { "Unique teammates" } }
     end
     return { sub = nil, footer = {} }
 end
@@ -263,13 +313,13 @@ end
 -- here so the threshold policy lives with the rest of the scale.
 ----------------------------------------------------------------------
 function ML.getNormalizedTimeColor(timerUsagePercent)
-    if type(timerUsagePercent) ~= "number" then return Q.neutral, R.neutral end
-    if timerUsagePercent < 70  then return Q.legendary, R.exceptional end
-    if timerUsagePercent < 80  then return Q.epic,      R.excellent end
-    if timerUsagePercent < 90  then return Q.rare,      R.veryGood end
-    if timerUsagePercent <= 100 then return Q.uncommon, R.good end
-    if timerUsagePercent <= 110 then return Q.poor,     R.neutral end
-    return Q.danger, R.concerning
+    if type(timerUsagePercent) ~= "number" then return ML.TierColor("N"), R.neutral end
+    if timerUsagePercent < 70  then return ML.TierColor("A"), R.exceptional end
+    if timerUsagePercent < 80  then return ML.TierColor("B"), R.excellent end
+    if timerUsagePercent < 90  then return ML.TierColor("C"), R.veryGood end
+    if timerUsagePercent <= 100 then return ML.TierColor("D"), R.good end
+    if timerUsagePercent <= 110 then return ML.TierColor("F"), R.neutral end
+    return ML.TierColor("F"), R.concerning
 end
 
 ----------------------------------------------------------------------
@@ -312,7 +362,8 @@ function ML.HeroStatStyle(key, value, formatted)
         lines[#lines + 1] = { sep = true }
         for _, t in ipairs(cfg.scale) do
             local on = (t == active)
-            local col = on and t.color or dimHex(t.color, 0.55)
+            local hex = ML.TierColor(t.color)                 -- t.color is a tier letter -> theme hex
+            local col = on and hex or dimHex(hex, 0.55)
             lines[#lines + 1] = {
                 left = (on and "> " or "     ") .. t.text,
                 right = t.rating, lcolor = col, rcolor = col,

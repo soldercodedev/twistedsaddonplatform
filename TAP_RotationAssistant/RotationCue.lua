@@ -124,6 +124,7 @@ local driver                 -- event-only driver frame (the poll is a C_Timer t
 local slotToButton = {}      -- reverse map: action slot -> the action button frame that owns it
 local keyCache = {}          -- spellID -> resolved key string (false = looked-up-but-unbound)
 local glowing = {}           -- spellID -> true while its proc (spell activation overlay) is up
+local uiTab = "behaviour"     -- active settings page (docked top-nav): behaviour | indicators | appearance
 local testMode = false       -- preview mode (settings page / placement) - shows the cue on-demand
 local placing = false        -- true only while in placement mode (the ONLY time the cue is draggable)
 local inCombat = false       -- tracked from REGEN events (reliable, unlike InCombatLockdown timing)
@@ -561,6 +562,42 @@ local function updatePreview()
     applyGCD(preview, s)
 end
 
+-- The four indicator previews on the Indicators page (GCD / Range / Resource / Cast). Each is a demo
+-- cue styled from the live APPEARANCE settings, then forced to SHOW one indicator's effect using that
+-- indicator's own colours + style - so you see what each looks like without having to trigger it live.
+local IND_PREVIEWS = {
+    { key = "gcd",      label = "GCD",      enabledKey = "showGCD" },
+    { key = "range",    label = "Range",    enabledKey = "rangeCheck" },
+    { key = "resource", label = "Resource", enabledKey = "resourceCheck" },
+    { key = "cast",     label = "Cast",     enabledKey = "castIndicator" },
+}
+local indPreviews = {}   -- key -> frame (created lazily the first time the Indicators page is drawn)
+
+local function styleIndicatorPreview(f, s, kind, size)
+    applyAppearance(f, s, size)
+    f.icon:SetTexture((GetSpellTexture and GetSpellTexture(133)) or QUESTION)   -- Fireball demo art
+    f.key:SetText("S-4")
+    f.icon:SetDesaturated(false); f.icon:SetVertexColor(1, 1, 1)                -- reset any prior tint
+    f.pip:Hide(); if f.pipBg then f.pipBg:Hide() end
+    if f.cd then f.cd:Hide(); f._gcdEnd = nil end
+    f:SetScript("OnUpdate", nil)                                                -- clear the GCD loop by default
+    if kind == "cast" then
+        applyCastIndicator(f, setmetatable({ castIndicator = true }, { __index = s }), 133)  -- 133 = a cast
+    elseif kind == "gcd" then
+        f.cd:Show(); f.cd:SetSwipeColor(0, 0, 0, s.gcdOpacity or 0.6)
+        f:SetScript("OnUpdate", function(self)          -- loop a 1.5s GCD so the sweep is always on show
+            if not self:IsVisible() then return end
+            if (self._gcdEnd or 0) - GetTime() <= 0 then
+                self.cd:SetCooldown(GetTime(), 1.5); self._gcdEnd = GetTime() + 1.5
+            end
+        end)
+    elseif kind == "range" then
+        tintIcon(f, s.rangeStyle or "red", s.rangeColor or { 1, 0.25, 0.25 })
+    elseif kind == "resource" then
+        tintIcon(f, s.resourceStyle or "tint", s.resourceColor or { 0.4, 0.5, 1 })
+    end
+end
+
 -- Apply every visual setting to the live cue (size follows scale as a SIZE multiplier so the
 -- CENTER anchor keeps one fixed pivot), then mirror the look to the preview.
 local function applyLayout()
@@ -581,6 +618,14 @@ local function applyLayout()
     cue:SetMovable(placing); cue:EnableMouse(placing)
 
     updatePreview()
+    -- Live-restyle any visible indicator previews (Indicators page) so dropdowns / swatches / sliders
+    -- that only call applyLayout still update them immediately.
+    for _, ind in ipairs(IND_PREVIEWS) do
+        local f = indPreviews[ind.key]
+        if f and f:IsVisible() then
+            styleIndicatorPreview(f, s, ind.key, math.min((s.iconSize or 48) * (s.scale or 1), 64))
+        end
+    end
 end
 
 -- Hide the cue and make sure any glow is torn down with it.
@@ -800,6 +845,13 @@ end
 -- Inline settings, rendered into the Suite Manager's builder. Returns the new y.
 -- `win` (the manager window) lets us re-render when a control changes what's shown (e.g.
 -- picking the Custom text position reveals the X / Y sliders).
+local TAB_TIPS = {
+    behaviour  = "When the cue shows, who it shows for, performance, and placement.",
+    indicators = "On-icon feedback: cast vs instant, GCD sweep, out of range, and can't-afford.",
+    appearance = "Icon shape/size, border, keybind text, and a live preview.",
+    settings   = "Enable or disable the module, and the minimap button.",
+}
+
 local function Settings(m, b, x, y, w, win)
     local C = b.theme.C
     local s = m:GetSettings()
@@ -1006,39 +1058,119 @@ local function Settings(m, b, x, y, w, win)
     -- the appearance controls so it updates live as you drag the sliders.
     if not preview then preview = buildCueFrame(b.content) end
 
-    y = b:Grid(x, y, { behaviourCell, visibilityCell }, { columns = 2, gap = 24, width = w, minColWidth = 240 })
-    y = y - 4
-    y = b:Grid(x, y, { castCell, gcdCell, rangeCell, resourceCell }, { columns = 2, gap = 24, width = w, minColWidth = 240 })
-    y = y - 4
-    y = b:Grid(x, y, { iconCell, borderCell, keybindCell, previewCell }, { columns = 2, gap = 22, width = w, minColWidth = 240 })
-    y = y - 8
+    -- Behaviour page: Behaviour + Visibility cells, then the full-width Performance / Minimap / actions.
+    local function renderBehaviour(cy)
+        cy = b:Grid(x, cy, { behaviourCell, visibilityCell }, { columns = 2, gap = 24, width = w, minColWidth = 240 })
+        cy = cy - 8
 
-    -- Performance (full width)
-    local P = pen(x, w, y)
-    P:sub("PERFORMANCE")
-    P:slider("Scan interval", "scanInterval", 0.05, 1.0, 0.05, "%.2f",
-        "How often the cue re-checks your next ability, in seconds. Higher = less CPU, a touch less "
-        .. "responsive. A single lightweight timer - combat start/end and spec changes still update instantly.")
-    P:note("The suggestion refreshes on this timer (higher = less CPU). Combat start/end, spec "
-        .. "changes and procs update immediately via events.")
-    y = P.y - 4
+        -- Performance (full width)
+        local P = pen(x, w, cy)
+        P:sub("PERFORMANCE")
+        P:slider("Scan interval", "scanInterval", 0.05, 1.0, 0.05, "%.2f",
+            "How often the cue re-checks your next ability, in seconds. Higher = less CPU, a touch less "
+            .. "responsive. A single lightweight timer - combat start/end and spec changes still update instantly.")
+        P:note("The suggestion refreshes on this timer (higher = less CPU). Combat start/end, spec "
+            .. "changes and procs update immediately via events.")
+        cy = P.y - 4
 
-    -- Actions
-    b:Button(x, y, 120, testMode and "Stop Test" or "Test On Screen", testMode and "danger" or "default", function()
-        testMode = not testMode
-        if not testMode then hideCue() end
-        refresh()
-    end)
-    b:Button(x + 128, y, 130, "Set Placement", "primary", function() startPlacement(win) end)
-    b:Button(x + 266, y, 130, "Reset Position", "default", function()
-        s.pos = { x = DEFAULT_POS.x, y = DEFAULT_POS.y }
-        applyLayout(); refresh()
-    end)
-    y = y - 34
+        -- Actions
+        b:Button(x, cy, 120, testMode and "Stop Test" or "Test On Screen", testMode and "danger" or "default", function()
+            testMode = not testMode
+            if not testMode then hideCue() end
+            refresh()
+        end)
+        b:Button(x + 128, cy, 130, "Set Placement", "primary", function() startPlacement(win) end)
+        b:Button(x + 266, cy, 130, "Reset Position", "default", function()
+            s.pos = { x = DEFAULT_POS.x, y = DEFAULT_POS.y }
+            applyLayout(); refresh()
+        end)
+        cy = cy - 34
 
-    if not GetNext then
-        b:Label("|cffffaa00Note:|r C_AssistedCombat.GetNextCastSpell isn't available on this client.", x, y, C.subtext, 10)
-        y = y - 16
+        if not GetNext then
+            b:Label("|cffffaa00Note:|r C_AssistedCombat.GetNextCastSpell isn't available on this client.", x, cy, C.subtext, 10)
+            cy = cy - 16
+        end
+        return cy
+    end
+    -- Preview strip: the four indicators laid 4-across, each a demo cue styled from the Appearance
+    -- settings and forced to show its own effect - a live "what it'll look like" for the toggles above.
+    local function renderIndicatorPreviews(cy)
+        b:Sub("PREVIEW", x, cy, w); cy = cy - 26
+        local boxTop, boxH = cy, 150
+        b:Box(x, boxTop, w, boxH, 0.12, 0, C.card)
+        local size = math.min((s.iconSize or 48) * (s.scale or 1), 64)   -- capped so four fit comfortably
+        local colW = w / #IND_PREVIEWS
+        for i, ind in ipairs(IND_PREVIEWS) do
+            local f = indPreviews[ind.key]
+            if not f then f = buildCueFrame(b.content); indPreviews[ind.key] = f end
+            f:SetParent(b.content); b:Transient(f)
+            local ccx = x + (i - 0.5) * colW
+            f:ClearAllPoints(); f:SetPoint("CENTER", b.content, "TOPLEFT", ccx, boxTop - 62)
+            f:Show()
+            styleIndicatorPreview(f, s, ind.key, size)
+            local on = s[ind.enabledKey] and true or false
+            local lfs = b:Label(ind.label .. (on and "" or "  (off)"), ccx - 60, boxTop - boxH + 26,
+                on and C.text or C.subtext, 11)
+            lfs:SetWidth(120); lfs:SetJustifyH("CENTER")
+        end
+        b:Label("Shown with your Appearance settings.", x, boxTop - boxH - 2, C.subtext, 10)
+        return boxTop - boxH - 16
+    end
+    local function renderIndicators(cy)
+        cy = b:Grid(x, cy, { castCell, gcdCell, rangeCell, resourceCell }, { columns = 2, gap = 24, width = w, minColWidth = 240 })
+        return renderIndicatorPreviews(cy - 8) - 8
+    end
+    local function renderAppearance(cy)
+        cy = b:Grid(x, cy, { iconCell, borderCell, keybindCell, previewCell }, { columns = 2, gap = 22, width = w, minColWidth = 240 })
+        return cy - 8
+    end
+    -- SETTINGS page: the master enable/disable and the minimap button (moved here from Behaviour).
+    local function renderSettings(cy)
+        cy = b:ModuleToggle(x, cy, w, m, { onToggle = function() if win then win:Refresh() end end,
+            sub = "When off, the on-screen cue is hidden and all its checks stop; your settings are kept." })
+        if Suite and Suite.IsMinimapButtonShown then
+            b:Sub("MINIMAP", x, cy, w); cy = cy - 30
+            local tg = b:Toggle(x, cy, Suite:IsMinimapButtonShown("rotationCue"),
+                function(v) Suite:SetMinimapButtonShown("rotationCue", v) end)
+            b.theme:SetTip(tg, "Minimap icon", "Show a Rotation Assistant button on the minimap (left-click opens this page).")
+            b:Label("Show a minimap button", x + 46, cy - 2, C.text)
+            b:Label("Left-click it to open this page.", x + 46, cy - 20, C.subtext, 10)
+            cy = cy - 42
+        end
+        return cy
+    end
+
+    -- Dock the tab strip as a fixed top-nav flush under the title bar (matches Mythic Ledger). It must
+    -- be re-issued every render - Window:Refresh clears the nav before each render.
+    if win and win.SetTopNav then
+        win:SetTopNav({
+            items = {
+                { key = "behaviour",  label = "Behaviour",  icon = "adjustments-horizontal" },
+                { key = "indicators", label = "Indicators", icon = "activity" },
+                { key = "appearance", label = "Appearance", icon = "palette" },
+                { key = "settings",   label = "Settings",   icon = "settings" },
+            },
+            active = uiTab, height = 30,
+            onSelect = function(key) uiTab = key; if win then win:Refresh() end end,
+            tip = function(key) return TAB_TIPS[key] end,
+        })
+        y = y - 4   -- small breathing room below the docked nav
+    end
+
+    -- Disabled: overlay every tab except Settings (where the enable toggle lives).
+    if m and m.IsEnabled and not m:IsEnabled() and uiTab ~= "settings" then
+        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings tab to turn Rotation Assistant back on.",
+            onSettings = function() uiTab = "settings"; if win then win:Refresh() end end })
+    end
+
+    if uiTab == "indicators" then
+        y = renderIndicators(y)
+    elseif uiTab == "appearance" then
+        y = renderAppearance(y)
+    elseif uiTab == "settings" then
+        y = renderSettings(y)
+    else
+        y = renderBehaviour(y)
     end
     return y
 end
@@ -1048,6 +1180,14 @@ end
 ----------------------------------------------------------------------
 local CHANGELOG = [==[
 # Rotation Assistant - What's New
+
+## 1.0.0-beta.3
+
+- **[CHANGE]** **Tabbed layout.** The page is now split into tabs - **Behaviour**, **Indicators**,
+  **Appearance**, and **Settings** - docked under the title bar, instead of one long scrolling page.
+  Everything's in the same place, just quicker to get to.
+- **[BUG FIX]** Picks up the latest shared appearance fixes - custom theme colours now save correctly
+  from the colour picker, and the **Menu scale** slider is smoother to drag.
 
 ## 1.0.0-beta.2
 
@@ -1088,11 +1228,23 @@ Suite:RegisterModule({
     icon    = "keyboard",
     addon   = "TAP_RotationAssistant",
     default = true,
+    fullPage = true,   -- we render our own tabbed page; suite skips the "SETTINGS" band
+    rendersWhenDisabled = true,   -- keep our page (and its Settings tab) reachable while disabled
     changelog = CHANGELOG,
     OnEnable  = OnEnable,
     OnDisable = OnDisable,
     Settings  = Settings,
 })
+
+-- Optional minimap icon for this module (hidden by default; toggled in this module's settings).
+if Suite.RegisterMinimapButton then
+    Suite:RegisterMinimapButton("rotationCue", {
+        icon = "Interface\\AddOns\\TAP_RotationAssistant\\assets\\images\\tap_rotation_assistant_icon.tga",
+        title = "|cffa06cf0Rotation Assistant|r", action = "open the settings",
+        onClick = function() Suite:OpenWindow("mod:rotationCue") end,
+        defaultHidden = true,
+    })
+end
 
 -- List this module's commands on the Manager's Help > Commands page. /tap rotation opens the
 -- module page; /rcue (registered below) stays the native diagnostics command.

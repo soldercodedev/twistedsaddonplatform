@@ -51,7 +51,7 @@ local function build(win)
     local FOOTER_H = (footerStyle == "none" and 0) or (footerStyle == "expanded" and (o.footerHeight or 48)) or (o.footerHeight or 22)
     local SIDE_W   = o.sidebarWidth or 210
     local name     = o.name or UIF.NextId(theme.id .. "Window")
-    win._headerH, win._footerH = HEADER_H, FOOTER_H
+    win._headerH, win._footerH, win._sideW = HEADER_H, FOOTER_H, SIDE_W
 
     local mgr = CreateFrame("Frame", name, UIParent)
     win.frame = mgr
@@ -408,6 +408,10 @@ function WindowMixin:Refresh()
         if self.scroll then self.scroll:SetVerticalScroll(0) end
     end
 
+    -- Start every render with no docked top-nav; a page that wants one re-adds it in its render()
+    -- (via win:SetTopNav). This auto-clears the bar when you navigate to a page that doesn't use it.
+    if self.built then self:SetTopNav(nil) end
+
     self.builder:Reset()
     local page = self:_pageFor(self.view)
     local ok, errOrY = pcall(function()
@@ -465,6 +469,63 @@ function WindowMixin:IsMaximized() return self._maximized and true or false end
 
 function WindowMixin:_pageFor(view)
     for _, p in ipairs(self.opts.pages or {}) do if p.view == view then return p end end
+end
+
+-- Dock a fixed, full-width navigation bar flush under the title bar - a traditional application
+-- top-nav / menu bar. It spans the whole content area (right of the sidebar to the window edge) and
+-- stays put while the page scrolls; the content scroll is pushed down to sit below it. Call this from
+-- a page's render() with { items, active, onSelect, tip, height, gap, tabWidth } to give that page a
+-- docked nav; pass nil (or no items) to remove it. Refresh() clears it before every render, so pages
+-- that don't call this get none.
+function WindowMixin:SetTopNav(spec)
+    if not self.built then return end
+    local mgr, theme = self.frame, self.theme
+    local HEADER_H, FOOTER_H = self._headerH or 44, self._footerH or 0
+    local SIDE_W = self._sideW or 210
+
+    -- Restore the content scroll (and its scrollbar) to sit directly under the header.
+    local function anchorContent(topOff)
+        self.scroll:ClearAllPoints()
+        self.scroll:SetPoint("TOPLEFT", SIDE_W + 2, -HEADER_H - topOff)
+        self.scroll:SetPoint("BOTTOMRIGHT", -20, FOOTER_H + 6)
+        if self.sbar then
+            self.sbar:ClearAllPoints()
+            self.sbar:SetPoint("TOPRIGHT", -6, -HEADER_H - topOff - 2)
+            self.sbar:SetPoint("BOTTOMRIGHT", -6, FOOTER_H + 8)
+        end
+    end
+
+    if not spec or not spec.items or #spec.items == 0 then
+        if self.topNav then self.topNav:Hide() end
+        anchorContent(6)
+        return   -- clearing the bar (done every Refresh before render) must NOT touch _topNavActive
+    end
+
+    -- Scroll the body to top whenever the docked nav's active item changes - i.e. the user switched
+    -- tabs. Same intent as the view-change reset in Refresh(), but for pages whose tabs live in this
+    -- top-nav (they re-render in place without changing self.view). Only fires on an actual change, so
+    -- re-renders that keep the same tab (e.g. live filtering) don't fight the user's scroll position.
+    if spec.active ~= nil and spec.active ~= self._topNavActive then
+        self._topNavActive = spec.active
+        if self.scroll then self.scroll:SetVerticalScroll(0) end
+    end
+
+    if not self.topNav then
+        self.topNav = theme:NavBar(mgr)
+        self.topNav:SetFrameLevel(mgr:GetFrameLevel() + 6)
+    end
+    local band = self.topNav
+    -- Full-bleed across the content area: flush under the header, no side margins.
+    local contentW = math.max(1, mgr:GetWidth() - (SIDE_W + 2) - 2)
+    band:ClearAllPoints()
+    band:SetPoint("TOPLEFT", mgr, "TOPLEFT", SIDE_W + 2, -HEADER_H)
+    band:Configure({
+        items = spec.items, active = spec.active, width = contentW,
+        height = spec.height or 30, gap = spec.gap or 2,
+        tabWidth = spec.tabWidth, onSelect = spec.onSelect, tip = spec.tip,
+    })
+    band:Show()
+    anchorContent(band:GetHeight() or 38)
 end
 
 -- Switch page and re-render.

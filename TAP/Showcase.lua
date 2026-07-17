@@ -79,7 +79,7 @@ end
 local function pageSkins(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("SKINS  (color + shape)", x, y); y = y - 30
+    y = b:Section("SKINS  (color + shape)", x, y); y = y - 30
     local _, h = b:Wrap("A skin changes the |cffffffffpalette|r AND the |cffffffffshape|r - corner radius, border weight, and font. "
         .. "Click one to restyle the entire window live.", x, y, win.opts.contentWidth - 44, C.subtext, 11)
     y = y - (h + 14)
@@ -102,7 +102,7 @@ local function pageSkins(b, win)
     end)
     y = y - 42
 
-    b:Section("PREVIEW", x, y); y = y - 30
+    y = b:Section("PREVIEW", x, y); y = y - 30
     b:Button(x, y, 100, "Primary", "primary", function() end)
     b:Button(x + 108, y, 100, "Default", "default", function() end)
     b:Button(x + 216, y, 100, "Danger", "danger", function() end)
@@ -125,7 +125,7 @@ local function pageWidgets(b, win)
     local C = theme.C
     local x, y = 24, -20
 
-    b:Section("BASIC CONTROLS", x, y); y = y - 34
+    y = b:Section("BASIC CONTROLS", x, y); y = y - 34
     theme:SetTip(b:Toggle(x, y, state.enabled, function(v) state.enabled = v end),
         "Toggle", "A themed on/off switch. Hover me - this is the tooltip system.")
     b:Label("Enable feature", x + 46, y - 2, C.text)
@@ -150,13 +150,13 @@ local function pageWidgets(b, win)
         200, 0, 10, 1, function() return state.volume end, function(v) state.volume = v end, "%d")
     y = y - 42
 
-    b:Section("BUTTONS", x, y); y = y - 34
+    y = b:Section("BUTTONS", x, y); y = y - 34
     b:Button(x, y, 110, "Primary", "primary", function() print("UIFoundry: primary click") end)
     b:Button(x + 120, y, 110, "Default", "default", function() print("UIFoundry: default click") end)
     b:Button(x + 240, y, 110, "Danger", "danger", function() print("UIFoundry: danger click") end)
     y = y - 44
 
-    b:Section("ICON + COLOR", x, y); y = y - 34
+    y = b:Section("ICON + COLOR", x, y); y = y - 34
     local ic = b:Icon(x, y - 2); ic:SetSize(28, 28)
     ic.tex:SetTexture(ICON .. state.picked)
     theme:SetTip(ic, "Icon button", "Click to pick from a grid of icons.")
@@ -173,7 +173,7 @@ local function pageWidgets(b, win)
     b:Swatch(x + 280, y - 8, state.color, function() win:Refresh() end, "Text color", "Opens the color picker.")
     y = y - 48
 
-    b:Section("PREVIEW (drag the icon)", x, y); y = y - 30
+    y = b:Section("PREVIEW (drag the icon)", x, y); y = y - 30
     local pv = b:Preview(x, y, win.opts.contentWidth - 40, 92)
     pv.fs:SetFont(theme.FONT, 30, "THICKOUTLINE")
     pv.fs:SetText(state.name ~= "" and state.name or "ALERT")
@@ -191,7 +191,7 @@ end
 local function pagePickers(b, win)
     local C = theme.C
     local x, y = 24, -20
-    b:Section("PICKERS & DIALOGS", x, y); y = y - 34
+    y = b:Section("PICKERS & DIALOGS", x, y); y = y - 34
     local _, h = b:Wrap("Every popup is themed and drag-movable. These are the same components a "
         .. "real addon calls: |cffffffffcolor picker|r, |cfffffffficon grid|r, |cffffffffcopy/paste dialog|r, and a "
         .. "|cffffffffkey-capture|r prompt.", x, y, win.opts.contentWidth - 44, C.subtext, 12)
@@ -231,7 +231,7 @@ local function pagePickers(b, win)
     end)
     y = y - 48
 
-    b:Section("LIVE THEME ACCENT", x, y); y = y - 34
+    y = b:Section("LIVE THEME ACCENT", x, y); y = y - 34
     b:Label("Accent", x, y - 2, C.subtext)
     b:Swatch(x + 66, y, state.accent, function(r, g, bb)
         theme:ApplyAccent({ r, g, bb }); win:Refresh()   -- recolor the whole window live
@@ -246,14 +246,14 @@ end
 local function pageType(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("HEADING ROLES", x, y); y = y - 30
+    y = b:Section("HEADING ROLES", x, y); y = y - 30
     for _, r in ipairs({ "display", "h1", "h2", "h3", "h4", "h5", "h6", "subtitle", "overline", "caption" }) do
         b:Heading(r:upper() .. "  -  The quick brown fox", x, y, r)
         local sz = UIF.HEADING_ROLES[r].fontSize
         y = y - (sz + 8)
     end
     y = y - 6
-    b:Section("OVERRIDE ANYTHING AT DRAW TIME", x, y); y = y - 30
+    y = b:Section("OVERRIDE ANYTHING AT DRAW TIME", x, y); y = y - 30
     b:Heading("Recolored + resized", x, y, "h3", { textColor = "20C997", fontSize = 20 }); y = y - 30
     b:Heading("Accent, bold outline", x, y, "h4", { textColor = "accent", fontFlags = "OUTLINE" }); y = y - 34
     return y
@@ -262,7 +262,7 @@ end
 local function pageForms(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("INPUTS", x, y); y = y - 30
+    y = b:Section("INPUTS", x, y); y = y - 30
     b:Label("Search", x, y - 2, C.subtext)
     b:SearchBox(x + 60, y, { width = 240, placeholder = "Filter things...", onChange = function() end }); y = y - 36
     b:Label("Stepper", x, y - 2, C.subtext)
@@ -275,7 +275,7 @@ local function pageForms(b, win)
     b:TextArea(x + 76, y, { width = 320, height = 72, value = "Multi-line text area...\nType here." })
     y = y - 84   -- leave the full text-area height before the next section
 
-    b:Section("PROGRESS", x, y); y = y - 30
+    y = b:Section("PROGRESS", x, y); y = y - 30
     b:ProgressBar(x, y, { width = 300, height = 16, value = state.volume * 5, color = "20C997", showText = true, format = "%d%%" }); y = y - 28
     b:ProgressBar(x, y, { width = 300, height = 8, value = 65, color = "accent" }); y = y - 24
     b:Label("Indeterminate", x + 44, y - 1, C.subtext)
@@ -287,7 +287,7 @@ end
 local function pageDisplay(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("BADGES  (square, pill, rounded)", x, y); y = y - 30
+    y = b:Section("BADGES  (square, pill, rounded)", x, y); y = y - 30
     local bx = x
     for _, v in ipairs({ "accent", "success", "warning", "danger", "info", "neutral" }) do
         local bd = b:Badge(bx, y, { text = v:upper(), variant = v }); bx = bx + bd:GetWidth() + 8
@@ -305,7 +305,7 @@ local function pageDisplay(b, win)
     local z2 = b:Badge(zx, y, { text = "BORDER", variant = "success", pill = true, border = { color = "FFFFFF", size = 1 } }); zx = zx + z2:GetWidth() + 10
     b:Badge(zx, y, { text = "BOTH", variant = "danger", pill = true, border = { color = "FFFFFF" }, shadow = { spread = 5, alpha = 0.5 } }); y = y - 34
 
-    b:Section("STAT TILES", x, y); y = y - 30
+    y = b:Section("STAT TILES", x, y); y = y - 30
     b:StatTile(x, y, { label = "DPS", value = "128k", delta = "+12%", trend = "up", width = 150 })
     b:StatTile(x + 162, y, { label = "Deaths", value = "3", delta = "-1", trend = "down", width = 150 })
     b:StatTile(x + 324, y, { label = "Item lvl", value = "489", width = 150 })
@@ -328,7 +328,7 @@ end
 local function pageSocial(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("SOCIAL BUTTONS", x, y); y = y - 30
+    y = b:Section("SOCIAL BUTTONS", x, y); y = y - 30
     local _, h = b:Wrap("Real brand buttons with official colors. Set |cfffffffficonDir|r on your theme to show the "
         .. "Tabler |cffffffffbrand-*|r icons (see ICONS.md); without it they fall back to the label in the brand color, "
         .. "as below. Click copies the link.", x, y, win.opts.contentWidth - 44, C.subtext, 11)
@@ -348,7 +348,7 @@ local function pageSocial(b, win)
     }, { gap = 6, iconOnly = true, size = 28 })
     y = y - 44
 
-    b:Section("TOASTS", x, y); y = y - 30
+    y = b:Section("TOASTS", x, y); y = y - 30
     b:Label("Position", x, y - 2, C.subtext)
     b:SegmentedControl(x + 66, y, { width = 300, value = state.toastPos, onChange = function(v) state.toastPos = v end,
         segments = { { value = "TOP", label = "Top" }, { value = "TOP-RIGHT", label = "Top-R" }, { value = "BOTTOM-RIGHT", label = "Bot-R" }, { value = "CENTER", label = "Center" } } })
@@ -384,7 +384,7 @@ end
 local function pageIcons(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("BUNDLED ICONS", x, y); y = y - 30
+    y = b:Section("BUNDLED ICONS", x, y); y = y - 30
     local _, h = b:Wrap("The Tabler set converted to white TGAs (outline + filled) plus your social icons. Because "
         .. "they're white, |cffffffffany icon tints to any color|r. Toggle the variant and recolor the whole grid; hover for names.",
         x, y, win.opts.contentWidth - 44, C.subtext, 11)
@@ -415,33 +415,33 @@ local function pageButtons(b, win)
     local C = theme.C
     local x, y = 24, -18
     local noop = function() end
-    b:Section("KINDS", x, y); y = y - 32
+    y = b:Section("KINDS", x, y); y = y - 32
     b:Button(x, y, 110, "Primary", "primary", noop)
     b:Button(x + 120, y, 110, "Default", "default", noop)
     b:Button(x + 240, y, 110, "Danger", "danger", noop)
     b:Button(x + 360, y, 110, "Ghost", "ghost", noop)
     y = y - 46
 
-    b:Section("CORNERS  (square edges or radius)", x, y); y = y - 32
+    y = b:Section("CORNERS  (square edges or radius)", x, y); y = y - 32
     local corners = { { "Square", { corner = "square" } }, { "4px", { radius = 4 } }, { "8px", { radius = 8 } }, { "12px", { radius = 12 } }, { "Pill", { corner = "pill" } } }
     local cx = x
     for _, c in ipairs(corners) do b:Button(cx, y, 92, c[1], "primary", noop, c[2]); cx = cx + 100 end
     y = y - 46
 
-    b:Section("WITH ICONS", x, y); y = y - 32
+    y = b:Section("WITH ICONS", x, y); y = y - 32
     b:Button(x, y, 130, "Attack", "primary", noop, { icon = "sword", iconColor = "FFD166", corner = "md" })
     b:Button(x + 140, y, 130, "Settings", "default", noop, { icon = "settings", corner = "md" })
     b:Button(x + 280, y, 130, "Delete", "danger", noop, { icon = "trash", corner = "md" })
     y = y - 46
 
-    b:Section("CUSTOM COLORS + FONT SIZE", x, y); y = y - 32
+    y = b:Section("CUSTOM COLORS + FONT SIZE", x, y); y = y - 32
     b:Button(x, y, 120, "Purple", "primary", noop, { color = "6610F2", corner = 8 })
     b:Button(x + 130, y, 120, "Teal", "primary", noop, { color = "20C997", corner = 8 })
     b:Button(x + 260, y, 120, "Amber", "primary", noop, { color = "FFC107", textColor = "000000", corner = 8 })
     b:Button(x + 390, y, 96, "Big", "default", noop, { fontSize = 15, corner = 8 })
     y = y - 46
 
-    b:Section("SHADOW + BORDER  (pop)", x, y); y = y - 34
+    y = b:Section("SHADOW + BORDER  (pop)", x, y); y = y - 34
     b:Button(x, y, 110, "Shadow", "primary", noop, { corner = 8, shadow = true })
     b:Button(x + 120, y, 120, "Big shadow", "primary", noop, { corner = 10, shadow = { spread = 9, alpha = 0.5 } })
     b:Button(x + 250, y, 110, "Border", "default", noop, { corner = 8, border = { color = "accent", size = 1 } })
@@ -453,7 +453,7 @@ end
 local function pageMenus(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("DROPDOWNS", x, y); y = y - 30
+    y = b:Section("DROPDOWNS", x, y); y = y - 30
     b:Label("Basic", x, y - 2, C.subtext)
     b:Dropdown(x + 70, y):SetChoices(180, { { "a", "Option A" }, { "b", "Option B" }, { "c", "Option C" } },
         function() return state.dd end, function(v) state.dd = v end)
@@ -466,12 +466,12 @@ local function pageMenus(b, win)
         function(v) state.spell = v end, spellLabel)
     y = y - 44
 
-    b:Section("SEARCHABLE COMBO  (with icons)", x, y); y = y - 30
+    y = b:Section("SEARCHABLE COMBO  (with icons)", x, y); y = y - 30
     b:Label("Fruit", x, y - 2, C.subtext)
     b:ComboBox(x + 70, y, { width = 260, value = state.combo, placeholder = "Search...", items = FRUIT, onChange = function(v) state.combo = v end })
     y = y - 44
 
-    b:Section("FONT SELECT  (each option in its own font; changes the whole UI)", x, y); y = y - 30
+    y = b:Section("FONT SELECT  (each option in its own font; changes the whole UI)", x, y); y = y - 30
     b:Label("UI font", x, y - 2, C.subtext)
     b:FontSelect(x + 70, y, { width = 220, value = state.fontKey, onChange = function(k)
         state.fontKey = k
@@ -481,7 +481,7 @@ local function pageMenus(b, win)
     b:Heading("The quick brown fox jumps", x + 306, y - 4, "h4")
     y = y - 44
 
-    b:Section("SLIDERS  (single + dual range)", x, y); y = y - 30
+    y = b:Section("SLIDERS  (single + dual range)", x, y); y = y - 30
     b:Label("Range", x, y - 2, C.subtext)
     b:RangeSlider(x + 70, y, { width = 240, min = 0, max = 100, step = 5, low = state.rlo, high = state.rhi,
         onChange = function(lo, hi) state.rlo, state.rhi = lo, hi end })
@@ -496,7 +496,7 @@ end
 local function pageTooltips(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("TOOLTIP PREVIEW", x, y); y = y - 30
+    y = b:Section("TOOLTIP PREVIEW", x, y); y = y - 30
     local _, h = b:Wrap("Design tooltip content and see it rendered inline - the same title + colored-lines model the live "
         .. "hover tooltips use. Lines take a palette key or hex color.", x, y, win.opts.contentWidth - 44, C.subtext, 11)
     y = y - (h + 12)
@@ -509,7 +509,7 @@ local function pageTooltips(b, win)
     } })
     y = y - (tp:GetHeight() or 110) - 18
 
-    b:Section("LIVE HOVER TOOLTIP", x, y); y = y - 30
+    y = b:Section("LIVE HOVER TOOLTIP", x, y); y = y - 30
     b:Label("Hover the button - multi-line tooltip with colored lines:", x, y - 2, C.subtext, 12); y = y - 26
     local hb = b:Button(x, y, 200, "Hover me", "primary", function() end, { corner = "md", icon = "info-circle" })
     theme:SetTipLines(hb, "Multi-line Tooltip", {
@@ -524,7 +524,7 @@ end
 local function pageCards(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("CARD VARIANTS", x, y); y = y - 30
+    y = b:Section("CARD VARIANTS", x, y); y = y - 30
 
     -- plain, header, header+footer
     local c1 = b:Card(x, y, { width = 180, height = 116, title = "Header only", subtitle = "with subtitle" })
@@ -536,7 +536,7 @@ local function pageCards(b, win)
     theme:Heading(c3.body, { text = "No header - just a body container you fill.", role = "caption", wrapWidth = 150 }):SetPoint("TOPLEFT", 0, 0)
     y = y - 130
 
-    b:Section("COLORED CARDS", x, y); y = y - 30
+    y = b:Section("COLORED CARDS", x, y); y = y - 30
     local vx, vlist = x, { "accent", "success", "warning", "danger", "info" }
     for _, v in ipairs(vlist) do
         local cc = b:Card(vx, y, { width = 108, height = 76, title = v:sub(1, 1):upper() .. v:sub(2), variant = v })
@@ -545,7 +545,7 @@ local function pageCards(b, win)
     end
     y = y - 90
 
-    b:Section("STAT TILE CARDS", x, y); y = y - 30
+    y = b:Section("STAT TILE CARDS", x, y); y = y - 30
     b:StatTile(x, y, { label = "Members", value = "1,204", delta = "+18", trend = "up", width = 150 })
     b:StatTile(x + 162, y, { label = "Uptime", value = "99.9%", width = 150 })
     b:StatTile(x + 324, y, { label = "Errors", value = "2", delta = "-5", trend = "down", width = 150 })
@@ -556,12 +556,12 @@ end
 local function pageModals(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("MODALS", x, y); y = y - 30
+    y = b:Section("MODALS", x, y); y = y - 30
     local _, h = b:Wrap("Centered dialogs over a dimmed backdrop. Ready-made |cffffffffAlert / Confirm / Prompt|r helpers "
         .. "plus a fully custom content modal, colored variants, and stacking.", x, y, win.opts.contentWidth - 44, C.subtext, 11)
     y = y - (h + 14)
 
-    b:Section("ALERTS", x, y); y = y - 30
+    y = b:Section("ALERTS", x, y); y = y - 30
     b:Button(x, y, 130, "Info", "primary", function()
         theme:Alert({ title = "Heads up", message = "This is an informational alert.", variant = "info", icon = "info-circle" })
     end, { icon = "info-circle" })
@@ -573,7 +573,7 @@ local function pageModals(b, win)
     end)
     y = y - 44
 
-    b:Section("CONFIRM  &  PROMPT", x, y); y = y - 30
+    y = b:Section("CONFIRM  &  PROMPT", x, y); y = y - 30
     b:Button(x, y, 170, "Confirm (danger)", "danger", function()
         theme:Confirm({ title = "Delete alert?", message = "This can't be undone.", variant = "danger",
             icon = "alert-circle", confirmLabel = "Delete", onConfirm = function() theme:Toast({ text = "Deleted.", variant = "danger" }) end })
@@ -584,7 +584,7 @@ local function pageModals(b, win)
     end)
     y = y - 44
 
-    b:Section("CUSTOM CONTENT  &  STACKING", x, y); y = y - 30
+    y = b:Section("CUSTOM CONTENT  &  STACKING", x, y); y = y - 30
     b:Button(x, y, 170, "Custom content", "default", function()
         theme:Modal({ title = "Quick Settings", width = 420, height = 200, icon = "settings",
             content = function(body, modal)
@@ -615,7 +615,7 @@ end
 local function pageGame(b, win)
     local C = theme.C
     local x, y = 24, -18
-    b:Section("PORTRAITS & MODELS  (live from the game)", x, y); y = y - 30
+    y = b:Section("PORTRAITS & MODELS  (live from the game)", x, y); y = y - 30
     local _, h = b:Wrap("These pull your character live: a flat |cffffffff2D portrait|r, a |cffffffff3D facial portrait|r, and a full "
         .. "|cffffffff3D model|r you can drag to spin.", x, y, win.opts.contentWidth - 44, C.subtext, 11)
     y = y - (h + 12)
@@ -643,7 +643,7 @@ local function pageGame(b, win)
     b:UnitModel(x + 300, y, { unit = "player", width = 150, height = 210, background = bg, animated = anim })
     y = y - 224
 
-    b:Section("SPELL / BUFF / ITEM ICONS  (hover for the real game tooltip)", x, y); y = y - 30
+    y = b:Section("SPELL / BUFF / ITEM ICONS  (hover for the real game tooltip)", x, y); y = y - 30
     b:Label("Spells", x, y - 2, C.subtext)
     local sx = x + 60
     for _, id in ipairs({ 133, 116, 172, 348, 585, 686 }) do b:GameIcon(sx, y, { spell = id, size = 34 }); sx = sx + 40 end
@@ -662,7 +662,7 @@ end
 local function pageAbout(b, win)
     local C = theme.C
     local x, y = 24, -20
-    b:Section("ABOUT UIFOUNDRY", x, y); y = y - 32
+    y = b:Section("ABOUT UIFOUNDRY", x, y); y = y - 32
     local _, h = b:Wrap("UIFoundry is a self-skinned, dependency-free UI kit: a theme with a live accent, "
         .. "custom |cfffffffftoggles / dropdowns / sliders / inputs|r, |cffffffffpickers|r and |cffffffffdialogs|r, a pooled "
         .. "content |cffffffffbuilder|r, and this |cffffffffwindow shell|r. Add it as a dependency and each of your tools "
@@ -670,7 +670,7 @@ local function pageAbout(b, win)
     y = y - (h + 16)
 
     -- Preview of the three window footer styles (this window uses "expanded").
-    b:Section("WINDOW FOOTER STYLES", x, y); y = y - 28
+    y = b:Section("WINDOW FOOTER STYLES", x, y); y = y - 28
     local fw = win.opts.contentWidth - 48
     b:Label("none  -  no footer bar at all", x, y - 2, C.subtext, 11); y = y - 24
 

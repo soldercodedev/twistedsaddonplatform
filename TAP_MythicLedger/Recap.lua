@@ -136,7 +136,7 @@ end
 local function playRecapSound(cfg)
     if not cfg.sound then return end
     local theme = _G.TAP and _G.TAP.uiTheme
-    if theme and theme.PlaySound then theme:PlaySound(cfg.soundKey or "Applause", "Master") end
+    if theme and theme.PlaySound then theme:PlaySound(cfg.soundKey or "Applause", cfg.soundChannel or "Master") end
 end
 
 ----------------------------------------------------------------------
@@ -251,6 +251,22 @@ function Recap.Stop()
     if frame then frame:UnregisterAllEvents() end
     if scanTimer then scanTimer:Cancel(); scanTimer = nil end
     ML.Log("Recap stopped")
+end
+
+-- In-window preview (Settings): a representative recap for a fabricated returning player, built with
+-- the SAME buildLines() the live recap uses so the preview matches your current settings exactly.
+-- Returns (nameLine, lines) - both pre-coloured strings/array - and neither prints nor plays a sound.
+function Recap.PreviewLines(cfg)
+    cfg = cfg or DB.Recap()
+    local sample = {
+        runs = 12, timed = 9, highestTimed = 14,
+        lastClassFile = "MAGE", lastSpecId = 63, lastRole = "DAMAGER",
+        avg = { dps = 1.84e6, deaths = 1.6, interrupts = 7 },
+        mixedLevels = true, minLevel = 8, maxLevel = 16,
+        lastRun = { status = STATUS.TIMED, dungeon = "Operation: Floodgate", level = 13 },
+        _key = nil,
+    }
+    return cc(classHex(sample.lastClassFile), "Spellburn-Illidan"), buildLines(sample, cfg)
 end
 
 -- Manual preview (Settings/Debug): recap everyone currently grouped, ignoring the once-per-session

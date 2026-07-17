@@ -1,5 +1,23 @@
 # Mythic Ledger — Changelog
 
+## 1.0.0-beta.2
+
+- **[NEW]** Hero-card character overview: **By Spec** (class-coloured spec cards) and **By Dungeon**
+  (dungeon-art cards) breakdowns, plus large-icon headline stat tiles.
+- **[NEW]** Dungeons tab reworked to a hero-card grid with a live type-to-filter (3+ chars).
+- **[NEW]** Data-retention policy (All seasons / current season / current expansion, optional newest-N
+  cap, "never remove a top run"); Settings previews (stat tile, recap, test scoreboard); per-sound
+  channel selection.
+- **[BUG FIX]** Boss icons resolve on the scoreboard and historical runs (Encounter Journal is now
+  selected before its encounters are queried); scoreboard dungeon art covers the full modal.
+- **[BUG FIX]** Average-deaths aggregates now use the player's own deaths, not party totals
+  (Runs page still reports party deaths); fixed a nil-call opening run scores and party-card /
+  section-header overlap.
+- **[CHANGE]** Interrupt/dispel capability profiles corrected for Midnight (per-spec cooldowns; DPS
+  and tanks credited for dispels). Scoring `Config.version` bumped to force a rescore.
+- **[CHANGE]** Export / Import removed from Settings (dataset size); manage data via Data Retention
+  and Delete All History.
+
 ## 1.0.0-beta.1
 
 - **[NEW]** First beta. Automatic, account-wide Mythic+ recording (timed / depleted / abandoned),

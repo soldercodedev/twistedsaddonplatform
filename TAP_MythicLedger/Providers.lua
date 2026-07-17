@@ -162,10 +162,21 @@ local function readMeterStats(ctx, sourceLabel)
             return nil
         end
 
+        -- Midnight Secret-wraps src.sourceGUID (ML.ReadStr -> nil), which would silently DROP that source
+        -- - including the LOCAL player, so finalize baked "playerDPS=nil" despite real live per-boss
+        -- numbers. The local player stays identifiable via the non-Secret isLocalPlayer flag, so key their
+        -- row under our known guid (mirrors readPartyDamageMap).
+        local pGuid = ctx and ctx.player and ctx.player.guid
+        local function keyOf(src)
+            local g = ML.ReadStr(src.sourceGUID)
+            if not g and src.isLocalPlayer and pGuid then g = pGuid end
+            return g
+        end
+
         -- Damage: totalAmount = damage, amountPerSecond = dps (Blizzard computes dps off effective
         -- combat time, so it matches the meter display - don't recompute damage/time ourselves).
         for _, src in ipairs(sourcesOf(MT.DamageDone) or {}) do
-            local g = ML.ReadStr(src.sourceGUID)
+            local g = keyOf(src)
             if g then
                 local d = bucket(g)
                 d.damage = ML.ReadNum(src.totalAmount); d.dps = ML.ReadNum(src.amountPerSecond)
@@ -174,7 +185,7 @@ local function readMeterStats(ctx, sourceLabel)
         end
         -- Healing: totalAmount = healing, amountPerSecond = hps.
         for _, src in ipairs(sourcesOf(MT.HealingDone) or {}) do
-            local g = ML.ReadStr(src.sourceGUID)
+            local g = keyOf(src)
             if g then local d = bucket(g); d.healing = ML.ReadNum(src.totalAmount); d.hps = ML.ReadNum(src.amountPerSecond) end
         end
         -- Single-value metrics: one row per source, totalAmount = the value/count.
@@ -184,7 +195,7 @@ local function readMeterStats(ctx, sourceLabel)
         }
         for key, mt in pairs(single) do
             for _, src in ipairs(sourcesOf(mt) or {}) do
-                local g = ML.ReadStr(src.sourceGUID)
+                local g = keyOf(src)
                 if g then bucket(g)[key] = ML.ReadNum(src.totalAmount) end
             end
         end
@@ -192,9 +203,13 @@ local function readMeterStats(ctx, sourceLabel)
         -- a per-source total. So COUNT rows per GUID (a player appearing twice died twice). Reading
         -- totalAmount here returned 0 and hid real deaths (a death showed as "0", not counted).
         for _, src in ipairs(sourcesOf(MT.Deaths) or {}) do
-            local g = ML.ReadStr(src.sourceGUID)
+            local g = keyOf(src)
             if g then local d = bucket(g); d.deaths = (d.deaths or 0) + 1 end
         end
+
+        -- Nothing readable anywhere (all-Secret sources, or the Overall session hasn't settled yet):
+        -- return nil so finalize RETRIES rather than baking an all-empty run over real live numbers.
+        if next(perGuid) == nil then return nil end
 
         local function statsFor(guid)
             local s = emptyStats()

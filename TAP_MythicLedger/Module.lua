@@ -46,12 +46,23 @@ mod = Suite:RegisterModule({
     addon   = ML.ADDON,
     default = true,
     fullPage = true,   -- we render our own tabbed page; suite skips the "SETTINGS" band
+    rendersWhenDisabled = true,   -- keep our page (and its Settings tab) reachable while disabled
     changelog = ML.CHANGELOG,
     OnEnable  = OnEnable,
     OnDisable = OnDisable,
     OnSelect  = function() ML.UI.ResetView() end,
     Settings  = Settings,
 })
+
+-- Optional minimap icon for this module (hidden by default; toggled in the Ledger's Settings tab).
+if Suite.RegisterMinimapButton then
+    Suite:RegisterMinimapButton(ML.MODULE_ID, {
+        icon = "Interface\\AddOns\\TAP_MythicLedger\\assets\\images\\tap_mythic_ledger_icon.tga",
+        title = "|cffa06cf0Mythic Ledger|r", action = "open the ledger",
+        onClick = function() Suite:OpenWindow("mod:" .. ML.MODULE_ID) end,
+        defaultHidden = true,
+    })
+end
 
 ----------------------------------------------------------------------
 -- Slash commands: /tap ledger ... via the platform router, plus a native /ledger.

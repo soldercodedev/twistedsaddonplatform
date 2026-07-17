@@ -52,6 +52,12 @@ function Norm.Player(run, member)
         dataSource = run.provider or ML.SOURCE and ML.SOURCE.NONE,
     }
 
+    -- Clean run = the meter tracked you (real combat numbers) but logged no death rows, so deaths reads
+    -- back nil. That means ZERO, not "no data" - so the Deaths category scores a confident "no deaths"
+    -- (100) instead of a neutral "no death data recorded". Applies retroactively to already-saved runs
+    -- too. Only when genuinely tracked; an untracked run (no combat stats at all) stays nil = unknown.
+    if n.deaths == nil and (n.dps or n.damageDone or n.hps or n.healing) then n.deaths = 0 end
+
     -- Effective/active seconds is NOT stored by the meter; approximate from damage/dps when both
     -- exist (Blizzard's dps is over effective combat time). Marked as an estimate for the UI.
     if n.damageDone and n.dps and n.dps > 0 then

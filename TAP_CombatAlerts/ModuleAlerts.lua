@@ -83,6 +83,12 @@ if theme then for k, slug in pairs(KIND_ICON) do KIND_ICON_TEX[k] = theme:GetIco
 ----------------------------------------------------------------------
 local editorId
 local editorTab   -- which editor tab is showing (per the tab set below)
+local listTab = "alerts"   -- active list page in the docked top-nav: alerts | profiles | settings
+local TAB_TIPS = {
+    alerts   = "Your alerts - create, edit, enable, duplicate, or delete them.",
+    profiles = "Which alert set this character uses, and copy alerts between profiles.",
+    settings = "Sound channel, check rate, import / export, and the minimap button.",
+}
 
 local function softApply()
     if TCC.RebuildEngine then TCC.RebuildEngine() end
@@ -751,12 +757,18 @@ end
 ----------------------------------------------------------------------
 -- Rule list + global options.
 ----------------------------------------------------------------------
-local function renderList(mod, b, x, y, w, win)
-    local C = b.theme.C
-    local d = TCC.db
+-- The list view is split into three docked-nav pages: Alerts, Profiles, and Settings (global).
+local function ensureDB(d)
     d.rules = d.rules or {}
     d.channel = d.channel or "Master"
     d.pollInterval = tonumber(d.pollInterval) or 0.25
+end
+
+-- PROFILES page: which alert set this character uses, + copy alerts between profiles.
+local function renderProfiles(mod, b, x, y, w, win)
+    local C = b.theme.C
+    local d = TCC.db
+    ensureDB(d)
     local P = newPen(b, win, x, w)
 
     -- PROFILE (which alert set this character uses, + copy alerts between profiles)
@@ -845,20 +857,44 @@ local function renderList(mod, b, x, y, w, win)
     end, { icon = "copy", iconSize = 14 }), "Copy alerts",
         "Copy the selected alert(s) from the source profile into the destination.")
     y = y - 50
+    return y
+end
 
-    -- GLOBAL
-    b:Sub("GLOBAL", x, y); y = y - 36
+-- SETTINGS page: global sound/check-rate, import / export / reset, and the minimap toggle.
+local function renderGlobal(mod, b, x, y, w, win)
+    local C = b.theme.C
+    local d = TCC.db
+    ensureDB(d)
+    local P = newPen(b, win, x, w)
+
+    -- MODULE: the master enable/disable for Combat Alerts (shared platform block).
+    y = b:ModuleToggle(x, y, w, mod, { onToggle = function() if win then win:Refresh() end end,
+        sub = "When off, no alerts fire. Your alerts and profiles are kept." })
+
+    -- SOUND: which channel alert sounds play on.
+    b:Sub("SOUND", x, y); y = y - 36
     b:Label("Sound channel", x, y - 2, C.subtext)
     P:tip(b:Dropdown(x + 110, y), "Sound channel", "Which channel alert sounds play on."):SetChoices(
         160, CHANNELS, function() return d.channel or "Master" end, function(v) d.channel = v; softApply() end)
+    b:Label("the audio channel every alert sound plays on", x + 300, y - 2, C.subtext, 10)
     y = y - 48
+
+    -- PERFORMANCE: how often the engine re-checks your situation.
+    b:Sub("PERFORMANCE", x, y); y = y - 36
     b:Label("Check rate", x, y - 2, C.subtext)
     P:tip(b:Slider(x + 110, y), "Check rate",
         "How often alerts re-check your situation. Lower = snappier alerts but slightly more CPU; higher = lighter."):Configure(
         170, 0.1, 1.0, 0.05, function() return tonumber(d.pollInterval) or 0.25 end,
         function(v) d.pollInterval = v; if TCC.ApplySettings then TCC.ApplySettings() end end, "%.2fs")
-    b:Label("seconds between checks", x + 300, y - 2, C.subtext, 10)
-    y = y - 42
+    b:Label("seconds between checks - lower is snappier, higher is lighter on CPU", x + 300, y - 2, C.subtext, 10)
+    y = y - 44
+
+    -- BACKUP & DATA: export / import the whole set (a round-trip pair), with the destructive reset
+    -- set apart below its own caption so it can't be fired by reflex next to the safe actions.
+    b:Sub("BACKUP & DATA", x, y); y = y - 26
+    local _, dh = b:Wrap("Export your whole alert set to a text string to back it up or share it with others; "
+        .. "Import adds alerts from a string shared with you.", x, y, w - 20, C.subtext, 11)
+    y = y - (dh or 16) - 12
     P:tip(b:Button(x, y, 130, "Export all", "default", function()
         if b.theme.ShowCopyDialog and TCC.ExportAll then b.theme:ShowCopyDialog("Your alerts (copy this to back up or share)", TCC.ExportAll() or "") end
     end, { icon = "upload", iconSize = 14 }), "Export all alerts", "Copy all your alerts out as a text string to back up or share. Bring them back with Import.")
@@ -874,12 +910,36 @@ local function renderList(mod, b, x, y, w, win)
             end)
         end
     end, { icon = "download", iconSize = 14 }), "Import alerts", "Paste alerts exported from here (or shared with you). They're added to your list.")
-    P:tip(b:Button(x + 280, y, 130, "Reset all", "danger", function()
+    y = y - 42
+    local _, dh2 = b:Wrap("Reset restores the default alert set for the active profile - it deletes your "
+        .. "current alerts and can't be undone.", x, y, w - 20, C.subtext, 11)
+    y = y - (dh2 or 16) - 12
+    P:tip(b:Button(x, y, 130, "Reset all", "danger", function()
         b.theme:Confirm({ title = "Reset all alerts?", variant = "danger", confirmLabel = "Reset",
             message = "Delete your alerts and restore the default set for this profile. This can't be undone.",
             onConfirm = function() if TCC.ResetSettings then TCC.ResetSettings() end; TCC.RefreshManager() end })
     end, { icon = "refresh", iconSize = 14 }), "Reset all alerts", "Delete your alerts and restore the default set for this profile.")
-    y = y - 44
+    y = y - 46
+
+    -- MINIMAP: its own section (off by default; managed by the platform).
+    if Suite and Suite.IsMinimapButtonShown then
+        b:Sub("MINIMAP", x, y); y = y - 30
+        P:tip(b:Toggle(x, y, Suite:IsMinimapButtonShown("combatAlerts"),
+            function(v) Suite:SetMinimapButtonShown("combatAlerts", v) end),
+            "Minimap icon", "Show a Combat Alerts button on the minimap (left-click opens this page).")
+        b:Label("Show a minimap button", x + 46, y - 2, C.text)
+        b:Label("Left-click it to open this page.", x + 46, y - 20, C.subtext, 10)
+        y = y - 42
+    end
+    return y
+end
+
+-- ALERTS page: the rule list + New Alert.
+local function renderAlerts(mod, b, x, y, w, win)
+    local C = b.theme.C
+    local d = TCC.db
+    ensureDB(d)
+    local P = newPen(b, win, x, w)
 
     -- ALERTS  (shorten the underline so the New Alert button doesn't sit on top of it)
     b:Sub("ALERTS", x, y, w - 170)
@@ -894,6 +954,38 @@ local function renderList(mod, b, x, y, w, win)
     y = y - 34
 
     local rules = TCC.GetRules and TCC.GetRules() or d.rules
+
+    -- Active-profile context. The Alerts list always shows the CURRENTLY ACTIVE profile's alert set,
+    -- but nothing on this page said which profile that is (you had to open the Profiles tab to find
+    -- out). Describe it inline: which profile is live, whether it's shared or private, and how many
+    -- alerts it holds - so it's clear what these alerts belong to before you start editing them.
+    if TCC.ProfileLabel then
+        local active     = TCC.activeProfile or TCC.AccountKey()
+        local isAccount  = (active == TCC.AccountKey())
+        local isThisChar = (active == TCC.CurrentCharKey())
+        local count = rules and #rules or 0
+        local scope
+        if isAccount then
+            scope = "Shared across all your characters - every character without its own profile uses this set."
+        elseif isThisChar then
+            scope = "A private set used only by this character; your other characters aren't affected."
+        else
+            scope = "A custom profile, currently active on this character."
+        end
+        local desc = ("%d alert%s.  %s  Switch profiles or copy alerts between them on the Profiles tab."):format(
+            count, count == 1 and "" or "s", scope)
+        local iconSz = 22
+        local tx = x + 14 + iconSz + 10
+        local tw = math.max(60, w - (tx - x) - 24)
+        b:Label("ACTIVE PROFILE  ·  " .. TCC.ProfileLabel(active), tx, y - 12, C.accent, 11)
+        local _, dh = b:Wrap(desc, tx, y - 30, tw, C.subtext, 11)
+        local boxH = 30 + (dh or 16) + 12
+        b:Box(x, y, w - 10, boxH, 0.05, 0, C.accent)   -- subtle tinted fill behind the text
+        b:Box(x, y, 3, boxH, 0.9, 0, C.accent)         -- accent left rail
+        b:Icon(x + 12, y - 13, { icon = b.theme:GetIcon("user") or 134400, iconCoords = { 0, 1, 0, 1 } }):SetSize(iconSz, iconSz)
+        y = y - boxH - 14
+    end
+
     if not rules or #rules == 0 then
         b:Wrap("No alerts yet. Click |cffffffffNew Alert|r to create one.", x, y, w - 44, C.subtext, 12)
         return y - 30
@@ -931,8 +1023,39 @@ end
 local function Settings(mod, b, x, y, w, win)
     if not TCC.db then b:Wrap("Loading...", x, y, w, b.theme.C.subtext, 12); return y - 20 end
     if editorId and TCC.GetSelectedRule then TCC.selectedRuleId = editorId end
+
+    -- Dock the tab strip flush under the title bar (matches Mythic Ledger). It must be re-issued every
+    -- render - Window:Refresh clears the nav first. While editing a rule the editor is a sub-view of the
+    -- Alerts page, so keep Alerts highlighted; picking any tab leaves the editor.
+    if win and win.SetTopNav then
+        win:SetTopNav({
+            items = {
+                { key = "alerts",   label = "Alerts",   icon = "bell" },
+                { key = "profiles", label = "Profiles", icon = "user" },
+                { key = "settings", label = "Settings", icon = "settings" },
+            },
+            active = editorId and "alerts" or listTab, height = 30,
+            onSelect = function(key)
+                editorId = nil   -- leave the editor (if open) when switching top-level page
+                listTab = key
+                if win then win:Refresh() end
+            end,
+            tip = function(key) return TAB_TIPS[key] end,
+        })
+        y = y - 4   -- small breathing room below the docked nav
+    end
+
+    -- Disabled: overlay every view except the Settings page (where the enable toggle lives), so the
+    -- module can always be switched back on but nothing else is usable meanwhile.
+    if mod and mod.IsEnabled and not mod:IsEnabled() and (editorId or listTab ~= "settings") then
+        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings tab to turn Combat Alerts back on.",
+            onSettings = function() editorId = nil; listTab = "settings"; if win then win:Refresh() end end })
+    end
+
     if editorId then return renderEditor(mod, b, x, y, w, win) end
-    return renderList(mod, b, x, y, w, win)
+    if listTab == "profiles" then return renderProfiles(mod, b, x, y, w, win) end
+    if listTab == "settings" then return renderGlobal(mod, b, x, y, w, win) end
+    return renderAlerts(mod, b, x, y, w, win)
 end
 
 ----------------------------------------------------------------------
@@ -968,12 +1091,24 @@ mod = Suite:RegisterModule({
     icon    = "bell",
     addon   = "TAP_CombatAlerts",
     default = true,
+    fullPage = true,   -- we render our own tabbed page; suite skips the "SETTINGS" band
+    rendersWhenDisabled = true,   -- keep our page (and its Settings tab) reachable while disabled
     changelog = TCC.CHANGELOG,
     OnEnable  = function() pushToEngine(true) end,
     OnDisable = function() pushToEngine(false) end,
-    OnSelect  = function() editorId = nil end,   -- clicking the nav always returns to the list
+    OnSelect  = function() editorId = nil; listTab = "alerts" end,   -- reopening lands on the Alerts list
     Settings  = Settings,
 })
+
+-- Optional minimap icon for this module (hidden by default; toggled in this module's settings).
+if Suite.RegisterMinimapButton then
+    Suite:RegisterMinimapButton("combatAlerts", {
+        icon = "Interface\\AddOns\\TAP_CombatAlerts\\assets\\images\\tap_combat_alerts_icon.tga",
+        title = "|cffa06cf0Combat Alerts|r", action = "open the alerts",
+        onClick = function() Suite:OpenWindow("mod:combatAlerts") end,
+        defaultHidden = true,
+    })
+end
 
 local boot = CreateFrame("Frame"); boot:RegisterEvent("PLAYER_LOGIN")
 boot:SetScript("OnEvent", function()
