@@ -67,9 +67,6 @@ private**: no data is uploaded, and there are no ratings, blacklists, or judgeme
 
 ![Account-wide Overview — your season at a glance](https://raw.githubusercontent.com/soldercodedev/twistedsaddonplatform/beta/media/14-mythic-ledger-overview.png)
 
-> **More screenshots** (run history, dungeon cards, personal bests, run details, the marker palette,
-> and more) live in the [`media/` gallery on GitHub](https://github.com/soldercodedev/twistedsaddonplatform/tree/beta/media).
-
 ---
 
 ## Why a platform?
@@ -95,7 +92,13 @@ private**: no data is uploaded, and there are no ratings, blacklists, or judgeme
 
 ## 💬 Community
 
-Questions, bugs, or feature ideas? **[Join the Discord »](https://discord.com/invite/pN5vYDrQ5j)**
+**Come help shape it.** Twisteds Addon Platform is actively in development, and the best ideas come
+from the people actually running keys. Right now we're especially looking for hands to help **dial in
+the Mythic Ledger scoring** — real runs, real feedback on where a grade feels right or wrong — plus
+**feature suggestions, bug reports, and testing** to push the whole platform forward.
+
+Whether you're here to fine-tune the numbers, pitch an idea, squash a bug, or just say hi — you're
+welcome. **[Join the Discord »](https://discord.com/invite/pN5vYDrQ5j)** and jump in.
 
 ---
 
