@@ -2,33 +2,73 @@
 
 **One hub. One command. Pick the tools you want.**
 
-Twisteds Addon Platform (TAP) bundles a set of small, focused combat helpers under a single clean
-UI. No pile of mismatched add-ons — just type **`/tap`**, switch on the tools you use, and leave the
-rest off. It all comes in **one download**.
+Twisteds Addon Platform (TAP) bundles a set of small, focused combat helpers and trackers under a
+single clean UI. No pile of mismatched add-ons, no ten separate config panels — just type **`/tap`**,
+switch on the tools you use, and leave the rest off. Everything shares one theme (set your accent
+color, skin, and font once and it all matches), and it all arrives in **one download**.
 
-> Type **`/tap`** to open the manager. Every module has a live on/off switch — no reload needed.
+![The /tap hub — every module in one window, each with a live on/off switch](https://raw.githubusercontent.com/soldercodedev/twistedsaddonplatform/beta/media/01-platform-overview.png)
+
+> Type **`/tap`** to open the manager. Every module has a live on/off switch — flip one off and it
+> unloads and gets out of the way. No reload needed.
 
 ---
 
 ## ✨ Modules
 
 ### 🔔 Combat Alerts
-Build your own **audible & visual cues** for the moments that matter — *no target, out of range,
-pulled aggro, pet down, trinket ready* — with sounds, big on-screen text, and icons you place
-yourself. Simple "typed" alerts for common cases, or an **advanced AND/OR builder** for anything
-custom. Includes a **spell/item search** so you can point an alert at any ability or item.
+Never miss the moment that matters. Build your own **audible & visual cues** for *no target, out of
+range, pulled aggro, pet down, low health, trinket/ability ready* — and anything else — with sounds,
+big on-screen text, and icons you place yourself. Start from simple **"typed" alerts** for the common
+cases, or open the **advanced AND/OR builder** for fully custom conditions, and point any alert at a
+specific ability or item with the built-in **spell/item search**. Alerts can be **scoped to just the
+specs that need them**, and saved per-character or shared account-wide.
+
+![A Combat Alert firing on-screen mid-pull](https://raw.githubusercontent.com/soldercodedev/twistedsaddonplatform/beta/media/05-combat-alerts-ingame-no-target.png)
 
 ### 🎯 Focus Target Interrupt
-Interrupt like a pro. A **one-key Focus + Mark** macro (combat-safe), an **on-screen raid-marker
-bar** you can click to focus + mark live (movable, resizable, row or column, your colors), and
-**auto-detected Interrupt & Stun macros** built for your exact spec and talents — just click and
-drag to a bar.
+Interrupt like a pro. A **one-key Focus + Mark** macro (fully combat-safe), an **on-screen
+raid-marker palette** you can click to focus + mark a target live (movable, resizable, row or column,
+your colors), and **auto-detected Interrupt & Stun macros** built for your *exact* spec and talents —
+just click **Create Macro** and drag it to a bar. Optional **party call-outs** announce your focus or
+interrupt target when a ready check starts, so the whole group knows who's got the kick.
+
+![Auto-detected interrupt & stun macros, generated for your spec](https://raw.githubusercontent.com/soldercodedev/twistedsaddonplatform/beta/media/06-focus-interrupt-macros.png)
 
 ### ⌨️ Rotation Assistant
-Learning a rotation, or a new spec? TAP reads Blizzard's built-in one-button assistant and shows the
+Learning a rotation, or a new spec? TAP reads Blizzard's built-in one-button assistant and draws the
 **keybind of your next suggested ability** right on screen. It's **show-only** — it never presses
-anything for you. Optional extras: a **cast-vs-instant** dot, a **GCD sweep**, an **out-of-range**
-tint, and an **out-of-resource** tint, all shaped to your icon.
+anything for you, so it's completely allowed. Shape the cue to your UI (size, border, font, position),
+and switch on optional extras: a **cast-vs-instant** tint, a **GCD sweep**, an **out-of-range** tint,
+and an **out-of-resource** tint.
+
+![The next-ability keybind cue, live in the world](https://raw.githubusercontent.com/soldercodedev/twistedsaddonplatform/beta/media/13-rotation-assistant-ingame-cue.png)
+
+### 🗝️ Mythic Ledger
+Your own **private, account-wide Mythic+ journal**. Every key is recorded automatically — dungeon,
+level, affixes, timer result and the **keystone upgrade** you earned (+1 / +2 / +3) — organized by
+character. At the end of a run it pops a full **scoreboard**: party DPS/HPS, damage taken, interrupts,
+dispels, deaths, boss splits, an in-combat **timeline**, and how your time stacks up **against your
+best for that exact key**.
+
+![End-of-run scoreboard with MVP, party stats, boss splits and timeline](https://raw.githubusercontent.com/soldercodedev/twistedsaddonplatform/beta/media/20-mythic-ledger-scoreboard.png)
+
+Each player also gets a deterministic **performance grade** — a transparent, group-relative rating
+across **Throughput, Interrupts, Dispels, Survival, and Death Impact** (talent-aware, so a spec is
+never docked for a tool it doesn't have). Every grade shows exactly *how* it was built and what to
+work on next — no black box, no uploads.
+
+![Per-player grade breakdown — see exactly how the score was built](https://raw.githubusercontent.com/soldercodedev/twistedsaddonplatform/beta/media/19-mythic-ledger-player-grade.png)
+
+And it remembers **who you've run keys with**: a searchable Players browser, per-player pages (runs
+together, timed %, highest key, averages, notes, tags, favorites), and a quiet **returning-player
+recap** — printed to *your* chat only — when you regroup with someone. Everything stays **local and
+private**: no data is uploaded, and there are no ratings, blacklists, or judgements of other players.
+
+![Account-wide Overview — your season at a glance](https://raw.githubusercontent.com/soldercodedev/twistedsaddonplatform/beta/media/14-mythic-ledger-overview.png)
+
+> **More screenshots** (run history, dungeon cards, personal bests, run details, the marker palette,
+> and more) live in the [`media/` gallery on GitHub](https://github.com/soldercodedev/twistedsaddonplatform/tree/beta/media).
 
 ---
 
@@ -36,11 +76,12 @@ tint, and an **out-of-resource** tint, all shaped to your icon.
 
 - **One look, one window.** A shared, self-skinned theme — set the accent color, skin, and font
   once and everything matches.
-- **Only what you want.** Toggle any module on or off, live. Off means unloaded and out of the way.
+- **Only what you want.** Toggle any module on or off, live — right from its own page. Off means
+  unloaded and out of the way.
 - **"What's New" built in.** Every module explains its updates in plain language, right in the
   window.
 - **Combat-safe & lightweight.** No external UI libraries; careful around the game's new protected
-  values.
+  values, and nothing that presses your buttons for you.
 
 ---
 
