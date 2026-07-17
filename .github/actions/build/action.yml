@@ -66,9 +66,12 @@ runs:
             -name tools -o -name scripts -o -name build-tools -o -name tests -o -name test \
             -o -name __pycache__ -o -name .git -o -name .github -o -name .vscode -o -name .idea \
           \) -prune -exec rm -rf {} +
+        # PNGs are source art only - WoW loads .tga/.blp at runtime, never .png - so a stray
+        # .png in an addon folder is dead weight (often 1-2 MB each). Strip them from the package.
         find "$STAGE" -type f \( \
             -name '*.py' -o -name '*.pyc' -o -name '*.ps1' \
             -o -name '*.log' -o -name '*.bak' -o -name '*.tmp' -o -name '*.zip' -o -name '*.orig' \
+            -o -name '*.png' \
           \) -delete
 
         # Validation: no dev files leaked, all folders present, root is exactly the addon folders.
