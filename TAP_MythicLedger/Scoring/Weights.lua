@@ -48,6 +48,15 @@ function Weights.Resolve(role, applicable)
         if dOff then move("dispels", w.dispels, Cfg.redistribution.dispels[role] or Cfg.redistribution.dispels.DAMAGER) end
     end
 
+    -- Survival and Death Impact ALWAYS carry EXACTLY equal weight - for every role, and no matter which
+    -- other categories applied or where redistributed weight landed (interrupt/dispel redistribution can
+    -- feed survival but not deaths). Averaging the two is sum-preserving, so the total still sums to 1.0.
+    if (w.survival or 0) ~= (w.deaths or 0) then
+        local sd = ((w.survival or 0) + (w.deaths or 0)) / 2
+        if w.survival ~= sd then log[#log + 1] = { from = "survival<->deaths", to = "equalize", amount = sd - (w.survival or 0) } end
+        w.survival, w.deaths = sd, sd
+    end
+
     -- Guard: renormalize away any float drift so the sum is exactly 1.0.
     local sum = 0; for _, c in ipairs(CATS) do sum = sum + w[c] end
     if sum > 0 and math.abs(sum - 1.0) > 1e-9 then

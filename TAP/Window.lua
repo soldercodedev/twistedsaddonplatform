@@ -530,6 +530,13 @@ end
 
 -- Switch page and re-render.
 function WindowMixin:SelectView(view)
+    -- Notify the OUTGOING page it's being left (only on a real change), so a page can hide any
+    -- persistent frame it parked over the shared content (e.g. a search box that survives Reset to
+    -- keep focus). Not fired on in-page Refresh(), so it won't fight a focused control mid-edit.
+    if view ~= self.view then
+        local prev = self:_pageFor(self.view)
+        if prev and prev.onDeselect then pcall(prev.onDeselect, self) end
+    end
     self.view = view
     self:Refresh()
 end

@@ -253,6 +253,23 @@ function Recap.Stop()
     ML.Log("Recap stopped")
 end
 
+-- Mark a just-played group (a run's party) as already-seen for THIS session without recapping them.
+-- The tracker calls this the instant a run is SAVED: that save flips the whole party to "returning", so
+-- a roster update right after (loot, someone leaving, zoning out) would otherwise toast the entire group
+-- as if you'd just met them - especially a fresh LFG group that dropped straight into the key and never
+-- got a clean pre-run scan. Marking them seen here closes that window. Leaving the group still wipes
+-- `shown`, so re-grouping with them in a later session recaps normally.
+function Recap.MarkGroupSeen(party)
+    if IsInGroup and IsInGroup() then inGroupSession = true end
+    local roster = party or (API.GroupMembers and API.GroupMembers()) or {}
+    for _, m in ipairs(roster) do
+        if not m.isPlayer then
+            local key = API.IdentityKey(m)
+            if key then shown[key] = true end
+        end
+    end
+end
+
 -- In-window preview (Settings): a representative recap for a fabricated returning player, built with
 -- the SAME buildLines() the live recap uses so the preview matches your current settings exactly.
 -- Returns (nameLine, lines) - both pre-colored strings/array - and neither prints nor plays a sound.

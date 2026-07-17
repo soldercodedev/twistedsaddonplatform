@@ -3,7 +3,7 @@
 ## Notes: Account-wide Mythic+ run, party, and performance history. A module of the Twisteds Addon Platform - configure with /tap.
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
 ## Author: Twistedfury-Zul'jin
-## Version: 1.0.0-beta.2
+## Version: 1.0.0-beta.3
 ## Category: Combat
 ## Dependencies: TAP
 ## SavedVariables: TAP_MythicLedgerDB
@@ -52,6 +52,10 @@ Export.lua
 
 # API self-check / diagnostics (validate the live API surface without running a key).
 Diag.lua
+
+# Live talent-inspection diagnostic for dispel capability (Debug page + /mldev inspect; not yet wired
+# into scoring - validating reliability first).
+Inspect.lua
 
 # In-game "What's New" changelog.
 Changelog.lua

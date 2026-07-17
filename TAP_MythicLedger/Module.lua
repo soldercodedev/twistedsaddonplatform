@@ -51,6 +51,7 @@ mod = Suite:RegisterModule({
     OnEnable  = OnEnable,
     OnDisable = OnDisable,
     OnSelect  = function() ML.UI.ResetView() end,
+    OnDeselect = function() ML.UI.OnHide() end,
     Settings  = Settings,
 })
 
@@ -127,6 +128,16 @@ if Suite.RegisterCommand then
         },
     })
     Suite:RegisterCommand({ cmd = "/ledger", desc = "Alias for /tap ledger (native slash)", owner = "Mythic Ledger" })
+    -- One-shot "change your keystone" reminder: arm it now, and the next post-run scoreboard pops an
+    -- alert over itself to remind you to slot your next key (see UI.ShowScoreboard).
+    Suite:RegisterCommand({
+        cmd = "/tap changekey", desc = "Remind me to swap my keystone after this run's scoreboard",
+        owner = "Mythic Ledger", sub = "changekey",
+        handler = function()
+            ML.DB.Settings().pendingChangeKey = true
+            ML.Print("Reminder set - you'll be prompted to change your keystone after this run's scoreboard.")
+        end,
+    })
 end
 
 SLASH_TAPMYTHICLEDGER1 = "/ledger"
@@ -158,5 +169,22 @@ _G.TAPMythicLedger = {
     TankHealiness = function(specID)
         local cfg = ML.Scoring and ML.Scoring.Config
         return (cfg and cfg.throughput and cfg.throughput.tankHealiness[specID]) or 1.0
+    end,
+    -- DEV: the capability DISPEL record for a spec (profile, spellID/name, talentDependent), from the
+    -- SAME Capability profiles the scorer uses. Lets /mldev inspect check whether a teammate actually
+    -- has a talent-gated dispel before we let live talent inspection gate the dispel score.
+    DispelInfo = function(specID, role, classFile)
+        local Cap = ML.Scoring and ML.Scoring.Capability
+        if not (Cap and Cap.Get) then return nil end
+        local p = Cap.Get(specID, role, classFile)
+        local d = p and p.dispel
+        if not d then return nil end
+        return { profile = d.profile, spellID = d.spellID, spellName = d.spellName,
+                 talentDependent = d.talentDependent and true or false }
+    end,
+    -- DEV: run the live group dispel inspection (same engine as the Debug page's "Inspect group"
+    -- button). onLine(line) fires per member; onDone(fullReport) fires at the end. Used by /mldev inspect.
+    InspectDispels = function(onLine, onDone)
+        if ML.Inspect and ML.Inspect.Run then return ML.Inspect.Run({ onLine = onLine, onDone = onDone }) end
     end,
 }

@@ -24,6 +24,8 @@ local DEFAULTS = {
         retentionRuns      = 0,        -- 0 = no numeric cap; otherwise keep only the newest N
         retentionKeepTop   = true,     -- never prune a protected top run (best-per-dungeon, top 10, crowns)
         cardStyle          = "COMPACT", -- Overview stat cards: CLEAN / PANEL / COMPACT
+        dateFormat         = "NA",      -- timestamp date part: NA (mm/dd/yy) / ISO (yyyy-mm-dd) / EU (dd/mm/yy)
+        clockFormat        = "24H",     -- timestamp time part (always local): 24H (hh:mm) / 12H (h:mm AM/PM)
         scoreboardScale    = 1.05,      -- end-of-run scoreboard size (capped to fit the screen)
         scoreboardFont     = "",        -- font key for the scoreboard ("" = use the UI font)
         scoreboardSound    = true,      -- play a sound when the scoreboard opens

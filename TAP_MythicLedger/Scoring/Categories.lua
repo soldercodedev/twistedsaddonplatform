@@ -20,9 +20,15 @@ local function curveScore(ratio)
     return Cfg.clamp(s, 0, c.maxInternal)
 end
 
--- Blend a computed score toward a neutral score by confidence in [0,1].
+-- Confidence blend toward a neutral score (confidence in [0,1]) - but it only ever HELPS. A low group
+-- sample forgives a weak showing by pulling it UP toward neutral; it NEVER drops a score below what was
+-- actually earned. Meeting your target (raw 100) stays 100 even on a low-sample run: you can't be docked
+-- because the run simply didn't offer many chances - that's outside your control, the same reason a
+-- teammate doing more never lowers your score. So once the raw sits at/above neutral, confidence is a
+-- no-op; it only lifts sub-neutral scores.
 local function blendConfidence(score, neutral, confidence)
-    return neutral + (score - neutral) * Cfg.clamp(confidence, 0, 1)
+    local blended = neutral + (score - neutral) * Cfg.clamp(confidence, 0, 1)
+    return math.max(score, blended)
 end
 
 ----------------------------------------------------------------------
@@ -94,6 +100,26 @@ function Cat.Dispel(norm, summary, groupDispelTotal)
         return { applicable = false, profile = profileKey,
                  reason = "This specialization has no relevant dispel capability.",
                  dispel = prof.dispel }
+    end
+
+    -- Capability gate (talent-gated dispels only): a dispel that requires a talent - e.g. Hunter
+    -- Tranquilizing Shot, Paladin Cleanse Toxins - only creates an expectation when we have EVIDENCE the
+    -- player actually specced it: live talent inspection confirmed it (norm.dispelTalent == true) OR they
+    -- recorded at least one dispel this run. Otherwise (confirmed absent, or inspection couldn't reach
+    -- them) we DON'T dock them for a tool they may not have - the category is N/A, weight redistributed.
+    -- Baseline dispels (healers' full cure, etc.) are always expected and skip this gate.
+    if prof.dispel and prof.dispel.talentDependent then
+        local didDispel = (type(norm.dispels) == "number" and norm.dispels >= 1)
+        if norm.dispelTalent ~= true and not didDispel then
+            local ability = prof.dispel.spellName or "a dispel"
+            -- talentMissing is true ONLY when inspection confirmed the talent is absent (not merely
+            -- unknown), so the UI can note "could have talented this but didn't" without overreaching.
+            return { applicable = false, profile = profileKey, capabilityGated = true,
+                     talentMissing = (norm.dispelTalent == false), dispel = prof.dispel,
+                     reason = (norm.dispelTalent == false)
+                         and ("Could talent " .. ability .. " (a dispel this spec can take) but hasn't - none expected here.")
+                         or ("Dispel not scored: couldn't confirm " .. ability .. " is talented.") }
+        end
     end
 
     -- Dungeon dispel-type gate: if NOTHING this spec's dispel can touch appears in this dungeon, don't
@@ -204,11 +230,20 @@ end
 ----------------------------------------------------------------------
 function Cat.Survival(norm)
     local taken = norm.damageTaken
-    if norm.avoidableDamageTaken == nil or not taken or taken <= 0 then
+    local av = norm.avoidableDamageTaken
+    -- A confirmed ZERO avoidable damage is a 0% share = perfect survival, regardless of total taken
+    -- (0 / anything = 0). On a tracked run, "no avoidable rows" is normalized to 0 (see Normalize), so
+    -- this is a confident 100, not a neutral "no data" estimate.
+    if av == 0 then
+        local s = Cfg.clamp(Cfg.interp(Cfg.survival.avoidableShareCurve, 0, "v", "s"), 0, 100)
+        return { applicable = true, score = s, confidence = 1,
+                 detail = { avoidableShare = 0, shareScore = s } }
+    end
+    if av == nil or not taken or taken <= 0 then
         return { applicable = true, score = Cfg.survival.neutralScore, confidence = 0,
                  note = "No avoidable-damage data was recorded; using a neutral estimate.", detail = {} }
     end
-    local share = norm.avoidableDamageTaken / taken
+    local share = av / taken
     local s = Cfg.clamp(Cfg.interp(Cfg.survival.avoidableShareCurve, share, "v", "s"), 0, 100)
     return { applicable = true, score = s, confidence = 0.7,
              detail = { avoidableShare = share, shareScore = s } }

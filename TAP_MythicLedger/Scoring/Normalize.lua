@@ -34,6 +34,9 @@ function Norm.Player(run, member)
         classID = member.classId or member.classID, classFile = member.classFile,
         specID = specID, role = role, isPlayer = member.isPlayer and true or false,
         dungeonName = run.dungeonName,   -- for the dungeon dispel-type gate (mapId is set below)
+        -- Live talent-inspection verdict for a TALENT-GATED dispel (true/false/nil = has/not/unknown).
+        -- Lets Categories.Dispel avoid docking a player for a dispel they never talented.
+        dispelTalent = member.dispelTalent,
 
         durationSeconds = num(run.duration),
         damageDone   = num(s.damage),
@@ -57,6 +60,11 @@ function Norm.Player(run, member)
     -- (100) instead of a neutral "no death data recorded". Applies retroactively to already-saved runs
     -- too. Only when genuinely tracked; an untracked run (no combat stats at all) stays nil = unknown.
     if n.deaths == nil and (n.dps or n.damageDone or n.hps or n.healing) then n.deaths = 0 end
+
+    -- Same for AVOIDABLE damage taken: on a tracked run, no avoidable-damage rows means you took NONE of
+    -- it - a true 0, not "no data". So Survival scores a confident 0% avoidable share -> 100, instead of
+    -- a neutral "no avoidable-damage data" estimate. Only when genuinely tracked (real combat numbers).
+    if n.avoidableDamageTaken == nil and (n.dps or n.damageDone or n.hps or n.healing) then n.avoidableDamageTaken = 0 end
 
     -- Effective/active seconds is NOT stored by the meter; approximate from damage/dps when both
     -- exist (Blizzard's dps is over effective combat time). Marked as an estimate for the UI.

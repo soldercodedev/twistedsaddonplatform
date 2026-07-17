@@ -131,7 +131,7 @@ local function addonVersion(addonName)
 end
 
 -- The suite's own version, with a sane fallback if the .toc metadata isn't ready yet.
-local function suiteVersion() return addonVersion("TAP") or "1.0.0-beta.3" end
+local function suiteVersion() return addonVersion("TAP") or "1.0.0-beta.4" end
 
 local function moduleNavIcon(spec)
     if spec.icon then return theme:ResolveIcon(spec.icon) end
@@ -758,6 +758,8 @@ local function buildPages()
                 render = function(b, w) return pageModule(b, w, m) end,
                 -- Let a module reset its page state when its nav entry is (re)clicked.
                 onSelect = function() if m.spec.OnSelect then m.spec.OnSelect(m) end end,
+                -- Let a module tidy up (e.g. hide a persistent frame) when you navigate away from it.
+                onDeselect = function() if m.spec.OnDeselect then m.spec.OnDeselect(m) end end,
             }
         end
     end

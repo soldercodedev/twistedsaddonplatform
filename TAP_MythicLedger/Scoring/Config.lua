@@ -30,7 +30,31 @@ Scoring.Config = Config
 -- v14: per-dungeon, per-type dispel DEMAND weights scale expected dispels (magic-heavy dungeons like
 --      Magisters expect more, light ones like Skyreach fewer); a spec's expected uses the max weight
 --      among the dispel types it can address there. Estimates from debuff breadth, not measured casts.
-Config.version = 14
+-- v15: TALENT-GATED dispels (Hunter Tranq Shot, Paladin Cleanse Toxins, Shaman Cleanse Spirit, Warlock
+--      Singe Magic) no longer create a dispel expectation unless the player is CONFIRMED to have it -
+--      live talent inspection captured on the run (party member dispelTalent) OR they actually dispelled.
+--      Otherwise the dispel category is N/A (not a dock). Old runs (no capture) treat unknown as N/A too.
+-- v16: talent-gate coverage completed (researched vs Midnight 12.0 talent trees). In 12.0 nearly EVERY
+--      DPS/tank defensive cleanse is a class-tree talent, so these are now talentDependent too: DH
+--      Consume Magic, Druid Remove Corruption, Evoker Cauterizing Flame, Mage Remove Curse, Monk Detox
+--      (Brewmaster/Windwalker), Shadow Priest Purify Disease. Only Rogue Shiv stays baseline (auto-
+--      granted to Assassination / near-universal Row-1 pick). Baseline healer cures are unaffected.
+-- v17: the confidence blend is now ONE-DIRECTIONAL. Low group-sample confidence only ever pulls a
+--      score UP toward neutral (forgiving a low showing when the run offered few chances); it never
+--      drops a MET target below full. Fixes a met dispel/interrupt target scoring < 100 (e.g. "93")
+--      on low-sample ("LIMITED") runs.
+-- v18: Survival and Death Impact now weigh the SAME per role - each set to (old survival + old deaths)/2
+--      (DPS 0.215/0.215, tanks & healers 0.24/0.24). Row totals unchanged (still sum to 1.0).
+-- v19: Survival == Death weight is now guaranteed for EVERY resolved run, not just the base: after any
+--      interrupt/dispel N/A redistribution, Weights.Resolve averages the two (sum-preserving) so they
+--      stay exactly equal regardless of which categories applied. Also: a tracked run with no avoidable-
+--      damage rows now counts as a TRUE 0% avoidable share -> Survival 100 (not a neutral "no data").
+-- v20: STATIC, UNIFORM weights across all roles - Throughput 35%, utility (interrupts + dispels) 25%
+--      COMBINED, Survival 20%, Death Impact 20%. Interrupts/dispels split the 25% EVENLY (12.5% each) when
+--      both apply; if only one applies the other's share moves to it so the utility bucket stays 25%; if
+--      neither applies the 25% goes to throughput + survival. roleContribution retired to 0 weight for all
+--      roles (targets tuned via knobs later, not weights). Retroactive rescore.
+Config.version = 20
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -40,31 +64,39 @@ Config.roles = { "TANK", "HEALER", "DAMAGER" }
 -- interrupts + dispels. When a utility category is N/A for a spec these are redistributed
 -- deterministically by Weights.lua.
 ----------------------------------------------------------------------
--- Deaths carry a HEAVY weight (0.18): dying should visibly tank the overall, not just nudge it.
+-- Static, uniform weights for every role (v20): Throughput 35%, utility (interrupts + dispels) 25%
+-- COMBINED, Survival 20%, Death Impact 20%. Interrupts and dispels split the 25% EVENLY (12.5% each) when
+-- both apply; when only ONE applies the other's share moves to it so the utility bucket stays 25% (see
+-- redistribution below); when NEITHER applies the 25% goes to throughput + survival. roleContribution is
+-- retired to 0 weight (its targets can be reintroduced via knobs later without touching these weights).
+-- Survival and Death Impact stay EXACTLY equal (Weights.Resolve averages them after any redistribution).
 Config.roleWeights = {
-    DAMAGER = { throughput = 0.27, interrupts = 0.18, dispels = 0.12, survival = 0.25, deaths = 0.18, roleContribution = 0.00 },
-    TANK    = { throughput = 0.16, interrupts = 0.18, dispels = 0.12, survival = 0.30, deaths = 0.18, roleContribution = 0.06 },
-    HEALER  = { throughput = 0.17, interrupts = 0.15, dispels = 0.15, survival = 0.30, deaths = 0.18, roleContribution = 0.05 },
+    DAMAGER = { throughput = 0.35, interrupts = 0.125, dispels = 0.125, survival = 0.20, deaths = 0.20, roleContribution = 0.00 },
+    TANK    = { throughput = 0.35, interrupts = 0.125, dispels = 0.125, survival = 0.20, deaths = 0.20, roleContribution = 0.00 },
+    HEALER  = { throughput = 0.35, interrupts = 0.125, dispels = 0.125, survival = 0.20, deaths = 0.20, roleContribution = 0.00 },
 }
 
 -- Deterministic redistribution when a utility category is not applicable. Fractions of the freed
--- weight, per role. Must sum to 1.0 each (validated). Never dumps everything into throughput.
+-- weight, per role. Must sum to 1.0 each (validated). Because interrupts + dispels are ONE 25% budget,
+-- an N/A on a single utility category moves its whole share to the OTHER utility category, keeping the
+-- bucket at 25% on whichever applies. Only when BOTH are N/A does the 25% leave the bucket (utilityBoth).
 Config.redistribution = {
-    interrupts = {
-        DAMAGER = { throughput = 0.50, survival = 0.50 },
-        TANK    = { survival = 0.50, roleContribution = 0.30, throughput = 0.20 },
-        HEALER  = { dispels = 0.50, survival = 0.25, roleContribution = 0.25 },
+    interrupts = {   -- interrupts N/A -> dispels absorbs the freed weight (utility stays 25%)
+        DAMAGER = { dispels = 1.00 },
+        TANK    = { dispels = 1.00 },
+        HEALER  = { dispels = 1.00 },
     },
-    dispels = {
-        DAMAGER = { throughput = 0.40, survival = 0.30, interrupts = 0.30 },
-        TANK    = { survival = 0.40, interrupts = 0.30, roleContribution = 0.30 },
-        HEALER  = { throughput = 0.40, survival = 0.30, interrupts = 0.30 },
+    dispels = {      -- dispels N/A -> interrupts absorbs the freed weight (utility stays 25%)
+        DAMAGER = { interrupts = 1.00 },
+        TANK    = { interrupts = 1.00 },
+        HEALER  = { interrupts = 1.00 },
     },
-    -- If BOTH utility categories are N/A, this flat split of their combined weight is used instead.
+    -- If BOTH utility categories are N/A, the combined 25% splits evenly to throughput and survival
+    -- (survival then shares equally with deaths via the Survival==Death equalize step in Weights.Resolve).
     utilityBoth = {
         DAMAGER = { throughput = 0.50, survival = 0.50 },
-        TANK    = { survival = 0.60, roleContribution = 0.40 },
-        HEALER  = { throughput = 0.45, survival = 0.35, roleContribution = 0.20 },
+        TANK    = { throughput = 0.50, survival = 0.50 },
+        HEALER  = { throughput = 0.50, survival = 0.50 },
     },
 }
 
@@ -76,12 +108,16 @@ Config.redistribution = {
 -- Warrior (14s Pummel), which is more than a Counter Shot Hunter (24s). ratePerMinute is kept only as a
 -- coarse FALLBACK for records with no cooldown data. Sources: warcraft.wiki.gg/wiki/Interrupt.
 ----------------------------------------------------------------------
+-- Coarse fallback rates, tuned to a 1:2:3:4 spread so the profiles' relative EXPECTED kick shares are
+-- LONG_CD 10% / STANDARD 20% / SHORT_CD 30% / HIGH_CONTROL 40%. STANDARD stays 0.30 (the kickUtil
+-- calibration point: a plain 15s kicker = 60/15 x 0.075 = 0.30), so per-spec CD-derived rates are
+-- unchanged; only the no-CD-data fallback and the coarse profile weighting move.
 Config.interruptProfiles = {
     NONE         = { ratePerMinute = 0.00, scoreEligible = false },
-    LONG_CD      = { ratePerMinute = 0.18, scoreEligible = true },   -- ~24-60s CD, ranged (Counterspell/Counter Shot/Quell/Solar Beam; Resto Shaman's 30s Wind Shear in Midnight)
-    STANDARD     = { ratePerMinute = 0.30, scoreEligible = true },   -- ~15s CD single interrupt (Kick/Pummel/Rebuke/Mind Freeze/Muzzle/Spear Hand)
-    SHORT_CD     = { ratePerMinute = 0.40, scoreEligible = true },   -- <=12s CD (Elemental/Enhancement Wind Shear; Resto's is now 30s -> LONG_CD)
-    HIGH_CONTROL = { ratePerMinute = 0.48, scoreEligible = true },   -- 15s interrupt + strong extra ranged stop/silence used rotationally (Prot Pal, DH)
+    LONG_CD      = { ratePerMinute = 0.15, scoreEligible = true },   -- ~24-60s CD, ranged (Counterspell/Counter Shot/Quell/Solar Beam; Resto Shaman's 30s Wind Shear in Midnight)  -- 10% share
+    STANDARD     = { ratePerMinute = 0.30, scoreEligible = true },   -- ~15s CD single interrupt (Kick/Pummel/Rebuke/Mind Freeze/Muzzle/Spear Hand)                              -- 20% share
+    SHORT_CD     = { ratePerMinute = 0.45, scoreEligible = true },   -- <=12s CD (Elemental/Enhancement Wind Shear; Resto's is now 30s -> LONG_CD)                                -- 30% share
+    HIGH_CONTROL = { ratePerMinute = 0.60, scoreEligible = true },   -- 15s interrupt + strong extra ranged stop/silence used rotationally (Prot Pal, DH)                         -- 40% share
 }
 
 ----------------------------------------------------------------------
@@ -468,7 +504,7 @@ Config.survival = {
 -- Deaths. Death Impact (NOT responsibility). Escalating, capped. Score = 100 - penalty.
 ----------------------------------------------------------------------
 -- Flat, heavy death penalty: -25 for EVERY death -> category 1=75, 2=50, 3=25, 4+=0. Combined with
--- the heavy 0.18 weight, dying is the single most costly thing you can do.
+-- the heavy 0.20 weight, dying is the single most costly thing you can do.
 Config.deaths = {
     penalties = { 25 },   -- flat -25 for the first death...
     perExtra = 25,        -- ...and -25 for every death after (2nd, 3rd, ...)

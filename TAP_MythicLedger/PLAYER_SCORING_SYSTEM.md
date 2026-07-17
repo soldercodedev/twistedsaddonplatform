@@ -102,8 +102,9 @@ barely moves the needle — an outlier interrupt total can't dominate:
 ## 11. Specs without interrupts
 
 `NONE` specs are marked **N/A** (never 0). The interrupt weight is **redistributed deterministically**
-(`Scoring/Weights.lua` + `Config.redistribution`): e.g. a healer's interrupt weight → 50% dispels,
-25% survival, 25% role contribution. The UI shows `Interrupt Contribution: N/A` and states where the
+(`Scoring/Weights.lua` + `Config.redistribution`): since interrupts + dispels are one 25% budget, an
+interrupt N/A moves its full share to **dispels** (the bucket stays 25%); only if the spec also can't
+dispel does the 25% leave the bucket. The UI shows `Interrupt Contribution: N/A` and states where the
 weight went.
 
 ## 12. Dispel scoring
@@ -156,19 +157,27 @@ and we wouldn't want to cancel the overlap even if we could.
 
 ## 16. Weight redistribution
 
-When a utility category is N/A, its weight is moved to categories the player can affect, per explicit
-per-role rules, and the result **always sums to 1.0** (validated + unit-tested). If **both** utility
-categories are N/A, a combined `utilityBoth` split is used. Nothing is silently renormalized.
+Interrupts and dispels share one **25% utility budget**. When **one** utility category is N/A its whole
+weight moves to the **other** utility category, so the bucket stays 25% on whichever applies. When
+**both** are N/A the combined 25% uses the `utilityBoth` split (evenly to throughput + survival). The
+result **always sums to 1.0** (validated + unit-tested), and nothing is silently renormalized.
 
-## 17. Role-specific category weights
+> The worked examples in §22 below predate v20 (they use the old per-role weights and redistribution);
+> the mechanics they illustrate still hold, but the specific weight numbers do not.
+
+## 17. Category weights (static, uniform across roles — v20)
 
 | Role | Throughput | Interrupts | Dispels | Survival | Deaths | Role Contribution |
 |---|---:|---:|---:|---:|---:|---:|
-| DPS | 35% | 18% | 12% | 25% | 10% | 0% |
-| Tank | 15% | 18% | 12% | 35% | 10% | 10% |
-| Healer | 25% | 15% | 15% | 30% | 10% | 5% |
+| DPS | 35% | 12.5% | 12.5% | 20% | 20% | 0% |
+| Tank | 35% | 12.5% | 12.5% | 20% | 20% | 0% |
+| Healer | 35% | 12.5% | 12.5% | 20% | 20% | 0% |
 
-Configurable in `Config.roleWeights`.
+Interrupts + Dispels form a single **25% utility budget**, split evenly when both apply. When only one
+applies, the other's share moves to it (the bucket stays 25%); when neither applies, the 25% goes to
+throughput + survival (§16). Survival and Death Impact are always **exactly equal**. Role Contribution is
+retired to **0 weight** — its inputs can be reintroduced via target knobs later without changing these
+weights. Configurable in `Config.roleWeights`.
 
 ## 18. Historical calibration / 19. Static vs learned baselines
 

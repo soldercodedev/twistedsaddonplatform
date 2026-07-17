@@ -51,7 +51,7 @@ local function statBlock(src)
 end
 
 -- Merge captured roster identity with provider stat blocks into the saved party array.
-local function mergePartyStats(roster, stats)
+local function mergePartyStats(roster, stats, capture)
     local byGuid, byName = {}, {}
     if stats then
         for _, e in ipairs(stats.party or {}) do
@@ -80,6 +80,9 @@ local function mergePartyStats(roster, stats)
             specIcon = src and src.specIcon,
             guildName = m.guildName, isPlayer = m.isPlayer and true or false,
             mplusScore = m.mplusScore,
+            -- Live talent-inspection verdict for this member's dispel: true = has it, false = confirmed
+            -- NOT talented, nil = unknown. Gates the dispel scorer (see Scoring/Categories.Dispel).
+            dispelTalent = capture and m.guid and capture[m.guid] and capture[m.guid].hasTool,
             stats = statBlock(src),
         }
     end
@@ -200,6 +203,22 @@ local function buildRun()
     }
 end
 
+-- Talent-inspect the group and record each member's dispel capability (guid -> hasTool bool/nil) on the
+-- run, so the dispel scorer can gate expectations: a player we can't confirm has a TALENT-GATED dispel
+-- is scored N/A, never docked. Best-effort + async; run start (everyone clustered at the door) is the
+-- ideal window. Merges results across calls, preferring a known verdict over an earlier unknown.
+local function captureDispels()
+    if not (current and ML.Inspect and ML.Inspect.CaptureGroup) then return end
+    ML.Inspect.CaptureGroup(function(map)
+        if not (current and type(map) == "table") then return end
+        local cur = current.dispelCapture or {}
+        for guid, v in pairs(map) do
+            if v.hasTool ~= nil or cur[guid] == nil then cur[guid] = v end
+        end
+        current.dispelCapture = cur
+    end)
+end
+
 function Tracker.BeginRun()
     if state == STATE.ACTIVE or state == STATE.COMPLETING then return end
     local run = buildRun()
@@ -218,6 +237,7 @@ function Tracker.BeginRun()
     if not ok then ML.Log("provider:BeginRun errored (continuing)") end
     setState(STATE.ACTIVE)
     persistRecovery()
+    captureDispels()   -- talent-inspect the group now, while everyone's clustered at the start
     local pc = run.character
     ML.Log("Run started: %s +%s | provider=%s avail=%s | party=%d | player guid=%s",
         tostring(run.dungeonName), tostring(run.level), run.provider,
@@ -241,6 +261,7 @@ function Tracker.OnRosterUpdate()
     rosterTimer = C_Timer.NewTimer(1.0, function()
         rosterTimer = nil
         refreshRoster()
+        captureDispels()   -- re-capture: picks up late joiners / anyone unknown (e.g. after a reload)
     end)
 end
 
@@ -475,7 +496,7 @@ local function finalizeRun(stats)
         run.status = STATUS.DEPLETED
     end
 
-    run.party           = mergePartyStats(run.party, stats)
+    run.party           = mergePartyStats(run.party, stats, run.dispelCapture)
     -- Clean-run deaths: the meter records no death rows for someone who didn't die, so their count comes
     -- back nil. For a player the meter actually TRACKED (real combat numbers), that means ZERO deaths,
     -- not "no data" - store 0 so scoring reads "no deaths" (a confident zero) everywhere instead of "no
@@ -528,6 +549,9 @@ local function finalizeRun(stats)
 
     setState(STATE.COMPLETED)
     local inserted = DB.AddRun(run)   -- de-duplicates + runs History.OnRunSaved internally
+    -- Saving flips this party to "returning"; mark them seen so a post-run roster update can't re-toast
+    -- the whole group as if you'd just met them (see Recap.MarkGroupSeen).
+    if ML.Recap and ML.Recap.MarkGroupSeen then pcall(ML.Recap.MarkGroupSeen, run.party) end
     if inserted then
         if DB.Settings().postRunSummary and ML.UI and ML.UI.QueuePostRun then
             pcall(ML.UI.QueuePostRun, run)
@@ -590,12 +614,13 @@ function Tracker.AbandonRun(reason)
     run.status      = STATUS.ABANDONED
     run.confidence  = "partial"
     local stats = Providers.Metadata:GetRunStats(run)
-    run.party       = mergePartyStats(run.party, stats)
+    run.party       = mergePartyStats(run.party, stats, run.dispelCapture)
     run.playerStats = playerStatsOf(run.party)
     run.deaths      = sumDeaths(run.party)
     run.bosses      = finalizeBosses()
     setState(STATE.ABANDONED)
     DB.AddRun(run)   -- de-duplicates + runs History.OnRunSaved internally
+    if ML.Recap and ML.Recap.MarkGroupSeen then pcall(ML.Recap.MarkGroupSeen, run.party) end
     DB.ClearActiveRun(); cleanup(); setState(STATE.IDLE)
     ML.Log("Abandoned run saved: %s +%s", tostring(run.dungeonName), tostring(run.level))
 end

@@ -176,16 +176,30 @@ function Util.numOr(n, fmt)
     return string.format(fmt or "%d", n)
 end
 
--- epoch seconds -> "2026-07-14 21:33". nil -> "-".
+-- Timestamp display. Both formatters render date + LOCAL time so a timestamp shows anywhere a
+-- date does. The date component and the 12/24-hour clock are user-customizable via settings
+-- (dateFormat: NA/ISO/EU, clockFormat: 24H/12H); before the DB is ready we fall back to the
+-- NA date + 24-hour default. WoW's date() formats in the client's local timezone.
+local DATE_PATTERNS = { NA = "%m/%d/%y", ISO = "%Y-%m-%d", EU = "%d/%m/%y" }
+local TIME_PATTERNS = { ["24H"] = "%H:%M", ["12H"] = "%I:%M %p" }
+
+local function stampPattern()
+    local s = ML.DB and ML.DB.Ready and ML.DB.Ready() and ML.DB.Settings() or nil
+    local dPat = DATE_PATTERNS[s and s.dateFormat] or DATE_PATTERNS.NA
+    local tPat = TIME_PATTERNS[s and s.clockFormat] or TIME_PATTERNS["24H"]
+    return dPat .. " " .. tPat
+end
+ML._stampPattern = stampPattern   -- exposed so the settings page can build a live preview
+
+-- epoch seconds -> e.g. "07/14/26 21:33" (date + local time). nil -> "-".
 function Util.dateTime(epoch)
     if type(epoch) ~= "number" then return DASH end
-    return date("%Y-%m-%d %H:%M", epoch)
+    return date(stampPattern(), epoch)
 end
 
-function Util.dateShort(epoch)
-    if type(epoch) ~= "number" then return DASH end
-    return date("%Y-%m-%d", epoch)
-end
+-- Kept as a distinct name for callers of the old date-only formatter; now also shows the
+-- local time so timestamps appear consistently everywhere a date is displayed.
+Util.dateShort = Util.dateTime
 
 -- A "+NN" keystone label.
 function Util.keyLabel(level)

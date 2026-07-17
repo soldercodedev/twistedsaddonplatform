@@ -61,20 +61,20 @@ spec(252, "DEATHKNIGHT", "Unholy", "DAMAGER", { interrupt = ir(47528, "Mind Free
 -- Demon Hunter - Disrupt (all) + Consume Magic (offensive purge). Vengeance = high control (Sigil of Silence).
 ----------------------------------------------------------------------
 spec(577, "DEMONHUNTER", "Havoc",     "DAMAGER", { interrupt = ir(183752, "Disrupt", 15, "MELEE", "STANDARD"),
-    dispel = dp("LIMITED", 278326, "Consume Magic", nil, { magic = true }) })
+    dispel = dp("LIMITED", 278326, "Consume Magic", nil, { magic = true }, { talentDependent = true }) })
 spec(581, "DEMONHUNTER", "Vengeance", "TANK",    { interrupt = ir(183752, "Disrupt", 15, "MELEE", "HIGH_CONTROL",
     { additionalStops = { { spellID = 202137, spellName = "Sigil of Silence", stopType = "SILENCE", cooldownSeconds = 90, rotationalLikelihood = "MEDIUM" } } }),
-    dispel = dp("LIMITED", 278326, "Consume Magic", nil, { magic = true }), highControl = true, incidentalControlRisk = 0.4 })
+    dispel = dp("LIMITED", 278326, "Consume Magic", nil, { magic = true }, { talentDependent = true }), highControl = true, incidentalControlRisk = 0.4 })
 
 ----------------------------------------------------------------------
 -- Druid - Feral/Guardian: Skull Bash (15s, in-form). Balance: Solar Beam (60s, AoE silence). Resto: NONE.
 ----------------------------------------------------------------------
 spec(102, "DRUID", "Balance",      "DAMAGER", { interrupt = ir(78675, "Solar Beam", 60, "RANGED", "LONG_CD", { silence = true }),
-    dispel = dp("LIMITED", 2782, "Remove Corruption", { curse = true, poison = true }, { enrage = true }) })   -- + Soothe (2908) enrage
+    dispel = dp("LIMITED", 2782, "Remove Corruption", { curse = true, poison = true }, { enrage = true }, { talentDependent = true }) })   -- + Soothe (2908) enrage
 spec(103, "DRUID", "Feral",        "DAMAGER", { interrupt = ir(106839, "Skull Bash", 15, "MELEE", "STANDARD"),
-    dispel = dp("LIMITED", 2782, "Remove Corruption", { curse = true, poison = true }, { enrage = true }) })   -- + Soothe (2908) enrage
+    dispel = dp("LIMITED", 2782, "Remove Corruption", { curse = true, poison = true }, { enrage = true }, { talentDependent = true }) })   -- + Soothe (2908) enrage
 spec(104, "DRUID", "Guardian",     "TANK",    { interrupt = ir(106839, "Skull Bash", 15, "MELEE", "STANDARD"),
-    dispel = dp("LIMITED", 2782, "Remove Corruption", { curse = true, poison = true }, { enrage = true }) })   -- + Soothe (2908) enrage
+    dispel = dp("LIMITED", 2782, "Remove Corruption", { curse = true, poison = true }, { enrage = true }, { talentDependent = true }) })   -- + Soothe (2908) enrage
 spec(105, "DRUID", "Restoration",  "HEALER",  { interrupt = IR_NONE,
     dispel = dp("STANDARD", 88423, "Nature's Cure", { magic = true, curse = true, poison = true }, {}) })
 
@@ -83,28 +83,29 @@ spec(105, "DRUID", "Restoration",  "HEALER",  { interrupt = IR_NONE,
 -- interrupt removal) -> NONE. Preservation: full-ish dispel (Naturalize). DPS: Cauterizing Flame.
 ----------------------------------------------------------------------
 spec(1467, "EVOKER", "Devastation",  "DAMAGER", { interrupt = ir(351338, "Quell", 40, "RANGED", "LONG_CD"),
-    dispel = dp("LIMITED", 374251, "Cauterizing Flame", { curse = true, disease = true, poison = true }, {}) })
+    dispel = dp("LIMITED", 374251, "Cauterizing Flame", { curse = true, disease = true, poison = true }, {}, { talentDependent = true }) })
 spec(1468, "EVOKER", "Preservation", "HEALER",  { interrupt = IR_NONE,
     dispel = dp("STANDARD", 360823, "Naturalize", { magic = true, poison = true }, {}) })
 spec(1473, "EVOKER", "Augmentation", "DAMAGER", { interrupt = ir(351338, "Quell", 40, "RANGED", "LONG_CD"),
-    dispel = dp("LIMITED", 374251, "Cauterizing Flame", { curse = true, disease = true, poison = true }, {}) })
+    dispel = dp("LIMITED", 374251, "Cauterizing Flame", { curse = true, disease = true, poison = true }, {}, { talentDependent = true }) })
 
 ----------------------------------------------------------------------
--- Hunter - BM/MM: Counter Shot (24s). Survival: Muzzle (15s). Tranq Shot (offensive) for all.
+-- Hunter - BM/MM: Counter Shot (24s). Survival: Muzzle (15s). Tranq Shot (offensive) is TALENTED in
+--   Midnight (not baseline) - so its dispel is talentDependent; a hunter without it is N/A, not docked.
 ----------------------------------------------------------------------
 spec(253, "HUNTER", "BeastMastery", "DAMAGER", { interrupt = ir(147362, "Counter Shot", 24, "RANGED", "LONG_CD"),
-    dispel = dp("LIMITED", 19801, "Tranquilizing Shot", nil, { magic = true, enrage = true }) })
+    dispel = dp("LIMITED", 19801, "Tranquilizing Shot", nil, { magic = true, enrage = true }, { talentDependent = true }) })
 spec(254, "HUNTER", "Marksmanship", "DAMAGER", { interrupt = ir(147362, "Counter Shot", 24, "RANGED", "LONG_CD"),
-    dispel = dp("LIMITED", 19801, "Tranquilizing Shot", nil, { magic = true, enrage = true }) })
+    dispel = dp("LIMITED", 19801, "Tranquilizing Shot", nil, { magic = true, enrage = true }, { talentDependent = true }) })
 spec(255, "HUNTER", "Survival",     "DAMAGER", { interrupt = ir(187707, "Muzzle", 15, "MELEE", "STANDARD"),
-    dispel = dp("LIMITED", 19801, "Tranquilizing Shot", nil, { magic = true, enrage = true }) })
+    dispel = dp("LIMITED", 19801, "Tranquilizing Shot", nil, { magic = true, enrage = true }, { talentDependent = true }) })
 
 ----------------------------------------------------------------------
 -- Mage - Counterspell (all, 24s ranged, also silences). Remove Curse + Spellsteal.
 ----------------------------------------------------------------------
 for _, s in ipairs({ { 62, "Arcane" }, { 63, "Fire" }, { 64, "Frost" } }) do
     spec(s[1], "MAGE", s[2], "DAMAGER", { interrupt = ir(2139, "Counterspell", 24, "RANGED", "LONG_CD", { silence = true }),
-        dispel = dp("LIMITED", 475, "Remove Curse", { curse = true }, { magic = true }) })
+        dispel = dp("LIMITED", 475, "Remove Curse", { curse = true }, { magic = true }, { talentDependent = true }) })
 end
 
 ----------------------------------------------------------------------
@@ -112,24 +113,25 @@ end
 -- interrupt removal) -> NONE, but keeps full dispel (Detox + Magic).
 ----------------------------------------------------------------------
 spec(268, "MONK", "Brewmaster", "TANK",    { interrupt = ir(116705, "Spear Hand Strike", 15, "MELEE", "STANDARD"),
-    dispel = dp("LIMITED", 218164, "Detox", { disease = true, poison = true }, {}), incidentalControlRisk = 0.25 })
+    dispel = dp("LIMITED", 218164, "Detox", { disease = true, poison = true }, {}, { talentDependent = true }), incidentalControlRisk = 0.25 })
 spec(269, "MONK", "Windwalker", "DAMAGER", { interrupt = ir(116705, "Spear Hand Strike", 15, "MELEE", "STANDARD"),
-    dispel = dp("LIMITED", 218164, "Detox", { disease = true, poison = true }, {}) })
+    dispel = dp("LIMITED", 218164, "Detox", { disease = true, poison = true }, {}, { talentDependent = true }) })
 spec(270, "MONK", "Mistweaver", "HEALER",  { interrupt = IR_NONE,
     dispel = dp("STANDARD", 218164, "Detox", { disease = true, magic = true, poison = true }, {}) })
 
 ----------------------------------------------------------------------
 -- Paladin - Rebuke (15s) for Protection/Retribution. Holy LOST Rebuke in Midnight (healer interrupt
 --           removal) -> NONE. Protection also Avenger's Shield (ranged silence) = high control.
---           Holy: full Cleanse. Prot/Ret: Cleanse Toxins (disease/poison).
+--           Holy: full Cleanse (baseline healer dispel). Prot/Ret: Cleanse Toxins (disease/poison) is
+--           TALENTED in Midnight -> talentDependent; a prot/ret without it is N/A, not docked.
 ----------------------------------------------------------------------
 spec(65, "PALADIN", "Holy",        "HEALER",  { interrupt = IR_NONE,
     dispel = dp("STANDARD", 4987, "Cleanse", { magic = true, disease = true, poison = true }, {}) })
 spec(66, "PALADIN", "Protection",  "TANK",    { interrupt = ir(96231, "Rebuke", 15, "MELEE", "HIGH_CONTROL",
     { additionalStops = { { spellID = 31935, spellName = "Avenger's Shield", stopType = "SILENCE", cooldownSeconds = 15, rotationalLikelihood = "HIGH" } } }),
-    dispel = dp("LIMITED", 213644, "Cleanse Toxins", { disease = true, poison = true }, {}), highControl = true, incidentalControlRisk = 0.5 })
+    dispel = dp("LIMITED", 213644, "Cleanse Toxins", { disease = true, poison = true }, {}, { talentDependent = true }), highControl = true, incidentalControlRisk = 0.5 })
 spec(70, "PALADIN", "Retribution", "DAMAGER", { interrupt = ir(96231, "Rebuke", 15, "MELEE", "STANDARD"),
-    dispel = dp("LIMITED", 213644, "Cleanse Toxins", { disease = true, poison = true }, {}) })
+    dispel = dp("LIMITED", 213644, "Cleanse Toxins", { disease = true, poison = true }, {}, { talentDependent = true }) })
 
 ----------------------------------------------------------------------
 -- Priest - Discipline/Holy: NO conventional interrupt (Mass Dispel + Purify -> HIGH_UTILITY dispel).
@@ -142,7 +144,7 @@ spec(257, "PRIEST", "Holy",       "HEALER", { interrupt = IR_NONE,
     dispel = dp("HIGH_UTILITY", 527, "Purify", { magic = true, disease = true }, { magic = true },
         { additional = { { spellID = 32375, spellName = "Mass Dispel" } } }) })
 spec(258, "PRIEST", "Shadow",     "DAMAGER", { interrupt = ir(15487, "Silence", 45, "RANGED", "LONG_CD", { silence = true }),
-    dispel = dp("LIMITED", 213634, "Purify Disease", { disease = true }, { magic = true }) })
+    dispel = dp("LIMITED", 213634, "Purify Disease", { disease = true }, { magic = true }, { talentDependent = true }) })
 
 ----------------------------------------------------------------------
 -- Rogue - Kick (all, 15s). Shiv (5938) removes an Enrage from an enemy = a real (if situational)
@@ -206,6 +208,19 @@ spec(73, "WARRIOR", "Protection", "TANK",    { interrupt = ir(6552, "Pummel", 14
 -- log in Midnight), so this is a VOLUME contribution, never a "you missed the priority dispel"
 -- judgement. Sources: warcraft.wiki.gg/wiki/Dispel; Wowhead "Important Dispels in Midnight S1 M+".
 -- (No profile rewriting here anymore - each spec is scored on the dispel profile set above.)
+--
+-- TALENT-GATED (researched vs the Midnight 12.0 talent trees, 2026): in 12.0 nearly every DPS/tank
+-- DEFENSIVE cleanse is a class-tree TALENT a player can skip, so the record carries talentDependent =
+-- true and the scorer only expects dispels from a member CONFIRMED to have it (live talent inspection,
+-- or they actually dispelled) - never a dock for a tool they didn't spec. Flagged: DH Consume Magic,
+-- Druid Remove Corruption, Evoker Cauterizing Flame, Hunter Tranquilizing Shot, Mage Remove Curse, Monk
+-- Detox (BrM/WW), Paladin Cleanse Toxins (Prot/Ret), Shadow Priest Purify Disease, Shaman Cleanse
+-- Spirit (Ele/Enh), Warlock Singe Magic (Imp/pet-conditional). NOT gated: Rogue Shiv (auto-granted to
+-- Assassination, near-universal Row-1 pick) and every baseline HEALER cure. NOTE: some flagged records
+-- also bundle a BASELINE offensive purge/soothe (Druid Soothe, Mage Spellsteal, Shaman Purge, Priest
+-- Dispel Magic) that the player always has - we still gate on the talented DEFENSIVE cleanse, so a
+-- purge/soothe they actually cast still credits via the "dispelled >= 1" clause; we just don't
+-- proactively EXPECT it. That errs toward N/A (never a dock), which is the intended direction.
 ----------------------------------------------------------------------
 
 ----------------------------------------------------------------------

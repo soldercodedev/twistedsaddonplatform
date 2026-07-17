@@ -3,6 +3,72 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
+## 1.0.0-beta.4
+
+A big **Mythic Ledger** visual + scoring pass (module version 1.0.0-beta.3), plus a platform-wide
+**per-module on/off** you can reach from any module's own Settings tab, and settings tidy-ups across
+the other modules.
+
+- **[NEW]** **Enable/disable any module from its own page.** Every module's **Settings** tab now has a
+  master on/off switch, and a module you switch off shows a clear **MODULE DISABLED** overlay on its
+  other tabs (with a jump straight back to Settings) instead of a dead page. **Rotation Assistant** and
+  **Focus Target Interrupt** gained a dedicated **Settings** tab for this — their minimap toggle moved
+  there too.
+- **[NEW]** **Mythic Ledger — run details, rebuilt.** A run's party and boss splits are now **hero
+  cards** (spec portraits with the performance grade; boss cards fronted by their portrait), with a
+  **run timeline** — in-combat vs downtime, each boss kill, deaths, and the **+1 / +2 / +3** timer
+  targets — matching the end-of-run scoreboard.
+- **[NEW]** **Mythic Ledger — "Timed +2".** Run results now show the **keystone upgrade** you earned
+  on the Runs list, the run tooltip, and the run header, not just "Timed".
+- **[CHANGE]** **Mythic Ledger — player pages** now match the character page: **Specs Played** and
+  **Dungeons Together** are the same hero cards, with the same reflowing headline tiles.
+- **[CHANGE]** **Mythic Ledger — interrupt scoring** reweighted so the tiers (long-CD / standard /
+  short-CD / high-control) split the expected kick volume **10 / 20 / 30 / 40** — higher-control kits
+  are expected to carry more.
+- **[CHANGE]** **Mythic Ledger — scoring weights are now static and uniform across roles.** Every role
+  is graded **Throughput 35% · Interrupts + Dispels 25% · Survival 20% · Death Impact 20%**. The two
+  utility categories share the 25% evenly when both apply; if a spec only has one (or the dungeon has
+  nothing for it), the whole 25% stays on the one it can affect. **Role Contribution is retired to 0%**
+  for now (its targets can be tuned later). Your saved runs are automatically rescored.
+- **[CHANGE]** **Mythic Ledger — Survival and Death Impact always weigh the same.** Each role's
+  Survival and Death Impact category carries exactly equal weight — and stays equal even when a utility
+  category (interrupts / dispels) doesn't apply and its weight is redistributed — so avoiding damage and
+  not dying always count equally toward your grade.
+- **[NEW]** **Mythic Ledger — timestamps show the time of day.** Every run date now shows the local
+  time next to it, with a new **Date & Time** setting to choose the date format (NA `mm/dd/yy`, ISO, or
+  EU) and a 12- or 24-hour clock.
+- **[CHANGE]** **Mythic Ledger — a clean run scores full Survival.** If you took **no avoidable damage**
+  on a tracked run, that now counts as a true 0% avoidable share (a perfect Survival score) rather than
+  a neutral "no data" estimate.
+- **[NEW]** **Mythic Ledger — fairer dispel scoring.** Researched against Midnight's talent trees:
+  almost every DPS/tank dispel is a **talent**, not baseline — Consume Magic, Remove Corruption,
+  Cauterizing Flame, Tranquilizing Shot, Remove Curse, Detox, Cleanse Toxins, Purify Disease, Cleanse
+  Spirit, Singe Magic (only Rogue's Shiv is baseline). The ledger talent-inspects the party at the start
+  of a run; a member who never specced their dispel (and cast none) is scored **N/A**, not penalized,
+  and their review names the ability they could talent.
+- **[NEW]** **Mythic Ledger — scoreboard "vs your best".** The end-of-run scoreboard shows your time
+  against your best for that exact **dungeon + character + spec + key level** — a new best, how far off
+  you were, or your first timed clear. The party table also shows **per-stat deltas** (DPS, HPS, damage
+  taken, deaths, interrupts, dispels, avoidable) next to your row **and next to any teammate you've run
+  this key with before** — each compared to that player's OWN best run of this key (matched by character
+  + spec, from your saved history).
+- **[NEW]** **Mythic Ledger — `/tap changekey`.** Arms a one-shot reminder that pops over your next
+  run's scoreboard to change your keystone.
+- **[BUG FIX]** **Mythic Ledger — recap spam.** The returning-player recap no longer toasts your whole
+  group at the end of a run.
+- **[BUG FIX]** **Mythic Ledger — scoreboard timeline labels** (0:00 / total time) no longer tuck
+  under the footer buttons.
+- **[BUG FIX]** **Mythic Ledger — utility scoring.** Meeting your **interrupt / dispel target** now
+  scores full even on a low-sample ("Limited") run — a met target was being dragged toward the neutral
+  score (e.g. **93** instead of 100). Low confidence now only lifts a weak showing toward neutral; it
+  never docks a target you actually hit.
+
+### Modules
+
+- **[CHANGE]** **Combat Alerts — Settings reorganized** into **Sound**, **Performance**, **Backup &
+  Data**, and **Minimap** sections, and the **Alerts** tab now names the **active profile** (shared
+  account-wide vs private to this character) and how many alerts it holds.
+
 ## 1.0.0-beta.3
 
 Third beta. A big visual + accuracy pass on **Mythic Ledger**, plus a round of platform appearance
@@ -11,7 +77,6 @@ New** (`/tap` → module → *What's New*).
 
 - **[CHANGE]** **Mythic Ledger — hero-card pages.** The character overview's **By Spec** and **By
   Dungeon** breakdowns are now rich hero cards (class-colored spec cards with spec icons; dungeon
-  cards fronted by their own art), the headline stats are large-icon tiles, and the **Dungeons** tab
   is a hero-card grid with a **type-to-filter** box (3+ letters) beside the season selector.
 - **[BUG FIX]** **Mythic Ledger — boss icons** now load on the post-run scoreboard and on
   previously-recorded runs (they were blank until the Encounter Journal was queried correctly), and

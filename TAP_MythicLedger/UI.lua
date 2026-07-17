@@ -922,7 +922,7 @@ local function renderRunDetails(b, C, x, y, w, win)
     -- and the run headline - result WITH the keystone-upgrade tier (Timed +2 / Depleted / Abandoned),
     -- time vs. the limit, affixes and date. Same visual language as the Overview hero banner.
     do
-        local bh = 104
+        local bh = 116   -- tall enough that the bottom affixes/date line clears the banner border
         local mi = r.mapId and API.GetMapInfo(r.mapId)
         local bg = API.DungeonBackground(r.dungeonName) or (mi and mi.texture)
         b:Box(x - 1, y + 1, w + 2, bh + 2, 0.9, 0, C.border)   -- 1px border
@@ -1015,7 +1015,7 @@ local function renderRunDetails(b, C, x, y, w, win)
     -- the full encounter breakdown incl. every member's DPS/HPS on the pull.
     if r.bosses and #r.bosses > 0 then
         y = b:Section("BOSS SPLITS", x, y); y = y - 28   -- clear the section divider before the hero cards
-        local minTile, gap, ch = 240, 10, 78
+        local minTile, gap, ch = 240, 10, 92   -- taller card so the 3rd stat line ("Total on boss") fits
         local cols = math.max(1, math.min(3, math.floor((w + gap) / (minTile + gap))))
         cols = math.min(cols, #r.bosses)
         local tileW = math.floor((w - gap * (cols - 1)) / cols)
@@ -1973,6 +1973,21 @@ local function renderSettings(b, C, x, y, w, win)
         y = y - 96 - 14
     end
 
+    b:Sub("DATE & TIME", x, y); y = y - 30
+    b:Label("Date format", x, y - 2, C.subtext)
+    T(b, b:Dropdown(x + 90, y), "Date format",
+        "How dates are written throughout the ledger. NA = mm/dd/yy, ISO = yyyy-mm-dd, EU = dd/mm/yy. "
+        .. "The local time is always shown next to the date."):SetChoices(200, {
+        { "NA", "NA (mm/dd/yy)" }, { "ISO", "ISO (yyyy-mm-dd)" }, { "EU", "EU (dd/mm/yy)" },
+    }, function() return s.dateFormat or "NA" end, function(v) s.dateFormat = v; win:Refresh() end)
+    T(b, b:Dropdown(x + 340, y), "Clock",
+        "12- or 24-hour clock for the time shown next to each date. Times are always in your local timezone."):SetChoices(160, {
+        { "24H", "24-hour (21:33)" }, { "12H", "12-hour (9:33 PM)" },
+    }, function() return s.clockFormat or "24H" end, function(v) s.clockFormat = v; win:Refresh() end)
+    y = y - 38
+    b:Label("Preview:  " .. Util.dateTime(time()), x, y - 2, C.subtext, 11)
+    y = y - 30
+
     b:Sub("SCOREBOARD", x, y); y = y - 30
     slider("Scale", 90, 200, 0.5, 3.0, 0.05, "%.2fx",
         function() return s.scoreboardScale or 1.5 end, function(v) s.scoreboardScale = v end,
@@ -2636,6 +2651,12 @@ function UI.ResetView()
     runFilter.playerKey = nil
 end
 
+-- Navigated away from the ledger page: hide the persistent Dungeons search box, which is parented to
+-- the shared content frame and would otherwise linger on top of whatever module you switch to.
+function UI.OnHide()
+    if dungeonSearch then dungeonSearch:Hide() end
+end
+
 -- Open the module page, optionally jumping to a tab (used by slash commands).
 function UI.Show(tab)
     if tab then view.tab = tab; view.detailRun = nil; view.detailPlayer = nil; view.detailDungeon = nil; view.detailCharacter = nil
@@ -3198,6 +3219,35 @@ function renderPlayerReview(b, C, x, y, w, win)
     return y - 14
 end
 
+-- The player's own spec on a run (the isPlayer party member's spec id), or nil if it wasn't captured.
+local function runPlayerSpec(rr)
+    for _, m in ipairs(rr and rr.party or {}) do
+        if m.isPlayer then return m.specId or m.specID end
+    end
+    return nil
+end
+
+-- Your best TIMED completion for the SAME dungeon + character + spec + key level as `run`, excluding
+-- `run` itself. Returns the RUN RECORD (nil when this is your first timed run of that exact combo) so
+-- callers get both its duration and its party stats. Character is the run's own character (guid); spec
+-- is the one you played THIS run, so a different spec keeps a separate best.
+local function playerBestForCombo(run)
+    local guid = run and run.character and run.character.guid
+    local spec = runPlayerSpec(run)
+    if not (guid and run.mapId and run.level) then return nil end
+    local best
+    for _, rr in ipairs(DB.Runs() or {}) do
+        if rr.id ~= run.id and rr.status == STATUS.TIMED and type(rr.duration) == "number"
+            and rr.mapId == run.mapId and rr.level == run.level
+            and (rr.character and rr.character.guid) == guid
+            and (spec == nil or runPlayerSpec(rr) == spec)
+        then
+            if not best or rr.duration < best.duration then best = rr end
+        end
+    end
+    return best
+end
+
 function UI.ShowScoreboard(run, opts)
     local theme = _G.TAP and _G.TAP.uiTheme
     if not (theme and theme.Modal and run) then return end
@@ -3269,7 +3319,8 @@ function UI.ShowScoreboard(run, opts)
     end
     local heroStyle = ({ CLEAN = "clean", PANEL = "panel", COMPACT = "compact" })[DB.Settings().cardStyle] or "compact"
 
-    local W, rowH, headerH, colH = 1520, 40, 104, 22
+    local W, rowH, headerH, colH = 1520, 50, 124, 22   -- headerH has room for the "vs your best" line;
+                                                        -- rowH fits a full-size per-stat delta line under each value
     local heroPart = (#heroes > 0) and 88 or 0
     local partyPart = 28   -- the "PARTY" section header above the table
     local bossPart = (#bosses > 0) and (56 + #bosses * 42) or 0
@@ -3308,6 +3359,31 @@ function UI.ShowScoreboard(run, opts)
 
             local mi = run.mapId and API.GetMapInfo(run.mapId)
 
+            -- Your previous best run of this exact key (drives the header's time delta).
+            local bestRun = playerBestForCombo(run)
+
+            -- Per-member best index: for EVERY (character guid + spec) in your saved history, that
+            -- player's stats in THEIR fastest timed run of THIS key (same dungeon + key level), excluding
+            -- the current run. So each party member's per-stat delta is driven by THEIR OWN best run -
+            -- not just whoever happened to be in yours - as long as you've logged a run with them at this
+            -- dungeon + level + character + spec. (guid pins character + class; spec pins the build.)
+            local memberBest = {}   -- "guid|specId" -> { dur, stats }
+            for _, rr in ipairs(DB.Runs() or {}) do
+                if rr.id ~= run.id and rr.status == STATUS.TIMED and type(rr.duration) == "number"
+                    and rr.mapId == run.mapId and rr.level == run.level then
+                    for _, pm in ipairs(rr.party or {}) do
+                        local g, sp = pm.guid, (pm.specId or pm.specID)
+                        if g and sp then
+                            local key = g .. "|" .. sp
+                            local cur = memberBest[key]
+                            if not cur or rr.duration < cur.dur then
+                                memberBest[key] = { dur = rr.duration, stats = pm.stats or {} }
+                            end
+                        end
+                    end
+                end
+            end
+
             -- Backdrop: a solid black fill with the dungeon's own art laid over it at 25% opacity,
             -- covering the WHOLE modal (header + body + footer), not just the body. Drawn on the modal
             -- frame at BACKGROUND sublevels 2/3 - above the panel fill (sublevel 1) but below the header
@@ -3338,6 +3414,28 @@ function UI.ShowScoreboard(run, opts)
             end
             b:Label(Util.dateTime(run.completedAt), x + 72, y - 66, C.subtext, 11)
             if newBest then b:Label("New personal best!", x + 72, y - 84, theme:Color("20C997"), 12) end
+
+            -- Delta vs YOUR best for this exact key (same dungeon + character + spec + key level).
+            do
+                local best = bestRun and bestRun.duration
+                local timed = run.status == STATUS.TIMED and type(run.duration) == "number"
+                local txt, hex
+                if not best then
+                    if timed then txt, hex = "First timed clear of this key on this character + spec.", "20C997" end
+                else
+                    local delta = (run.duration or 0) - best
+                    if timed and delta < -0.5 then
+                        txt = string.format("New best for this key!  %s faster than your previous best (%s).",
+                            Util.duration(-delta), Util.duration(best)); hex = "20C997"
+                    elseif math.abs(delta) <= 0.5 then
+                        txt = string.format("Matched your best for this key (%s).", Util.duration(best))
+                    else
+                        txt = string.format("%s off your best for this key (%s).", Util.duration(delta), Util.duration(best))
+                        hex = "e0a030"
+                    end
+                end
+                if txt then b:Label(txt, x + 72, y - 102, hex and theme:Color(hex) or C.subtext, 12) end
+            end
 
             -- MVP (top-right free space): the highest-graded player, as a hero-style card - big icon
             -- on the right + a border, matching the hero cards.
@@ -3392,6 +3490,20 @@ function UI.ShowScoreboard(run, opts)
             if #party == 0 then
                 b:Label("No party stats were captured for this run.", x + 4, y - 2, C.subtext, 11)
             end
+
+            -- Small per-stat delta drawn UNDER a member's value: this run vs the SAME player's stats in
+            -- your previous best run of this key (only for members who were in both). Green = improved in
+            -- that stat's good direction (damage-taken / deaths / avoidable are lower-is-better).
+            local function intFmt(v) return string.format("%d", v) end
+            local function statDelta(colX, ry, cur, prev, lowerBetter, fmt, minShow)
+                if type(cur) ~= "number" or type(prev) ~= "number" then return end
+                local d = cur - prev
+                if math.abs(d) < (minShow or 1) then return end
+                local improved = (lowerBetter and d < 0) or ((not lowerBetter) and d > 0)
+                b:Label((d > 0 and "+" or "-") .. fmt(math.abs(d)), x + colX, ry - 34,
+                    theme:Color(improved and "20C997" or "e0655a"), 12)
+            end
+
             for i, m in ipairs(party) do
                 local s = m.stats or {}
                 local sc = memberScore(scores, m)
@@ -3452,6 +3564,21 @@ function UI.ShowScoreboard(run, opts)
                 b:Label(Util.numOr(s.interrupts, "%d"), x + COL.int, y - 16, C.text, 12)
                 b:Label(Util.numOr(s.dispels, "%d"), x + COL.dsp, y - 16, C.text, 12)
                 b:Label(Util.shortNum(s.avoidableDamageTaken), x + COL.avoid, y - 16, C.subtext, 12)
+                -- Deltas vs THIS member's own best run of this key (their guid + spec), if you've logged
+                -- one with them. So you, and any teammate you've run this key with before, each compare
+                -- to their own personal best.
+                local mspec = m.specId or m.specID
+                local mb = (m.guid and mspec) and memberBest[m.guid .. "|" .. mspec]
+                local pb = mb and mb.stats
+                if pb then
+                    statDelta(COL.dps,    y, s.dps,                  pb.dps,                  false, Util.shortNum, 1000)
+                    statDelta(COL.hps,    y, s.hps,                  pb.hps,                  false, Util.shortNum, 1000)
+                    statDelta(COL.dtk,    y, s.damageTaken,          pb.damageTaken,          true,  Util.shortNum, 100000)
+                    statDelta(COL.deaths, y, s.deaths,               pb.deaths,               true,  intFmt,        1)
+                    statDelta(COL.int,    y, s.interrupts,           pb.interrupts,           false, intFmt,        1)
+                    statDelta(COL.dsp,    y, s.dispels,              pb.dispels,              false, intFmt,        1)
+                    statDelta(COL.avoid,  y, s.avoidableDamageTaken, pb.avoidableDamageTaken, true,  Util.shortNum, 10000)
+                end
                 y = y - rowH
             end
 
@@ -3532,6 +3659,26 @@ function UI.ShowScoreboard(run, opts)
         local when = st.scoreboardSoundWhen or "END"
         if when == "ALWAYS" or opts.postRun then
             if theme.PlaySound then theme:PlaySound(st.scoreboardSoundKey or "VictoryFanfare", st.scoreboardSoundChannel or "Master") end
+        end
+    end
+
+    -- "Change your keystone" reminder (set via /tap changekey): once THIS post-run scoreboard is up,
+    -- pop a small alert OVER it, then clear the flag (one-shot). Only for the end-of-run popup, not when
+    -- re-viewing an old run's scoreboard.
+    if opts.postRun and st.pendingChangeKey then
+        st.pendingChangeKey = nil
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.8, function()
+                if theme.Alert then
+                    theme:Alert({
+                        title = "Change your keystone!",
+                        variant = "warning",
+                        icon = theme.GetIcon and theme:GetIcon("key") or nil,
+                        message = "Don't forget to slot your next Mythic+ keystone before you head off again.",
+                        okLabel = "Got it",
+                    })
+                end
+            end)
         end
     end
 end
