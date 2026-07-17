@@ -19,10 +19,10 @@ local Suite = _G.TAP
 local ICON_DIR = "Interface\\AddOns\\TAP\\assets\\icons\\"
 
 -- Default suite look, out of the box (overridden by any saved appearance). The look is split
--- into two independent axes: SHAPE (square vs rounded) and a COLOUR scheme (palette + accent).
+-- into two independent axes: SHAPE (square vs rounded) and a COLOR scheme (palette + accent).
 local DEFAULT_SKIN         = "dragonflight"   -- seeds NewTheme's palette/accent at creation
 local DEFAULT_SHAPE        = "rounded"        -- soft corners out of the box
-local DEFAULT_PALETTE_NAME = "dragonflight"   -- dragon-fire colours out of the box
+local DEFAULT_PALETTE_NAME = "dragonflight"   -- dragon-fire colors out of the box
 
 local theme = UIF:NewTheme({
     name    = "TAPManager",
@@ -84,7 +84,7 @@ local function applyFont()
     else theme:ApplyFont(a.font or "UBUNTU") end
 end
 
--- Apply the saved appearance: the COLOUR scheme first (a custom palette, or a named scheme +
+-- Apply the saved appearance: the COLOR scheme first (a custom palette, or a named scheme +
 -- its accent override), then the SHAPE tokens, then the font LAST so nothing overrides the
 -- user's chosen font.
 local function applySavedAppearance()
@@ -343,7 +343,7 @@ local function pageModule(b, win, mod)
 end
 
 ----------------------------------------------------------------------
--- Page: Settings (suite appearance - shape, colours, accent, font)
+-- Page: Settings (suite appearance - shape, colors, accent, font)
 ----------------------------------------------------------------------
 
 -- Friendly labels for each editable palette variable (Custom mode).
@@ -369,10 +369,10 @@ local function applyMenuScaleWhenReleased(w)
 end
 
 -- Ensure a.custom holds an {r,g,b} for every palette variable, seeded from what's on screen
--- now (so entering Custom starts from the current colours). Idempotent - keeps existing edits.
--- IMPORTANT: reuse the existing per-key table instead of replacing it. The colour picker holds
+-- now (so entering Custom starts from the current colors). Idempotent - keeps existing edits.
+-- IMPORTANT: reuse the existing per-key table instead of replacing it. The color picker holds
 -- a reference to the table it edits and fires live during a drag (which triggers win:Refresh ->
--- this reseed); replacing the table here would orphan the picker's edits so the colour never
+-- this reseed); replacing the table here would orphan the picker's edits so the color never
 -- sticks. Mutating in place keeps the picker and the saved value pointing at the same table.
 local function seedCustomPalette(a)
     a.custom = a.custom or {}
@@ -393,8 +393,8 @@ local function pageSettings(b, win)
 
     b:Heading("Appearance", x, y, "h1"); y = y - 34
     local _, hh = b:Wrap("Customize the look of the Platform Manager. Pick a shape for the buttons "
-        .. "and borders, choose a colour scheme, and set the font. Choose |cffffffffCustom|r to set "
-        .. "every colour yourself. Saved across sessions.", x, y, w - 44, C.subtext, 11)
+        .. "and borders, choose a color scheme, and set the font. Choose |cffffffffCustom|r to set "
+        .. "every color yourself. Saved across sessions.", x, y, w - 44, C.subtext, 11)
     y = y - (hh + 16)
 
     -- SHAPE - buttons: square/sharp vs rounded corners & borders.
@@ -411,8 +411,8 @@ local function pageSettings(b, win)
     end
     y = y - 42
 
-    -- COLOURS - a scheme dropdown (all palettes), plus a Custom entry.
-    y = b:Section("COLOURS", x, y); y = y - 30
+    -- COLORS - a scheme dropdown (all palettes), plus a Custom entry.
+    y = b:Section("COLORS", x, y); y = y - 30
     b:Label("Scheme", x, y - 2, C.subtext)
     -- Grouped menu: Neutral / Light / Styled / Expansion sections, plus a Custom entry at the end.
     local function schemeItems()
@@ -427,7 +427,7 @@ local function pageSettings(b, win)
     b:Dropdown(x + 76, y):SetMenu(230, schemeItems, function() return a.palette or DEFAULT_PALETTE_NAME end,
         function(v)
             if v == "custom" then
-                seedCustomPalette(a)               -- start from the currently-shown colours
+                seedCustomPalette(a)               -- start from the currently-shown colors
                 a.palette = "custom"
                 theme:ApplyCustomPalette(a.custom)
             else
@@ -441,9 +441,9 @@ local function pageSettings(b, win)
     y = y - 40
 
     if a.palette == "custom" then
-        -- Full palette editor: a swatch + hex for every colour variable, in two columns.
+        -- Full palette editor: a swatch + hex for every color variable, in two columns.
         local cust = seedCustomPalette(a)
-        b:Wrap("Click a swatch to set each colour. These define the whole palette.",
+        b:Wrap("Click a swatch to set each color. These define the whole palette.",
             x, y, w - 44, C.subtext, 10)
         y = y - 20
         local colW, rowTop = (w - 52) / 2, y
@@ -455,7 +455,7 @@ local function pageSettings(b, win)
             b:Swatch(cx, ry - 2, cust[k], function()
                 theme:ApplyCustomPalette(cust)   -- cust[k] was mutated in place by the swatch
                 win:Refresh()
-            end, label, "Set the " .. label:lower() .. " colour.")
+            end, label, "Set the " .. label:lower() .. " color.")
             b:Label(label .. "  ·  #" .. UIF.hexOf(cust[k][1], cust[k][2], cust[k][3]), cx + 28, ry - 4, C.text, 11)
         end
         y = rowTop - math.ceil(#UIF.PALETTE_KEYS / 2) * 30 - 10
@@ -465,7 +465,7 @@ local function pageSettings(b, win)
         b:Swatch(x, y - 2, a.accent, function(r, g, b2)
             theme:ApplyAccent({ r, g, b2 })
             win:Refresh()
-        end, "Accent color", "The platform's highlight color, on top of the colour scheme.")
+        end, "Accent color", "The platform's highlight color, on top of the color scheme.")
         b:Label("Accent color  ·  #" .. UIF.hexOf(a.accent[1], a.accent[2], a.accent[3]), x + 30, y - 4, C.text)
         y = y - 34
     end
@@ -627,7 +627,7 @@ local function pageAbout(b, win)
     y = b:Section("GETTING AROUND", x, y); y = y - 30
     for _, line in ipairs({
         { "Overview",    "See all your modules at a glance and jump to any one." },
-        { "Settings",    "Change the platform's look - theme, accent colour and font." },
+        { "Settings",    "Change the platform's look - theme, accent color and font." },
         { "Installed",   "Fully load or unload the add-ons that plug in here." },
         { "The sidebar", "Every module has its own page - click it to configure it." },
     }) do

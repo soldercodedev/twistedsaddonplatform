@@ -20,7 +20,7 @@ custom. Includes a **spell/item search** so you can point an alert at any abilit
 
 ### 🎯 Focus Target Interrupt
 Interrupt like a pro. A **one-key Focus + Mark** macro (combat-safe), an **on-screen raid-marker
-bar** you can click to focus + mark live (movable, resizable, row or column, your colours), and
+bar** you can click to focus + mark live (movable, resizable, row or column, your colors), and
 **auto-detected Interrupt & Stun macros** built for your exact spec and talents — just click and
 drag to a bar.
 
@@ -34,7 +34,7 @@ tint, and an **out-of-resource** tint, all shaped to your icon.
 
 ## Why a platform?
 
-- **One look, one window.** A shared, self-skinned theme — set the accent colour, skin, and font
+- **One look, one window.** A shared, self-skinned theme — set the accent color, skin, and font
   once and everything matches.
 - **Only what you want.** Toggle any module on or off, live. Off means unloaded and out of the way.
 - **"What's New" built in.** Every module explains its updates in plain language, right in the

@@ -14,7 +14,7 @@ automation and nothing protected.
   where the keybind text sits — with a **live preview** and a **Set Placement** button to drag it
   into position.
 - **Optional indicators:**
-  - **Cast vs instant** — a coloured corner dot (or border tint) for hard casts vs instants.
+  - **Cast vs instant** — a colored corner dot (or border tint) for hard casts vs instants.
   - **GCD sweep** — a radial "wipe" on the icon that empties with your global cooldown, shaped to
     your icon.
   - **Out of range** — grey out or red-tint the icon when the suggestion can't reach your target.

@@ -15,16 +15,16 @@ local CHANGELOG = [==[
 - **[CHANGE]** **Tabbed layout.** The page is now split into tabs - **Macros**, **Marker Palette**,
   **Announce**, and **Settings** - docked under the title bar, instead of one long scrolling page.
   Everything's in the same place, just quicker to get to.
-- **[BUG FIX]** Picks up the latest shared appearance fixes - custom theme colours now save correctly
-  from the colour picker, and the **Menu scale** slider is smoother to drag.
+- **[BUG FIX]** Picks up the latest shared appearance fixes - custom theme colors now save correctly
+  from the color picker, and the **Menu scale** slider is smoother to drag.
 
 ## 1.0.0-beta.2
 
 - **[NEW]** The marker bar now **remembers your focus marker**. Click a marker on the bar out of
   combat and it becomes your **saved** Focus macro marker (the "TAP Focus" macro updates and you get
   a chat confirmation). In combat it still just marks your current target, with no change or spam.
-- **[NEW]** Fresh platform look in Settings: pick a **shape** and a **colour scheme** (neutrals,
-  light themes, or a WoW-expansion palette) or full custom colours, and scale the menu with
+- **[NEW]** Fresh platform look in Settings: pick a **shape** and a **color scheme** (neutrals,
+  light themes, or a WoW-expansion palette) or full custom colors, and scale the menu with
   **Menu scale**.
 
 ## 1.0.0
@@ -35,7 +35,7 @@ local CHANGELOG = [==[
   target) and slap your chosen raid marker on it. Both are combat-safe, so it works mid-fight.
 - **[NEW]** An on-screen marker bar: click any of the 8 raid markers to focus + mark whoever
   you're looking at, live. Move it, resize it, lay it out as a row or a column, and pick its
-  background/border colours and opacity.
+  background/border colors and opacity.
 - **[NEW]** Auto-detected Interrupt and Stun macros for your exact spec and talents - it finds the
   ability you actually have, so you just hit Create Macro and drag it to a bar.
 - **[NEW]** Optional call-outs: announce your focus (or a ready check) to say / party / raid, and
@@ -99,7 +99,7 @@ local function Settings(mod, b, x, y, w, win)
     mac.paletteBorderColor = mac.paletteBorderColor or { 0.25, 0.25, 0.30 }
     if mac.paletteOpacity == nil then mac.paletteOpacity = 0.9 end
 
-    -- Re-apply the bar's look (rotation / size / colours / opacity) live from a control.
+    -- Re-apply the bar's look (rotation / size / colors / opacity) live from a control.
     local function refreshPalette() if FTI.ApplyPalettePresentation then FTI.ApplyPalettePresentation() end end
 
     local function tip(widget, title, body) if widget then b.theme:SetTip(widget, title, body) end return widget end
@@ -229,13 +229,13 @@ local function Settings(mod, b, x, y, w, win)
                 function() return tonumber(mac.paletteOpacity) or 0.9 end,
                 function(v) mac.paletteOpacity = v; refreshPalette() end, "%.2f")
             y = y - 40
-            -- Colours row.
+            -- Colors row.
             b:Label("Background", x + 46, y - 2, C.subtext)
-            tip(b:Swatch(x + 150, y - 2, mac.paletteBgColor, function() refreshPalette() end, "Background colour"),
-                "Background colour", "The bar's fill colour (pair with Opacity 0 for outline-only).")
+            tip(b:Swatch(x + 150, y - 2, mac.paletteBgColor, function() refreshPalette() end, "Background color"),
+                "Background color", "The bar's fill color (pair with Opacity 0 for outline-only).")
             b:Label("Border", x + 240, y - 2, C.subtext)
-            tip(b:Swatch(x + 300, y - 2, mac.paletteBorderColor, function() refreshPalette() end, "Border colour"),
-                "Border colour", "The bar's outline colour.")
+            tip(b:Swatch(x + 300, y - 2, mac.paletteBorderColor, function() refreshPalette() end, "Border color"),
+                "Border color", "The bar's outline color.")
         end
         y = y - 44
         return y

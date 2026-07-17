@@ -142,7 +142,7 @@ function Mixin:ShapeLabel(name) return UIF.SHAPE_LABELS[name] or name end
 function Mixin:ShapeList() return UIF.SHAPE_ORDER end
 
 -- Extra full palettes beyond the WoW-expansion set: a neutral greyscale ramp (blacks -> greys) and a
--- couple of LIGHT templates (light background, dark text). Each sets every colour key, so switching is
+-- couple of LIGHT templates (light background, dark text). Each sets every color key, so switching is
 -- a clean swap; the accent stays tasteful but you can override it or go Custom. radius/borderSize only
 -- matter if applied as a full skin - the appearance page drives shape on its own axis.
 UIF.SKINS.obsidian = {   -- near-black, cool neutral
@@ -211,10 +211,10 @@ function Mixin:PaletteLabel(name) return UIF.PALETTE_LABELS[name] or UIF.SKIN_LA
 function Mixin:PaletteList() return UIF.PALETTE_ORDER end
 function Mixin:PaletteGroups() return UIF.PALETTE_GROUPS end
 
--- The palette colour variables, in editor display order (the Custom editor edits each of these).
+-- The palette color variables, in editor display order (the Custom editor edits each of these).
 UIF.PALETTE_KEYS = { "bg", "sidebar", "panel", "card", "hover", "border", "accent", "text", "subtext" }
 
--- Apply ONLY the shape tokens (corner radius + border weight); colour + font are untouched.
+-- Apply ONLY the shape tokens (corner radius + border weight); color + font are untouched.
 function Mixin:ApplyShape(name)
     local s = UIF.SHAPES[name]; if not s then return self end
     self.shape      = name
@@ -224,7 +224,7 @@ function Mixin:ApplyShape(name)
     return self
 end
 
--- Apply ONLY the colour (palette + accent) of a named scheme; shape + font are untouched.
+-- Apply ONLY the color (palette + accent) of a named scheme; shape + font are untouched.
 -- Resets to the base palette first so switching schemes never leaves stale entries behind.
 function Mixin:ApplyPalette(name)
     local skin = UIF.SKINS[name]; if not skin then return self end

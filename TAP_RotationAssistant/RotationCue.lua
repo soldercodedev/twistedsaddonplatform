@@ -158,7 +158,7 @@ local function seedDefaults()
     if s.rangeColor   == nil then s.rangeColor   = { 1, 0.25, 0.25 } end    -- out of range = red
     if s.resourceColor == nil then s.resourceColor = { 0.40, 0.50, 1 } end  -- no resource = blue
     -- One-time move to the clearer corner-dot style (the old border-tint default was easy to miss on
-    -- a warm-coloured border). Runs once; a later manual choice of "border" is respected.
+    -- a warm-colored border). Runs once; a later manual choice of "border" is respected.
     if not s._castStyleV2 then s.castStyle = "dot"; s._castStyleV2 = true end
     if s.keyColor    == nil then s.keyColor = { 1, 1, 1 } end
     if s.specs       == nil then s.specs = {} end   -- class/spec visibility filter (empty = all)
@@ -318,7 +318,7 @@ end
 --   icon : the spell art, clipped to the shape via a mask. NO fill sits behind it, so fading
 --          the icon reveals the world - not a dark plate.
 --   ring : a real hollow border ring (its centre is transparent), drawn over the icon's edge;
---          thickness comes from pre-baked ring textures, colour + opacity are tint + alpha.
+--          thickness comes from pre-baked ring textures, color + opacity are tint + alpha.
 ----------------------------------------------------------------------
 -- Pre-baked ring thickness levels available on disk (ring-<shape>-1 .. -10).
 local RING_MIN, RING_MAX = 1, 10
@@ -354,7 +354,7 @@ local function buildCueFrame(parent, name)
     local chrome = CreateFrame("Frame", nil, f); chrome:SetAllPoints(f)
     chrome:SetFrameLevel(f:GetFrameLevel() + 5); f.chrome = chrome
     local ring = chrome:CreateTexture(nil, "ARTWORK", nil, 2); ring:SetAllPoints(f); f.ring = ring
-    -- Cast/instant indicator dot (corner-dot style); recoloured + shown on demand. A dark backing
+    -- Cast/instant indicator dot (corner-dot style); recolored + shown on demand. A dark backing
     -- gives it an outline so it reads on bright icons.
     local pipBg = chrome:CreateTexture(nil, "OVERLAY", nil, 5); pipBg:Hide(); f.pipBg = pipBg
     local pip   = chrome:CreateTexture(nil, "OVERLAY", nil, 6); pip:Hide();   f.pip   = pip
@@ -398,7 +398,7 @@ local function applyAppearance(f, s, size)
         local A = TEXT_ANCHORS[s.textAnchor] or TEXT_ANCHORS.BOTTOM
         f.key:SetPoint(A[1], f, A[2], A[3], A[4])
     end
-    -- Corner-dot indicator geometry (colour/visibility handled dynamically per spell).
+    -- Corner-dot indicator geometry (color/visibility handled dynamically per spell).
     local pipSz = math.max(8, size * 0.30)
     f.pip:SetSize(pipSz, pipSz)
     f.pip:ClearAllPoints(); f.pip:SetPoint("TOPRIGHT", f, "TOPRIGHT", 2, 2)
@@ -415,7 +415,7 @@ local function applyAppearance(f, s, size)
     end
 end
 
--- Colour the cue by whether the next ability is a hard cast or instant. Two styles: tint the
+-- Color the cue by whether the next ability is a hard cast or instant. Two styles: tint the
 -- border ring, or a corner dot. Called live (per spell) and for the preview.
 local function applyCastIndicator(f, s, spellID)
     if not f then return end
@@ -459,7 +459,7 @@ local function applyGCD(f, s)
 end
 
 -- Icon feedback for "can't use this right now": out of range, or can't afford (resource). Both
--- recolour/desaturate the icon; out-of-range wins when both apply (you can't even reach). Called
+-- recolor/desaturate the icon; out-of-range wins when both apply (you can't even reach). Called
 -- every tick since range/resource change independently of which spell is suggested.
 local function tintIcon(f, style, color)
     if style == "grey" then
@@ -564,7 +564,7 @@ end
 
 -- The four indicator previews on the Indicators page (GCD / Range / Resource / Cast). Each is a demo
 -- cue styled from the live APPEARANCE settings, then forced to SHOW one indicator's effect using that
--- indicator's own colours + style - so you see what each looks like without having to trigger it live.
+-- indicator's own colors + style - so you see what each looks like without having to trigger it live.
 local IND_PREVIEWS = {
     { key = "gcd",      label = "GCD",      enabledKey = "showGCD" },
     { key = "range",    label = "Range",    enabledKey = "rangeCheck" },
@@ -935,20 +935,20 @@ local function Settings(m, b, x, y, w, win)
         P:note("None checked = every class / spec.")
         return P.y
     end
-    -- Cast/instant indicator: colour the cue by whether the next ability is a hard cast or instant.
+    -- Cast/instant indicator: color the cue by whether the next ability is a hard cast or instant.
     local function castCell(cx, cw, cy)
         local P = pen(cx, cw, cy)
         P:sub("CAST INDICATOR")
         local tg = b:Toggle(P.x, P.y, s.castIndicator and true or false,
             function(v) s.castIndicator = v; applyLayout(); repage() end)
-        b.theme:SetTip(tg, "Cast / instant indicator", "Colour the cue by whether Blizzard's next suggested ability is a hard cast or instant.")
+        b.theme:SetTip(tg, "Cast / instant indicator", "Color the cue by whether Blizzard's next suggested ability is a hard cast or instant.")
         b:Label("Show cast vs instant", P.x + 46, P.y - 2, C.text); P.y = P.y - 30
         if s.castIndicator then
             P:dropdown("Style", { { "border", "Tint the border" }, { "dot", "Corner dot" } },
                 function() return s.castStyle or "border" end, function(v) s.castStyle = v; applyLayout() end,
-                "Show it by recolouring the border ring, or with a dot in the corner.")
-            P:swatch("Cast", s.castColor, "Colour used when the next ability has a cast time.")
-            P:swatch("Instant", s.instantColor, "Colour used when the next ability is instant.")
+                "Show it by recoloring the border ring, or with a dot in the corner.")
+            P:swatch("Cast", s.castColor, "Color used when the next ability has a cast time.")
+            P:swatch("Instant", s.instantColor, "Color used when the next ability is instant.")
         end
         return P.y
     end
@@ -978,7 +978,7 @@ local function Settings(m, b, x, y, w, win)
                 function() return s.rangeStyle or "red" end, function(v) s.rangeStyle = v; applyLayout() end,
                 "How to show out-of-range: tint the icon red, or grey it out.")
             if (s.rangeStyle or "red") == "red" then
-                P:swatch("Tint", s.rangeColor, "Colour applied to the icon when out of range.")
+                P:swatch("Tint", s.rangeColor, "Color applied to the icon when out of range.")
             end
         end
         return P.y
@@ -992,11 +992,11 @@ local function Settings(m, b, x, y, w, win)
         b.theme:SetTip(tg, "Out-of-resource feedback", "Tint or grey the icon when you can't afford the suggested ability (not enough mana / energy / rage / combo points / ...).")
         b:Label("Show can't afford", P.x + 46, P.y - 2, C.text); P.y = P.y - 30
         if s.resourceCheck then
-            P:dropdown("Style", { { "tint", "Colour tint" }, { "grey", "Desaturate (grey)" } },
+            P:dropdown("Style", { { "tint", "Color tint" }, { "grey", "Desaturate (grey)" } },
                 function() return s.resourceStyle or "tint" end, function(v) s.resourceStyle = v; applyLayout() end,
-                "How to show it: tint the icon a colour, or grey it out.")
+                "How to show it: tint the icon a color, or grey it out.")
             if (s.resourceStyle or "tint") == "tint" then
-                P:swatch("Tint", s.resourceColor, "Colour applied to the icon when you can't afford it.")
+                P:swatch("Tint", s.resourceColor, "Color applied to the icon when you can't afford it.")
             end
         end
         return P.y
@@ -1018,7 +1018,7 @@ local function Settings(m, b, x, y, w, win)
         local P = pen(cx, cw, cy)
         P:sub("BORDER")
         P:slider("Thickness", "borderSize", 0, 10, 1, "%d", "Border ring thickness. 0 = no border.")
-        P:swatch("Color", s.borderColor, "Border ring colour.")
+        P:swatch("Color", s.borderColor, "Border ring color.")
         P:slider("Opacity", "borderOpacity", 0, 1, 0.05, "%.2f", "Transparency of the border ring.")
         return P.y
     end
@@ -1034,7 +1034,7 @@ local function Settings(m, b, x, y, w, win)
         end
         P:fontsel("Font", "keyFont")
         P:slider("Size", "keySize", 8, 48, 1, "%d", "Keybind text size.")
-        P:swatch("Color", s.keyColor, "Keybind text colour.")
+        P:swatch("Color", s.keyColor, "Keybind text color.")
         P:slider("Opacity", "textOpacity", 0, 1, 0.05, "%.2f", "Transparency of the keybind text.")
         return P.y
     end
@@ -1186,21 +1186,21 @@ local CHANGELOG = [==[
 - **[CHANGE]** **Tabbed layout.** The page is now split into tabs - **Behaviour**, **Indicators**,
   **Appearance**, and **Settings** - docked under the title bar, instead of one long scrolling page.
   Everything's in the same place, just quicker to get to.
-- **[BUG FIX]** Picks up the latest shared appearance fixes - custom theme colours now save correctly
-  from the colour picker, and the **Menu scale** slider is smoother to drag.
+- **[BUG FIX]** Picks up the latest shared appearance fixes - custom theme colors now save correctly
+  from the color picker, and the **Menu scale** slider is smoother to drag.
 
 ## 1.0.0-beta.2
 
 - **[NEW]** Slash commands: **/tap rotation** jumps straight to this page, and **/rcue** runs the
   diagnostics (run it twice, ~10s apart, to check the cue is reading Blizzard's suggestions).
 - **[CHANGE]** The on-screen cue now follows your chosen **Platform font** automatically.
-- **[NEW]** Fresh platform look in Settings: pick a **shape** and a **colour scheme** (neutrals,
-  light themes, or a WoW-expansion palette) or full custom colours, and scale the menu with
+- **[NEW]** Fresh platform look in Settings: pick a **shape** and a **color scheme** (neutrals,
+  light themes, or a WoW-expansion palette) or full custom colors, and scale the menu with
   **Menu scale**.
 
 ## 1.1.0
 
-- **[NEW]** Cast vs instant indicator - a coloured corner dot (or border tint) tells you whether
+- **[NEW]** Cast vs instant indicator - a colored corner dot (or border tint) tells you whether
   your next suggested ability is a hard cast or an instant.
 - **[NEW]** Global-cooldown sweep - an optional radial "wipe" on the icon that empties with your
   GCD, shaped to match your icon.

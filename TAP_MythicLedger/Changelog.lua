@@ -8,7 +8,7 @@ ML.CHANGELOG = [==[
 ## 1.0.0-beta.2
 
 - **[NEW]** **Hero-card pages.** The character overview's **By Spec** and **By Dungeon** breakdowns
-  are now rich hero cards - class-coloured spec cards with spec icons, and dungeon cards fronted by
+  are now rich hero cards - class-colored spec cards with spec icons, and dungeon cards fronted by
   their own art - and the headline stats are large-icon tiles.
 - **[NEW]** The **Dungeons** tab is a hero-card grid with a **type-to-filter** box (start typing 3+
   letters) next to the season selector.

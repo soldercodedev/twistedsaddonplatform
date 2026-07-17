@@ -34,7 +34,7 @@ function Mixin:Toggle(parent)
     function f:Configure(checked, cb, opts)
         self.checked = checked and true or false; self.cb = cb
         -- Reset style EVERY time (this widget is pooled): otherwise a toggle reused without opts
-        -- keeps a prior caller's on/off colour or size, so toggles render inconsistent colours.
+        -- keeps a prior caller's on/off color or size, so toggles render inconsistent colors.
         self._onColor  = opts and UIF.toColor(opts.color or opts.onColor) or nil
         self._offColor = opts and UIF.toColor(opts.offColor) or nil
         self:SetSize((opts and opts.width) or 38, (opts and opts.height) or 18)
@@ -180,8 +180,8 @@ function Mixin:Dropdown(parent)
     b:SetScript("OnLeave", function(self) theme:FillPaint(self, theme.C.card); GameTooltip_Hide() end)
 
     function b:SetChoices(w, choices, getVal, setVal)
-        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/colour so a live skin swap sticks
-        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text colour too (light themes)
+        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/color so a live skin swap sticks
+        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text color too (light themes)
         self:SetSize(w, 26)
         self.fs:SetFont(theme.FONT, 12)
         self.iconTex:Hide(); self.fs:SetPoint("LEFT", 8, 0)   -- clear any leftover icon from pooled reuse
@@ -198,8 +198,8 @@ function Mixin:Dropdown(parent)
 
     -- Dropdown where each item carries an icon; the button shows the selected item's icon.
     function b:SetIconChoices(w, items, getVal, setVal)
-        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/colour so a live skin swap sticks
-        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text colour too (light themes)
+        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/color so a live skin swap sticks
+        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text color too (light themes)
         self:SetSize(w, 26)
         self.caret:SetTextColor(theme.C.accent[1], theme.C.accent[2], theme.C.accent[3])
         local function cur() for _, it in ipairs(items) do if it.value == getVal() then return it end end end
@@ -225,8 +225,8 @@ function Mixin:Dropdown(parent)
     -- Fully custom: buildItems() returns a fresh item array each open (for headers /
     -- dynamic lists), labelFor(value) renders the closed-state label.
     function b:SetMenu(w, buildItems, getVal, onPick, labelFor)
-        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/colour so a live skin swap sticks
-        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text colour too (light themes)
+        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/color so a live skin swap sticks
+        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text color too (light themes)
         self:SetSize(w, 26)
         self.iconTex:Hide(); self.fs:SetPoint("LEFT", 8, 0)
         self.caret:SetTextColor(theme.C.accent[1], theme.C.accent[2], theme.C.accent[3])
@@ -252,8 +252,8 @@ function Mixin:EditBox(parent)
     e:SetScript("OnEnter", theme.showTip)
     e:SetScript("OnLeave", GameTooltip_Hide)
     function e:Configure(w, h, value, onCommit)
-        theme:StylePanel(self, C.bg)           -- pooled: re-apply shape/colour so a live skin swap sticks
-        self:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text colour too (light themes)
+        theme:StylePanel(self, C.bg)           -- pooled: re-apply shape/color so a live skin swap sticks
+        self:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text color too (light themes)
         self:SetSize(w, h or 24)
         self:SetFont(theme.FONT, 12, "")       -- re-apply live theme font (global font swap)
         self:SetScript("OnTextChanged", nil)   -- pooled: avoid a stale handler firing on SetText

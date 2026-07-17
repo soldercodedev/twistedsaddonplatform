@@ -1,21 +1,21 @@
 -- TAP: Mythic Ledger - HeroStats.lua
 -- The single source of truth for the Overview "hero" summary tiles: which icon each metric
--- uses, and the WoW-quality colour scale that maps a value to a colour + a plain-language
+-- uses, and the WoW-quality color scale that maps a value to a color + a plain-language
 -- rating. UI.lua reads ML.HERO_STATS / ML.HeroStatStyle only - no thresholds live in the UI.
 --
--- Colours are WoW item-quality inspired so the scale reads intuitively to players (green good,
+-- Colors are WoW item-quality inspired so the scale reads intuitively to players (green good,
 -- blue better, purple great, orange exceptional, gold elite, red concerning). Every value maps
--- to a rating word too, so the cards never rely on colour alone (accessibility).
+-- to a rating word too, so the cards never rely on color alone (accessibility).
 
 local ADDON, ML = ...
 local Util = ML.Util
 
 ----------------------------------------------------------------------
--- Palette (WoW item-quality inspired). Hex strings; the UI kit's colour
--- helpers accept "RRGGBB" anywhere a colour is expected.
+-- Palette (WoW item-quality inspired). Hex strings; the UI kit's color
+-- helpers accept "RRGGBB" anywhere a color is expected.
 ----------------------------------------------------------------------
--- Canonical metric colour scale: F (worst) -> D -> C -> B -> A -> S (best), plus N (neutral/unrated).
--- ASIDE FROM M+ SCORE (which keeps Blizzard's own rarity colour), EVERY metric/grade colour in the
+-- Canonical metric color scale: F (worst) -> D -> C -> B -> A -> S (best), plus N (neutral/unrated).
+-- ASIDE FROM M+ SCORE (which keeps Blizzard's own rarity color), EVERY metric/grade color in the
 -- module resolves through here. Two variants keep both themes legible - bright green/orange and mid-grey
 -- wash out on the wrong background - picked per render by TierColor() from the live theme's bg luminance.
 local TIER_DARK = {   -- the requested scale, as-is (designed for a dark bg)
@@ -61,7 +61,7 @@ local Q = {
 }
 ML.QUALITY_COLORS = Q
 
--- Rating words (do not rely on colour alone - shown in the tooltip / accessible label).
+-- Rating words (do not rely on color alone - shown in the tooltip / accessible label).
 local R = {
     poor        = "Poor",
     neutral     = "Neutral",
@@ -76,7 +76,7 @@ local R = {
 
 ----------------------------------------------------------------------
 -- Tier evaluators. Each stat's scale is ONE ordered list of tiers; the
--- colour, the rating, and the tooltip scale text all derive from it, so a
+-- color, the rating, and the tooltip scale text all derive from it, so a
 -- threshold is written exactly once.
 --   desc: first tier where value >= tier.min   (higher is better)
 --   asc:  first tier where value <  tier.max    (lower is better)
@@ -104,7 +104,7 @@ end
 
 ----------------------------------------------------------------------
 -- Hero-stat configuration. `icon` is a bundled Tabler icon name (white TGA,
--- tintable). `eval(value)` returns colour(hex), rating, and its matched tier.
+-- tintable). `eval(value)` returns color(hex), rating, and its matched tier.
 -- `scale` is the ordered tier list used for the tooltip. `note` is extra
 -- guidance (e.g. "lower is better"). `neutralValue` (avg time) is unrated.
 ----------------------------------------------------------------------
@@ -308,7 +308,7 @@ function ML.HeroStatSubtext(key, o, scopeLabel)
 end
 
 ----------------------------------------------------------------------
--- Future work: normalised time colour. Only usable once per-run dungeon
+-- Future work: normalised time color. Only usable once per-run dungeon
 -- timers are recorded and we can compute (elapsed / dungeon timer). Kept
 -- here so the threshold policy lives with the rest of the scale.
 ----------------------------------------------------------------------
@@ -324,12 +324,12 @@ end
 
 ----------------------------------------------------------------------
 -- Resolve a hero stat + value to everything the UI needs to draw one tile:
---   color (hex) · rating (word) · icon · label · tipData (rich, colour-coded)
+--   color (hex) · rating (word) · icon · label · tipData (rich, color-coded)
 -- `formatted` is the already-formatted display string (kept in the UI so the
 -- existing data source / formatting is untouched).
 ----------------------------------------------------------------------
 -- Dim a "RRGGBB" hex toward the card grey so inactive scale rows recede and the
--- active band pops. t = 0 keeps the colour, 1 = full grey. Returns an { r, g, b } table.
+-- active band pops. t = 0 keeps the color, 1 = full grey. Returns an { r, g, b } table.
 local function dimHex(hex, t)
     local r = tonumber(hex:sub(1, 2), 16)
     local g = tonumber(hex:sub(3, 4), 16)
@@ -349,9 +349,9 @@ function ML.HeroStatStyle(key, value, formatted)
     if cfg.normalize and type(v) == "number" then v = cfg.normalize(v) end
     local color, rating, active = cfg.eval(v)
 
-    -- Rich, colour-coded tooltip: description, this value's rating in its colour, then the
-    -- full scale where every band is drawn in ITS quality colour (active band marked + bright,
-    -- others dimmed). Colour never carries meaning alone - the rating word is always shown.
+    -- Rich, color-coded tooltip: description, this value's rating in its color, then the
+    -- full scale where every band is drawn in ITS quality color (active band marked + bright,
+    -- others dimmed). Color never carries meaning alone - the rating word is always shown.
     local lines = { { text = cfg.desc, color = "subtext" } }
     if formatted ~= nil then
         lines[#lines + 1] = { blank = true }

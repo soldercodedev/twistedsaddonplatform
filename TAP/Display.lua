@@ -130,8 +130,8 @@ end
 --   theme:StatTile(parent, { label="DPS", value="128.4k", delta="+12%", trend="up",
 --       width=150, height=72 })
 --
--- Metric colouring (opt-in): pass `accent` = a colour (hex/{r,g,b}) to draw a subtle 3px
--- left accent bar, tint the 1px border toward it, and (unless overridden) colour the value
+-- Metric coloring (opt-in): pass `accent` = a color (hex/{r,g,b}) to draw a subtle 3px
+-- left accent bar, tint the 1px border toward it, and (unless overridden) color the value
 -- and icon with it - the pattern the Mythic Ledger hero tiles use.
 --   opts: icon (bundled icon name) · iconVariant · iconColor (defaults to accent/value) ·
 --         iconSize · accent · valueColor · valueRole · hero (bold/flashy treatment) ·
@@ -139,7 +139,7 @@ end
 --
 -- `hero = true` (used with `accent`) gives the bold look: the icon sits in a SOLID metric
 -- badge with a knocked-out glyph, the value is large with a soft metric glow, the card carries
--- a faint metric wash + tinted border, and (when `meter` is a 0..1 fraction) a coloured rank
+-- a faint metric wash + tinted border, and (when `meter` is a 0..1 fraction) a colored rank
 -- meter bar runs along the bottom showing where the value sits on its scale.
 ----------------------------------------------------------------------
 -- Three opt-in card styles (opts.style) sharing one formula - label / big value / supporting
@@ -243,14 +243,14 @@ function Mixin:StatTile(parent, opts)
     opts = opts or {}
     if opts.style then return styledStatTile(self, parent, opts) end
     local theme, C = self, self.C
-    -- The accent colour drives the border tint, the badge/meter, and (by default) the value.
+    -- The accent color drives the border tint, the badge/meter, and (by default) the value.
     local accent = opts.accent and UIF.toColor(opts.accent) or nil
     local hero = opts.hero and accent or nil
     local borderCol = opts.borderColor
     if accent and borderCol == nil then borderCol = UIF.mix(C.border, accent, hero and 0.55 or 0.35) end
     local valueCol = opts.valueColor
     if valueCol == nil and accent then valueCol = accent end
-    -- Hero cards get a faint metric wash so they read as "coloured" without a solid fill.
+    -- Hero cards get a faint metric wash so they read as "colored" without a solid fill.
     local bgCol = opts.bg
     if bgCol == nil and hero then bgCol = UIF.mix(C.card, accent, 0.10) end
 
@@ -293,7 +293,7 @@ function Mixin:StatTile(parent, opts)
     local value = theme:Heading(f.body, { text = opts.value or "",
         role = opts.valueRole or (hero and "h1" or "h2"), textColor = valueCol })
     if hero then value:SetPoint("TOPLEFT", labelX, -18) else value:SetPoint("BOTTOMLEFT", 0, 0) end
-    -- Soft metric glow behind the value (a coloured text shadow), only on hero cards.
+    -- Soft metric glow behind the value (a colored text shadow), only on hero cards.
     if hero and value.SetShadowColor then
         value:SetShadowColor(accent[1], accent[2], accent[3], 0.6)
         value:SetShadowOffset(0, 0)

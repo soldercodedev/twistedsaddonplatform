@@ -2,7 +2,7 @@
 
 ## 1.0.0-beta.2
 
-- **[NEW]** Hero-card character overview: **By Spec** (class-coloured spec cards) and **By Dungeon**
+- **[NEW]** Hero-card character overview: **By Spec** (class-colored spec cards) and **By Dungeon**
   (dungeon-art cards) breakdowns, plus large-icon headline stat tiles.
 - **[NEW]** Dungeons tab reworked to a hero-card grid with a live type-to-filter (3+ chars).
 - **[NEW]** Data-retention policy (All seasons / current season / current expansion, optional newest-N

@@ -222,7 +222,7 @@ do
     end
 end
 
--- Blizzard's rarity colour for an overall M+ score ({r,g,b}), or nil.
+-- Blizzard's rarity color for an overall M+ score ({r,g,b}), or nil.
 function API.ScoreColor(score)
     score = ML.ReadNum(score)
     if not (score and C_CM and type(C_CM.GetDungeonScoreRarityColor) == "function") then return nil end

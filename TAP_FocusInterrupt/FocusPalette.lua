@@ -29,7 +29,7 @@ end
 
 local CELL, GAP, EDGE = 28, 3, 6
 
--- Background / border colours + opacity for the bar (configurable in the module settings).
+-- Background / border colors + opacity for the bar (configurable in the module settings).
 local function paletteColors()
     local m = (FTI.db and FTI.db.macro) or {}
     local bg = m.paletteBgColor or { 0.05, 0.05, 0.06 }
@@ -73,7 +73,7 @@ local function colorPalette(p)
     for _, e in ipairs({ p.eTop, p.eBot, p.eLeft, p.eRight }) do e:SetColorTexture(bd[1], bd[2], bd[3], 1) end
 end
 
--- Apply colours (safe any time) + layout (out of combat only, since children are secure). Scale is
+-- Apply colors (safe any time) + layout (out of combat only, since children are secure). Scale is
 -- handled separately by ApplyMarkerPaletteScale so it can pin the focal point.
 local function applyPalettePresentation(p)
     p = p or markerPalette
@@ -82,7 +82,7 @@ local function applyPalettePresentation(p)
     colorPalette(p)
     if not (InCombatLockdown and InCombatLockdown()) then layoutPalette(p) end
 end
--- Public: re-apply presentation (rotation / colours / opacity) from the settings page.
+-- Public: re-apply presentation (rotation / colors / opacity) from the settings page.
 function FTI.ApplyPalettePresentation() applyPalettePresentation(markerPalette) end
 
 local function ensureMarkerPalette()

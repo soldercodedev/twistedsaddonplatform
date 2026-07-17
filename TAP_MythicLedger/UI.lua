@@ -31,7 +31,7 @@ local function coachIcon(theme, parent, i, size)
     return gi
 end
 
--- Text/accent colours for cards with a forced-dark background (the dungeon-art hero cards). The theme's
+-- Text/accent colors for cards with a forced-dark background (the dungeon-art hero cards). The theme's
 -- own text goes DARK on light mode and vanishes over the art, so these stay light on BOTH themes.
 local ON_ART, ON_ART_SUB = { 0.97, 0.98, 1.0 }, { 0.80, 0.84, 0.92 }
 -- A lightened accent (blended halfway to white) that reads over the dark art regardless of theme.
@@ -319,7 +319,7 @@ local function classRGB(classFile)
     return c and { c.r, c.g, c.b } or nil
 end
 
--- Class colour as an "RRGGBB" hex (for tipData lcolor/rcolor), or nil.
+-- Class color as an "RRGGBB" hex (for tipData lcolor/rcolor), or nil.
 local function classHexOf(classFile)
     local c = classRGB(classFile)
     return c and string.format("%02x%02x%02x", c[1] * 255, c[2] * 255, c[3] * 255) or nil
@@ -421,7 +421,7 @@ local function renderSeasonSelector(b, C, x, y, w, win)
 end
 
 -- Character choices for the Overview scope row: "All Characters" plus every tracked toon,
--- class-coloured. Value "all" = no character filter.
+-- class-colored. Value "all" = no character filter.
 local function overviewCharChoices()
     local c = { { "all", "All Characters" } }
     for _, ch in ipairs(History.CharacterList()) do
@@ -473,7 +473,7 @@ local HERO_CARD_BG = { 0.05, 0.055, 0.07 }
 -- Overview and Bests hero cards consistent with the dungeon-hero cards on the Dungeons tab. `accent`
 -- (hex or {r,g,b}) tints the edge, label and (bundled) icon. Provide either `icon` (a bundled icon,
 -- tinted with the accent) or `drawIcon(b, ix, iy, isz)` for a custom glyph (e.g. a class crest). The
--- value keeps its own inline colour if it has one. Optional `onClick` / `tipData` (hover) wire a hit region.
+-- value keeps its own inline color if it has one. Optional `onClick` / `tipData` (hover) wire a hit region.
 local function heroStatCard(b, C, cx, cy, cw, ch, opts)
     local acc = opts.accent or C.accent
     if type(acc) == "string" then acc = b.theme:Color(acc, C.accent) end
@@ -505,7 +505,7 @@ end
 -- base (+ optional background art), 1px border, an accent left edge, a LARGE left icon (a square
 -- portrait/portal, or a 2:1 banner via iconWide), a title with an optional right-aligned accent value,
 -- and up to a few subtext stat lines. This is the ONE hero-card look shared by dungeons, bosses and
--- top runs so every hero across the module reads the same. `iconTint` tints the icon (nil = full colour
+-- top runs so every hero across the module reads the same. `iconTint` tints the icon (nil = full color
 -- portrait/portal); `art` lays dimmed background art; `onClick` / `tipData` wire a hit region.
 local function heroCard(b, C, cx, cy, cw, ch, opts)
     local acc = opts.accent or C.accent
@@ -580,7 +580,7 @@ local function renderOverview(b, C, x, y, w, win)
     end
 
     -- Summary tiles: hero cards in the dungeon-hero visual language (dark base, accent left edge, large
-    -- left icon) with the WoW-quality colour scale (ML.HeroStatStyle) tinting each card + a supporting
+    -- left icon) with the WoW-quality color scale (ML.HeroStatStyle) tinting each card + a supporting
     -- subtext line (ML.HeroStatSubtext). The two highlight cards (most-played character, run outcomes)
     -- ride along in the same responsive grid so everything reads as one block.
     local scopeLabel = scopeSeason() and "This season" or "All seasons"
@@ -634,7 +634,7 @@ local function renderOverview(b, C, x, y, w, win)
         })
     end
 
-    -- Run outcomes: timed / depleted / abandoned, colour-coded inline.
+    -- Run outcomes: timed / depleted / abandoned, color-coded inline.
     do
         idx = idx + 1
         local px, py = cellXY(idx)
@@ -675,7 +675,7 @@ end
 
 local STATUS_HEX = { TIMED = "33dd66", DEPLETED = "e0a030", ABANDONED = "9098a8" }
 
--- Rich tooltip data for a run row: dungeon icon header + colour-coded stat lines + party list.
+-- Rich tooltip data for a run row: dungeon icon header + color-coded stat lines + party list.
 local function runTipData(r)
     local mi = r.mapId and API.GetMapInfo(r.mapId)
     local timeStr = Util.duration(r.duration)
@@ -1419,7 +1419,7 @@ local function renderPlayerDetails(b, C, x, y, w, win)
     T(b, b:Button(x + w - 84, y, 72, "Back", "default", function() view.detailPlayer = nil; win:Refresh() end,
         { icon = "arrow-left", iconSize = 13 }), "Back", "Return to the previous page.")
 
-    -- Header: class crest with a spec badge in the corner + class-coloured name + spec/class/guild line.
+    -- Header: class crest with a spec badge in the corner + class-colored name + spec/class/guild line.
     classGlyph(b, x, y - 6, 64, p.classFile)
     if p.lastKnownSpecId or p.lastKnownSpecIcon then
         specGlyph(b, x + 44, y - 46, 20, p.lastKnownSpecId, p.lastKnownSpecIcon)   -- spec badge over the crest corner
@@ -1438,8 +1438,8 @@ local function renderPlayerDetails(b, C, x, y, w, win)
     local runs = History.FilterRuns({ playerKey = p.identityKey })   -- newest-first
 
     -- Headline stats as responsive hero tiles - the SAME look, sizing and reflow as the character-
-    -- details page (colour-scaled metrics via HeroStatStyle; the run-outcome tallies carry fixed
-    -- status colours + a describing tooltip). Panel style can't host the large icon, so fall back to a
+    -- details page (color-scaled metrics via HeroStatStyle; the run-outcome tallies carry fixed
+    -- status colors + a describing tooltip). Panel style can't host the large icon, so fall back to a
     -- large-icon-capable style there, exactly like the character page.
     local t = p.totals
     local pct = History.timedPct(t)
@@ -1566,7 +1566,7 @@ local function renderPlayerDetails(b, C, x, y, w, win)
     table.sort(specs, function(a, bb) return a.totals.runs > bb.totals.runs end)
     table.sort(dungs, function(a, bb) return a.totals.runs > bb.totals.runs end)
 
-    -- SPECS PLAYED: one class/spec hero card each (class colour + spec icon), like the character page.
+    -- SPECS PLAYED: one class/spec hero card each (class color + spec icon), like the character page.
     y = b:Section("SPECS PLAYED", x, y); y = y - 30
     if #specs == 0 then
         b:Label("No spec data recorded yet.", x + 4, y - 2, C.subtext, 11); y = y - 26
@@ -1691,11 +1691,11 @@ local function topRunCard(b, C, cx, cy, cw, ch, rank, r, win)
     local line = statusText(r.status) .. "    " .. Util.duration(r.duration)
     if type(dps) == "number" then line = line .. "    " .. Util.shortNum(dps) .. " DPS" end
     b:Label(line, tx, cy - 35, ON_ART_SUB, 11)
-    -- Whose run it was (class-coloured) + the date - so a crown here isn't ambiguous across characters.
+    -- Whose run it was (class-colored) + the date - so a crown here isn't ambiguous across characters.
     local who = r.character and classColorText(r.character.classFile, r.character.name or r.character.fullName or "?")
     b:Label((who and (who .. "   ·   ") or "") .. Util.dateShort(r.completedAt), tx, cy - 51, ON_ART_SUB, 10)
     -- Your grade (score-driven) on the right; crown if this is also your best-scoring run of its kind.
-    -- Force the bright (dark-theme) grade colour since the card art is always dark, even on light mode.
+    -- Force the bright (dark-theme) grade color since the card art is always dark, even on light mode.
     local guid = r.character and r.character.guid
     local Store = ML.Scoring and ML.Scoring.Store
     local ps = guid and Store and Store.Summary(r)[guid]
@@ -2405,15 +2405,15 @@ end
 -- Character details (click a character row): the deep-dive for judging one toon - headline
 -- stats, a per-SPEC comparison, a per-DUNGEON breakdown, and the character's runs.
 ----------------------------------------------------------------------
--- A class/spec "hero" card: the spec's icon, its name in CLASS COLOUR, a class-coloured accent edge +
+-- A class/spec "hero" card: the spec's icon, its name in CLASS COLOR, a class-colored accent edge +
 -- subtle wash, the role, and a two-line stat readout (runs / timed% / avg key, then best key · DPS-or-
 -- HPS · avg deaths). Mirrors the dungeon hero card's shape so the two sections read as one set.
 function specHeroCard(b, C, cx, cy, cw, ch, sp, classFile)   -- forward-declared above
     local rgb = classRGB(classFile) or C.accent
     b:Box(cx - 1, cy + 1, cw + 2, ch + 2, 0.9, 0, C.border)              -- 1px border
     b:Box(cx, cy, cw, ch, 1, 1, { 0, 0, 0 })                            -- black base
-    b:Box(cx, cy, cw, ch, 0.12, 1, rgb)                                 -- subtle class-colour wash
-    b:VRule(cx + 1, cy, cy - ch, 2, rgb)                                -- class-colour accent edge
+    b:Box(cx, cy, cw, ch, 0.12, 1, rgb)                                 -- subtle class-color wash
+    b:VRule(cx + 1, cy, cy - ch, 2, rgb)                                -- class-color accent edge
     local icon = specIconID(sp.specId) or sp.specIcon
     if icon then b:Tex(cx + 12, cy - 9, 30, 30, icon) end               -- large spec icon
     local nm = sp.specName or specName(sp.specId) or (sp.role and (ML.ROLE_LABEL[sp.role] or sp.role)) or "Unknown"
@@ -2475,8 +2475,8 @@ local function renderCharacterDetails(b, C, x, y, w, win)
         if cnt > 0 then avgScore = sum / cnt end
     end
 
-    -- Headline stats as responsive hero tiles (the Overview page's look + colour scale). Columns reflow
-    -- to the page width. DPS/HPS are neutral (absolute throughput isn't rated); scores use the grade colour.
+    -- Headline stats as responsive hero tiles (the Overview page's look + color scale). Columns reflow
+    -- to the page width. DPS/HPS are neutral (absolute throughput isn't rated); scores use the grade color.
     -- Panel style can't host the large right-side icon, so fall back to a large-icon-capable style there.
     local setStyle = ({ CLEAN = "clean", PANEL = "panel", COMPACT = "compact" })[DB.Settings().cardStyle]
     local style = (setStyle == "panel" or not setStyle) and "clean" or setStyle
@@ -2521,7 +2521,7 @@ local function renderCharacterDetails(b, C, x, y, w, win)
 
     y = y - math.ceil(idx / cols) * gy - 6
 
-    -- BY SPEC: each spec played, as a class/spec hero card (class colour + spec icon).
+    -- BY SPEC: each spec played, as a class/spec hero card (class color + spec icon).
     y = b:Section("BY SPEC", x, y); y = y - 30
     do
         local cols = (w >= 720) and 2 or 1
@@ -2654,12 +2654,12 @@ local summaryWatcher
 local SB_STATUS_HEX = { TIMED = "33dd66", DEPLETED = "e0a030", ABANDONED = "9098a8" }
 
 -- Performance-score (ML.Scoring) helpers, shared by the scoreboard AND the run detail so the grade
--- shows everywhere a run's party breakdown appears. Grade colour keys off the letter.
+-- shows everywhere a run's party breakdown appears. Grade color keys off the letter.
 -- Aggressive, honest scale: only A/S read as green/gold ("met expectations"); B is amber ("room to
 -- improve"), C orange, D/F red. The category bars and numbers derive from this same map (via a score's
--- grade), so a 79 category is the exact colour a 79 overall would show.
--- Grade colour = the shared, theme-aware F..S metric scale (ML.TierColor). M+ Score is the ONE
--- exception - it keeps Blizzard's own rarity colour via API.ScoreColor.
+-- grade), so a 79 category is the exact color a 79 overall would show.
+-- Grade color = the shared, theme-aware F..S metric scale (ML.TierColor). M+ Score is the ONE
+-- exception - it keeps Blizzard's own rarity color via API.ScoreColor.
 function gradeColor(grade) return (grade and ML.TierColor(grade:sub(1, 1))) or ML.TierColor("N") end   -- forward-declared above
 
 -- Score every party member of a run. Routed through Scoring.Store, which memoises per run + engine
@@ -2695,8 +2695,8 @@ function memberScore(scores, m)   -- forward-declared above
 end
 
 -- Tooltip lines for a player's performance score (grade + per-category breakdown from the engine).
--- Colour a 0-100 score by the SAME grade scale the overall uses, so a category scoring 79 is the exact
--- colour a 79 overall would be. Aggressive: only ~A/S read green/gold; a 79 (B) is amber, not "green".
+-- Color a 0-100 score by the SAME grade scale the overall uses, so a category scoring 79 is the exact
+-- color a 79 overall would be. Aggressive: only ~A/S read green/gold; a 79 (B) is amber, not "green".
 local function catScoreHex(n)
     if type(n) ~= "number" then return "8b91a0" end
     local S = ML.Scoring and ML.Scoring.Score
@@ -2709,24 +2709,24 @@ local function scoreGrade(n)
     return (type(n) == "number" and S and S.Grade) and S.Grade(n) or nil
 end
 
--- Rich tooltip that explains the grade / score COLOUR SCALE - the WoW-loot-rarity ramp every grade and
--- category number is coloured by. Each row is drawn in its own tier colour so the legend IS the scale.
--- Pass the current grade to mark the row this score lands on. Reused everywhere a scale colour appears.
+-- Rich tooltip that explains the grade / score COLOR SCALE - the WoW-loot-rarity ramp every grade and
+-- category number is colored by. Each row is drawn in its own tier color so the legend IS the scale.
+-- Pass the current grade to mark the row this score lands on. Reused everywhere a scale color appears.
 local SCALE_ROWS = {   -- { first-letter tier, score range, rarity name }
     { "S", "97-100", "Artifact" }, { "A", "85-96", "Legendary" }, { "B", "70-84", "Epic" },
     { "C", "60-69", "Rare" }, { "D", "50-59", "Uncommon" }, { "F", "0-49", "Poor" },
 }
 local function scoreScaleTip(currentGrade)
     local cur = currentGrade and currentGrade:sub(1, 1)
-    local lines = { { text = "How scores are coloured (higher is better):", color = "cdd2db" }, { sep = true } }
+    local lines = { { text = "How scores are colored (higher is better):", color = "cdd2db" }, { sep = true } }
     for _, row in ipairs(SCALE_ROWS) do
         local hex = ML.TierColor(row[1])
         local mark = (cur == row[1]) and "  <" or ""
         lines[#lines + 1] = { left = row[1] .. "   " .. row[2], right = row[3] .. mark, lcolor = hex, rcolor = hex }
     end
     lines[#lines + 1] = { sep = true }
-    lines[#lines + 1] = { text = "The same colours WoW uses for item rarity. Every grade and category number is tinted by where it lands here.", color = "8b91a0" }
-    return { title = "Score & grade colours", lines = lines, anchor = "ANCHOR_CURSOR" }
+    lines[#lines + 1] = { text = "The same colors WoW uses for item rarity. Every grade and category number is tinted by where it lands here.", color = "8b91a0" }
+    return { title = "Score & grade colors", lines = lines, anchor = "ANCHOR_CURSOR" }
 end
 
 -- Percent from a 0-1 fraction (weights / confidence are stored as fractions).
@@ -2742,8 +2742,8 @@ local function accentHex()
 end
 
 -- Highlight every VARIABLE number in a detail/explanation string with the theme accent, via inline WoW
--- colour codes so it renders identically in the page AND in tooltips. Catches counts, decimals, %, x
--- ratios and K/M/B-suffixed values (e.g. 94.4K, 1.01x, 22%, ~4.5, -25). Score numbers are coloured by
+-- color codes so it renders identically in the page AND in tooltips. Catches counts, decimals, %, x
+-- ratios and K/M/B-suffixed values (e.g. 94.4K, 1.01x, 22%, ~4.5, -25). Score numbers are colored by
 -- grade elsewhere and deliberately NOT run through this.
 local function hlNums(str)
     if type(str) ~= "string" or str == "" then return str end
@@ -2778,7 +2778,7 @@ local function scoreTipLinesFromText(sc, lines)
 end
 
 -- Tooltip for a player's performance score. Rendered straight from the structured category data so
--- each row is a clean "Category -> score" (score colour-coded) with ONE calm, dim detail line: the
+-- each row is a clean "Category -> score" (score color-coded) with ONE calm, dim detail line: the
 -- key comparison + a quiet trailing weight. No dense parsed run-on, no gold-highlight-every-number,
 -- and the internal derivation math (min x rate x comp) is left to the full audit text, not the hover.
 local DETAIL_DIM = "9198a6"
@@ -2867,19 +2867,19 @@ function scoreTipLines(sc)   -- forward-declared above
         block("Role Contribution", rc.score, false, "survival + utility composite" .. wt(rc.weight))
     end
 
-    -- Compact colour-scale legend so the score colours are self-explaining wherever this tooltip shows
+    -- Compact color-scale legend so the score colors are self-explaining wherever this tooltip shows
     -- (the full ranged legend lives on the grade tile / breakdown-card hovers).
     lines[#lines + 1] = { sep = true }
     local seg = {}
     for k = #SCALE_ROWS, 1, -1 do   -- worst -> best (F D C B A S)
         seg[#seg + 1] = "|cff" .. ML.TierColor(SCALE_ROWS[k][1]) .. SCALE_ROWS[k][1] .. "|r"
     end
-    lines[#lines + 1] = { text = "Grade colours (low -> high): " .. table.concat(seg, "  "), color = "9198a6" }
+    lines[#lines + 1] = { text = "Grade colors (low -> high): " .. table.concat(seg, "  "), color = "9198a6" }
 
     return lines
 end
 
--- Review "state" (from Scoring.Review.Band) -> accent colour, matching the category score scale.
+-- Review "state" (from Scoring.Review.Band) -> accent color, matching the category score scale.
 local BAND_HEX = { EXCELLENT = "33dd66", STRONG = "6fd06f", SOLID = "cdd2db", SOFT = "e0a030", WEAK = "e0655a" }
 
 -- Per-run PLAYER REVIEW: a hero breakdown of one member's combat stats, a bar-charted grade
@@ -2933,8 +2933,8 @@ function renderPlayerReview(b, C, x, y, w, win)
     y = y - 124
 
     -- Hero combat-stat cards, laid out in TWO rows (4 + 3) so they breathe, using the same large
-    -- class-coloured hero icons as the scoreboard. Avoidable is its share of damage taken (the survival
-    -- metric), coloured by the survival score; deaths redden when non-zero.
+    -- class-colored hero icons as the scoreboard. Avoidable is its share of damage taken (the survival
+    -- metric), colored by the survival score; deaths redden when non-zero.
     local survScore = sc and sc.categories and sc.categories.survival and sc.categories.survival.score
     local avoidShare = sc and sc.categories and sc.categories.survival
         and sc.categories.survival.detail and sc.categories.survival.detail.avoidableShare
@@ -2978,8 +2978,8 @@ function renderPlayerReview(b, C, x, y, w, win)
         return y - 30
     end
 
-    -- GRADE BREAKDOWN as quasi-hero cards: bold label + explanation, an aggressively-coloured bar, and a
-    -- big score in the exact grade colour that score would earn as an overall. Throughput splits DPS/HPS.
+    -- GRADE BREAKDOWN as quasi-hero cards: bold label + explanation, an aggressively-colored bar, and a
+    -- big score in the exact grade color that score would earn as an overall. Throughput splits DPS/HPS.
     local cats = sc.categories
     local Cfg = ML.Scoring and ML.Scoring.Config
     local poss = m.isPlayer and "your" or "their"
@@ -3205,7 +3205,7 @@ function UI.ShowScoreboard(run, opts)
 
     -- Theme-AGNOSTIC: the scoreboard always renders on its own fixed dark palette so it looks identical
     -- on every UI theme (and stays readable in light mode - its art backdrop is dark). Swap the shared
-    -- palette in just while the modal is BUILT, then restore it: fontstrings capture their colour, the
+    -- palette in just while the modal is BUILT, then restore it: fontstrings capture their color, the
     -- Builder captures the palette reference (so row hovers stay dark too), and grades resolve to their
     -- bright variants because the swapped bg reads as dark - all locked in at build time.
     local savedC = theme.C
@@ -3365,8 +3365,8 @@ function UI.ShowScoreboard(run, opts)
                     b:StatTile(x + (i - 1) * (cw + gap), y, {
                         style = heroStyle, width = cw, height = 80,
                         label = h.label, value = h.fmt(h.value),
-                        icon = h.icon, iconSize = 64, iconColor = acc,   -- big class-coloured hero icon
-                        accent = acc, valueColor = C.text,               -- number neutral; name class-coloured
+                        icon = h.icon, iconSize = 64, iconColor = acc,   -- big class-colored hero icon
+                        accent = acc, valueColor = C.text,               -- number neutral; name class-colored
                         sub = cname, footer = { cname },
                     })
                 end
@@ -3427,14 +3427,14 @@ function UI.ShowScoreboard(run, opts)
                 local isMVP = mvp and sc and ((sc.playerGUID and sc.playerGUID == mvp.playerGUID)
                     or (sc.name and sc.name == mvp.name))
                 if isMVP then b:Tex(x + COL.name - 14, y - 15, 12, 12, "crown", nil, { 1, 0.82, 0.2 }) end
-                -- Our performance grade (colour-coded) + the numeric score.
+                -- Our performance grade (color-coded) + the numeric score.
                 if sc then
                     b:Label(sc.grade or "?", x + COL.grade, y - 16, theme:Color(gradeColor(sc.grade)), 14)
                     b:Label(tostring(sc.overall or 0), x + COL.grade + 40, y - 16, C.subtext, 12)
                 else
                     b:Label(DASH, x + COL.grade, y - 16, C.subtext, 12)
                 end
-                -- M+ score, rarity-coloured; the player also shows this run's gain in green.
+                -- M+ score, rarity-colored; the player also shows this run's gain in green.
                 if m.mplusScore then
                     b:Label(tostring(math.floor(m.mplusScore + 0.5)), x + COL.score, y - 16,
                         API.ScoreColor(m.mplusScore) or theme:Color("a0a6b4"), 13)

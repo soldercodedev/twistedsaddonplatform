@@ -9,8 +9,8 @@ TCC.CHANGELOG = [==[
 - **[CHANGE]** **Tabbed layout.** The page is now split into tabs - **Alerts**, **Profiles**, and
   **Settings** - docked under the title bar, instead of one long scrolling page. Everything's in the
   same place, just quicker to get to.
-- **[BUG FIX]** Picks up the latest shared appearance fixes - custom theme colours now save correctly
-  from the colour picker, and the **Menu scale** slider is smoother to drag.
+- **[BUG FIX]** Picks up the latest shared appearance fixes - custom theme colors now save correctly
+  from the color picker, and the **Menu scale** slider is smoother to drag.
 
 ## 1.0.0-beta.2
 
@@ -22,8 +22,8 @@ TCC.CHANGELOG = [==[
   (plus the platform's game database when it's loaded) and pick a spell or item instead of typing an
   ID. The lookup field shows a **live icon** of what you picked, and stores the ID so it keeps working
   in Mythic+.
-- **[NEW]** Fresh platform look in Settings: pick a **shape** (sharp or rounded) and a **colour
-  scheme** (neutral greys, light themes, or a WoW-expansion palette), or set every colour yourself,
+- **[NEW]** Fresh platform look in Settings: pick a **shape** (sharp or rounded) and a **color
+  scheme** (neutral greys, light themes, or a WoW-expansion palette), or set every color yourself,
   and scale the whole menu with **Menu scale**.
 - **[BUG FIX]** Fixed cramped spacing on the **Text size** and **Icon size** sliders in the alert
   editor (the value readout no longer overlaps the row above).

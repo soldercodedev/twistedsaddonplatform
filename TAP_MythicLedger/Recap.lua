@@ -23,9 +23,9 @@ local inGroupSession = false
 ----------------------------------------------------------------------
 -- Formatting helpers.
 ----------------------------------------------------------------------
--- Colour helpers. Chat + toast fontstrings both honour |cffRRGGBB..|r escapes, so one coloured
+-- Color helpers. Chat + toast fontstrings both honour |cffRRGGBB..|r escapes, so one colored
 -- string works in either surface. Labels are muted grey and the METRIC NUMBERS are bright, so the
--- numbers pop. (Avoid pure "ffffff": the toast runs text through theme:HL, which recolours exactly
+-- numbers pop. (Avoid pure "ffffff": the toast runs text through theme:HL, which recolors exactly
 -- |cffffffff to the accent - so a "white" would render differently in chat vs toast.)
 local function cc(hex, s) return "|cff" .. hex .. tostring(s) .. "|r" end
 local COL = { val = "f4f6fb", timed = "3fd07a", key = "ffd100", label = "8b91a0",
@@ -75,7 +75,7 @@ local function avgLine(rc)
     return table.concat(bits, cc(COL.label, ", "))
 end
 
--- Build the recap as an array of short, pre-coloured phrases. Chat joins them on one line with a
+-- Build the recap as an array of short, pre-colored phrases. Chat joins them on one line with a
 -- bullet; the toast stacks them as separate lines. `name` is the player (owned by the caller).
 local function buildLines(rc, cfg)
     local lines = {}
@@ -109,7 +109,7 @@ local function buildLines(rc, cfg)
 end
 
 ----------------------------------------------------------------------
--- Emit (local only). One returning player -> a coloured chat line and/or a centre-screen toast.
+-- Emit (local only). One returning player -> a colored chat line and/or a centre-screen toast.
 -- The sound is NOT played here (it fires once per batch via playRecapSound), so a group with
 -- several returning members doesn't stack the sound.
 ----------------------------------------------------------------------
@@ -255,7 +255,7 @@ end
 
 -- In-window preview (Settings): a representative recap for a fabricated returning player, built with
 -- the SAME buildLines() the live recap uses so the preview matches your current settings exactly.
--- Returns (nameLine, lines) - both pre-coloured strings/array - and neither prints nor plays a sound.
+-- Returns (nameLine, lines) - both pre-colored strings/array - and neither prints nor plays a sound.
 function Recap.PreviewLines(cfg)
     cfg = cfg or DB.Recap()
     local sample = {

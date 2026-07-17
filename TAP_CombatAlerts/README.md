@@ -10,7 +10,7 @@ situations you care about.
 
 - **Typed alerts** for the common cases, one click each: Range, Target, Threat, Pet, Item.
 - **Advanced alerts** with an **AND / OR** condition builder for anything custom.
-- Per-alert **actions**: play a sound, flash on-screen text (font, size, colour, position, pulse),
+- Per-alert **actions**: play a sound, flash on-screen text (font, size, color, position, pulse),
   show and place an **icon**, and/or print a chat message.
 - **Load rules** so an alert only runs where it should — by class/spec, in/out of combat, group
   state, or content type.

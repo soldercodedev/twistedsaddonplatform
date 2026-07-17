@@ -542,8 +542,8 @@ local function sectionVisual(P, a, rule, y, win)
     if a.visual then
         b:Label("Text", P.x, y - 2, C.subtext)
         b:EditBox(P.x + 80, y, 200, a.visualText or "ALERT", function(t) a.visualText = t; refreshPrev(); softApply() end)
-        b:Label("Colour", P.x + 300, y - 2, C.subtext)
-        P:tip(b:Swatch(P.x + 352, y - 2, a.color, function() refreshPrev(); softApply() end, "Text colour"), "Text colour", "Alert text colour.")
+        b:Label("Color", P.x + 300, y - 2, C.subtext)
+        P:tip(b:Swatch(P.x + 352, y - 2, a.color, function() refreshPrev(); softApply() end, "Text color"), "Text color", "Alert text color.")
         y = y - 32
         b:Label("Font", P.x, y - 2, C.subtext)
         local fd = b:Dropdown(P.x + 80, y); fd:SetChoices(200, FONT_CHOICES, function() return a.font or "UBUNTU" end,

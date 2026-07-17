@@ -39,7 +39,7 @@ back on.
 
 ## Highlights
 
-- **One look, one window.** A shared, self-skinned theme (accent colour, skin and font are all
+- **One look, one window.** A shared, self-skinned theme (accent color, skin and font are all
   configurable in **Settings**). No external UI libraries.
 - **Live on/off.** Toggle modules without a reload; each cleanly stands itself up and down.
 - **"What's New" built in.** Every module lists its changelog in plain language — look for the

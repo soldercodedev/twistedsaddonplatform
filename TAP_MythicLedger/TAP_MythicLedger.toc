@@ -56,7 +56,7 @@ Diag.lua
 # In-game "What's New" changelog.
 Changelog.lua
 
-# Central hero-tile config: icons + WoW-quality colour scales for the Overview summary tiles.
+# Central hero-tile config: icons + WoW-quality color scales for the Overview summary tiles.
 HeroStats.lua
 
 # All UI pages (one module page + internal tabs) and the post-run summary modal.

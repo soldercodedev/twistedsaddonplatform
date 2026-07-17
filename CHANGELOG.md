@@ -10,7 +10,7 @@ fixes that every module inherits. Each module also lists its own changes in its 
 New** (`/tap` → module → *What's New*).
 
 - **[CHANGE]** **Mythic Ledger — hero-card pages.** The character overview's **By Spec** and **By
-  Dungeon** breakdowns are now rich hero cards (class-coloured spec cards with spec icons; dungeon
+  Dungeon** breakdowns are now rich hero cards (class-colored spec cards with spec icons; dungeon
   cards fronted by their own art), the headline stats are large-icon tiles, and the **Dungeons** tab
   is a hero-card grid with a **type-to-filter** box (3+ letters) beside the season selector.
 - **[BUG FIX]** **Mythic Ledger — boss icons** now load on the post-run scoreboard and on
@@ -21,7 +21,7 @@ New** (`/tap` → module → *What's New*).
 - **[CHANGE]** **Mythic Ledger — scoring.** Interrupts and dispels were rescored for Midnight:
   per-spec interrupt cooldowns corrected, and DPS/tanks are now credited for the dispels they bring
   (healers aren't the only ones expected to dispel).
-- **[BUG FIX]** **Appearance.** Custom theme colours now save correctly from the colour picker; the
+- **[BUG FIX]** **Appearance.** Custom theme colors now save correctly from the color picker; the
   **Menu scale** slider is smoother to drag (it applies when you release it); table tooltips render at
   the cursor; there's more room under the per-page dropdown; and check-box labels no longer wrap.
 - **[BUG FIX]** Fixed a Lua error when opening a run's player scores, and fixed party cards
@@ -50,14 +50,14 @@ in-game **What's New** (`/tap` → module → *What's New*).
   scoreboard, and easy backup & sharing. Stats come from the game's own damage meter (with the basics
   still tracked if it isn't available).
 - **[NEW]** **Appearance, reworked.** In `/tap` → Settings the look is now two independent choices:
-  a **shape** (sharp / rounded) and a **colour scheme** — a neutral greyscale ramp (Obsidian,
+  a **shape** (sharp / rounded) and a **color scheme** — a neutral greyscale ramp (Obsidian,
   Graphite, Nickel…), **light** themes (Daylight, Parchment), the styled set (Modern/Blizzard/Neon),
-  or a WoW-**expansion** palette — plus a full **Custom** editor for every colour. Add a **Menu
+  or a WoW-**expansion** palette — plus a full **Custom** editor for every color. Add a **Menu
   scale** slider to size the whole window.
 - **[CHANGE]** **Cleaner module pages** — a selected module's name now shows in the window title
   instead of a repeated in-page header, leaving more room for its settings.
 - **[BUG FIX]** Dropdown/menu backgrounds and text now follow the theme on a live swap (fixes stale
-  colours on the light themes); shape changes apply to every widget.
+  colors on the light themes); shape changes apply to every widget.
 - **[CHANGE]** Consistent branding: every add-on shows the shared platform logo and a `Twisteds …`
   name in the AddOns list.
 - **[KNOWN]** Mythic Ledger targets Retail Midnight; some live meter/API details are still being
@@ -84,7 +84,7 @@ First public release of the platform. Everything ships as one download.
   range, aggro, pet down, item ready). Includes a spell/item search backed by an optional bundled
   database. *(Grew out of the standalone "Twisteds Combat Cues".)*
 - **[NEW]** **Focus Target Interrupt** — one-key focus + mark macro, an on-screen raid-marker bar
-  (movable, resizable, recolourable, row or column), and auto-detected interrupt/stun macros for
+  (movable, resizable, recolorable, row or column), and auto-detected interrupt/stun macros for
   your spec and talents.
 - **[NEW]** **Rotation Assistant** — draws the keybind of Blizzard's suggested next ability on
   screen (show-only), with cast-vs-instant, GCD sweep, out-of-range, and out-of-resource indicators.

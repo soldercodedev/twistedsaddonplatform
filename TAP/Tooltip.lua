@@ -72,7 +72,7 @@ end
 --   anchor = "ANCHOR_RIGHT",
 --   lines  = {                          -- each entry is one of:
 --     "plain wrapped line",
---     { text = "coloured line", color = "accent"|"20C997"|{r,g,b} },
+--     { text = "colored line", color = "accent"|"20C997"|{r,g,b} },
 --     { left = "Label", right = "Value", lcolor = ..., rcolor = ... },   -- aligned two columns
 --     { blank = true },                 -- vertical spacer
 --     { sep = true },                   -- faint divider line
