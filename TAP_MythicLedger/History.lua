@@ -709,6 +709,45 @@ end
 
 function History.PlayerSummary(identityKey) return DB.PlayerIndex()[identityKey] end
 
+-- Reverse lookup: a "Name-Realm" -> the identityKey (guid) of a player you've run with, or nil. For
+-- surfaces that only give a name (LFG / who / guild / friends / chat) rather than a unit GUID. Cached and
+-- rebuilt only when the number of known players changes (a name is stable once recorded).
+--
+-- Matching is realm-normalization-insensitive. We store fullName from UnitName, whose realm keeps its
+-- display punctuation (spaces + apostrophes, e.g. "Twisting Nether", "Zul'jin"), but callers like LFG hand
+-- back the *normalized* realm that strips both ("TwistingNether", "Zuljin"). So we index and query on a
+-- canonical key: drop whitespace and apostrophes, lower-case. (Character names carry no such punctuation,
+-- so the "-" separator is safe to keep.)
+local nameToKey, nameToKeyN
+local function nameKey(full) return (full:gsub("[%s']", "")):lower() end
+function History.PlayerByName(fullName)
+    if type(fullName) ~= "string" or fullName == "" then return nil end
+    local idx = DB.PlayerIndex()
+    local n = 0; for _ in pairs(idx) do n = n + 1 end
+    if nameToKeyN ~= n or not nameToKey then
+        nameToKey = {}
+        for key, rec in pairs(idx) do if rec.fullName then nameToKey[nameKey(rec.fullName)] = key end end
+        nameToKeyN = n
+    end
+    return nameToKey[nameKey(fullName)]
+end
+
+-- Average Mythic Ledger performance score for a player across your shared runs -> avgOverall, letterGrade
+-- (or nil if the scorer isn't available / no scored runs). Uses the persisted per-run score summaries.
+function History.AvgScore(identityKey)
+    local Store = ML.Scoring and ML.Scoring.Store
+    local Score = ML.Scoring and ML.Scoring.Score
+    if not (identityKey and Store and Store.Summary) then return nil end
+    local sum, n = 0, 0
+    for _, r in ipairs(History.FilterRuns({ playerKey = identityKey })) do
+        local sc = Store.Summary(r)[identityKey]
+        if sc and type(sc.overall) == "number" then sum = sum + sc.overall; n = n + 1 end
+    end
+    if n == 0 then return nil end
+    local avg = sum / n
+    return avg, (Score and Score.Grade and Score.Grade(avg)) or nil
+end
+
 -- Runs shared with a specific party member (most recent first).
 function History.PlayerRuns(identityKey)
     return History.FilterRuns({ playerKey = identityKey })

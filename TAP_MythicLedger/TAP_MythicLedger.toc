@@ -49,6 +49,9 @@ Scoring\Tests.lua
 # Returning-player recap service (local-only, anti-spam, role-aware).
 Recap.lua
 
+# Blizzard tooltip augmentation: your shared run history with a player, on unit + LFG tooltips.
+Tooltip.lua
+
 # Versioned, non-executable export / import.
 Export.lua
 

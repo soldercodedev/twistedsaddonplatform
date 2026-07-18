@@ -46,7 +46,7 @@ S.SeasonData["MidnightS1"] = {
         },
         ----------------------------------------------------------------
         ["skyreach"] = {
-            trash = { interruptFrequency = 0.335,    -- per-min (est /20m; no +10 data yet)
+            trash = { interruptFrequency = 1.15,     -- per-min (obs: ~1.25 trash kicks/min, n=2 real +2/+11; held slightly under; was 0.335 est)
                 partyDebuffFrequencies = { magic = 0.08 },
                 targetBuffFrequencies  = { purge = 0.17, enrage = 0.18 } },   -- Solar Barrier/Rushing Winds purge, Wrathful Wind soothe
             bosses = {
@@ -104,7 +104,7 @@ S.SeasonData["MidnightS1"] = {
         },
         ----------------------------------------------------------------
         ["nexuspointxenas"] = {
-            trash = { interruptFrequency = 0.385,    -- per-min (est /20m; no +10 data yet)
+            trash = { interruptFrequency = 1.40,     -- per-min (obs: ~1.44 trash kicks/min, n=2 real +10; was 0.385 est)
                 partyDebuffFrequencies = { magic = 0.19, curse = 0.2 },
                 targetBuffFrequencies  = { purge = 0.2 } },   -- Holy Echo purge (no soothe on trash)
             bosses = {
@@ -115,7 +115,7 @@ S.SeasonData["MidnightS1"] = {
         },
         ----------------------------------------------------------------
         ["windrunnerspire"] = {
-            trash = { interruptFrequency = 0.38,     -- per-min (est /20m; no +10 data yet)
+            trash = { interruptFrequency = 2.0,      -- per-min (obs: ~2.3 trash kicks/min, n=2 real +10; held slightly under; was 0.38 est)
                 partyDebuffFrequencies = { magic = 0.17, curse = 0.2, poison = 0.21 },
                 targetBuffFrequencies  = { purge = 0.1, enrage = 0.18 } },   -- new content: modest, TUNE
             bosses = {

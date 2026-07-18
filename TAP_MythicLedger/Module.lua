@@ -21,12 +21,14 @@ local function OnEnable(m)
     mod = m
     ML.Tracker.Start()
     ML.Recap.Start()
+    if ML.Tooltip and ML.Tooltip.Start then ML.Tooltip.Start() end
     ML.Log("Module enabled")
 end
 
 local function OnDisable(m)
     ML.Tracker.Stop()
     ML.Recap.Stop()
+    if ML.Tooltip and ML.Tooltip.Stop then ML.Tooltip.Stop() end
     ML.Log("Module disabled")
 end
 

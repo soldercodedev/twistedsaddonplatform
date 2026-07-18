@@ -131,7 +131,7 @@ local function addonVersion(addonName)
 end
 
 -- The suite's own version, with a sane fallback if the .toc metadata isn't ready yet.
-local function suiteVersion() return addonVersion("TAP") or "1.0.1" end
+local function suiteVersion() return addonVersion("TAP") or "1.1.0" end
 
 local function moduleNavIcon(spec)
     if spec.icon then return theme:ResolveIcon(spec.icon) end

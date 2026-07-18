@@ -1,7 +1,41 @@
-# Twisteds Addon Platform — Changelog
+# Twisteds Addon Platform - Changelog
 
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
+
+## 1.1.0
+
+A platform release rolling up the latest from every module. **Mythic Ledger** lands a major scoring accuracy pass plus two new features, and the other modules graduate to a stable **1.0**. Each module's full notes also live in its in-game **What's New** (`/tap` > module > *What's New*).
+
+### Mythic Ledger (1.0.0-beta.5)
+
+A scoring accuracy pass, two new features - a **Group Utility** panel and **shared-history player tooltips** - and a couple of capture fixes. Scoring changes below **re-score your existing runs automatically** on login.
+
+- **[NEW]** **At-a-glance Group Utility.** Run details and the scoreboard now show a **Group Utility** panel: party totals for **interrupts**, **buffs purged/soothed**, and **debuffs cleansed**, each landed vs expected. Hover the dispel tiles for what was dispellable, with icons.
+- **[NEW]** **Your shared history, right on their tooltip.** Mouse over anyone you've keyed with - frames, group finder, /who, guild, communities, friends - and their tooltip shows your shared history: keys together, timed %, best key, **average score**, and your notes. Sits **under** RaiderIO without replacing it; toggle each surface in **Settings > Tooltips**.
+- **[CHANGE]** **Interrupt & dispel expectations are built from real runs.** Each dungeon's expected kicks and dispels are now calibrated from logged data instead of estimates - and higher, since the old model under-counted a coordinated group. The last untuned dungeons (Skyreach, Windrunner Spire, Nexus-Point Xenas) are dialed in too.
+- **[CHANGE]** **Time in combat shapes interrupt & dispel expectations.** They now scale with time in combat - trash with run length, each **boss** with how long it was up. A 19-minute key and a 26-minute key are no longer held to the same number.
+- **[CHANGE]** **Carrying a slacker no longer hands them a free pass.** A teammate covering interrupts/dispels for you now only helps **halfway** - the old system forgave the shortfall completely, so a lazy player could ride the group to a perfect Utility score.
+- **[CHANGE]** **Tank damage counts for more.** Tanks contribute more of the group's damage than we credited, so tank Throughput scored too easily. Rebalanced to match; DPS off-healing counts for a little more too.
+- **[CHANGE]** **Augmentation Evokers are scored as the support spec they are.** An Aug's Throughput bar now drops to about **half** a normal DPS's, with that share handed to the teammates it buffs - most to damage-dealers, a little to tank and healer. It shouldn't be graded on personal damage when its job is pumping everyone else's.
+- **[CHANGE]** **Party members are scored on their real spec when we can see it.** We now use the start-of-run talent inspection when it lands instead of a class guess - so a Beast Mastery Hunter isn't credited with a kick it doesn't have. Un-inspected Hunter DPS defaults to Counter Shot (long cooldown).
+- **[CHANGE]** **Survival is a bit more forgiving.** A wider avoidable-damage grace band, and it now bottoms out at **50%** of your damage taken being avoidable (was 40%).
+- **[BUG FIX]** **Runs that finish on trash now record their stats.** A key that completed on **trash** instead of the last boss saved while still in combat, so the Midnight meter (out-of-combat only) returned empty totals. Finalizing now waits for combat to drop; boss splits were unaffected.
+
+### Combat Alerts (1.0.0)
+
+- **[CHANGE]** Out of beta - Twisteds Combat Alerts is now a stable 1.0 release.
+
+### Focus Target Interrupt (1.0.0)
+
+- **[CHANGE]** Out of beta - Focus Target Interrupt is now a stable 1.0 release.
+
+### Rotation Assistant (1.0.0)
+
+- **[CHANGE]** Out of beta - Rotation Assistant is now a stable 1.0 release.
+- **[NOTE]** The on-screen cue reads keybinds from **Action Bars 1-5** only - the bars listed under
+  Action Bars in the keybinding editor. Keys bound solely on third-party action-bar addons may not
+  be picked up.
 
 ## 1.0.1
 
@@ -9,68 +43,73 @@ A big **Mythic Ledger** visual + scoring pass (module version 1.0.0-beta.4), plu
 **per-module on/off** you can reach from any module's own Settings tab, and settings tidy-ups across
 the other modules.
 
-- **[BUG FIX]** **Mythic Ledger — Warlock interrupts now count.** Spell Lock fires from the Felhunter,
+- **[BUG FIX]** **Mythic Ledger - Warlock interrupts now count.** Spell Lock fires from the Felhunter,
   so the meter filed those kicks under the **pet** (and a resummoned pet gets a new source id), dropping
-  them — a Warlock's interrupts could read 0. Pet interrupts/dispels are now mapped back to the owner
+  them - a Warlock's interrupts could read 0. Pet interrupts/dispels are now mapped back to the owner
   live during the run, and a pet/talent-gated interrupt a player couldn't use is scored **N/A**, not a
   zero. *(Fix is in but not yet confirmed in a live key.)*
 - **[NEW]** **Enable/disable any module from its own page.** Every module's **Settings** tab now has a
   master on/off switch, and a module you switch off shows a clear **MODULE DISABLED** overlay on its
   other tabs (with a jump straight back to Settings) instead of a dead page. **Rotation Assistant** and
-  **Focus Target Interrupt** gained a dedicated **Settings** tab for this — their minimap toggle moved
+  **Focus Target Interrupt** gained a dedicated **Settings** tab for this - their minimap toggle moved
   there too.
-- **[NEW]** **Mythic Ledger — run details, rebuilt.** A run's party and boss splits are now **hero
+- **[NEW]** **Mythic Ledger - run details, rebuilt.** A run's party and boss splits are now **hero
   cards** (spec portraits with the performance grade; boss cards fronted by their portrait), with a
-  **run timeline** — in-combat vs downtime, each boss kill, deaths, and the **+1 / +2 / +3** timer
-  targets — matching the end-of-run scoreboard.
-- **[NEW]** **Mythic Ledger — "Timed +2".** Run results now show the **keystone upgrade** you earned
+  **run timeline** - in-combat vs downtime, each boss kill, deaths, and the **+1 / +2 / +3** timer
+  targets - matching the end-of-run scoreboard.
+- **[NEW]** **Mythic Ledger - "Timed +2".** Run results now show the **keystone upgrade** you earned
   on the Runs list, the run tooltip, and the run header, not just "Timed".
-- **[CHANGE]** **Mythic Ledger — player pages** now match the character page: **Specs Played** and
+- **[CHANGE]** **Mythic Ledger - player pages** now match the character page: **Specs Played** and
   **Dungeons Together** are the same hero cards, with the same reflowing headline tiles.
-- **[CHANGE]** **Mythic Ledger — interrupt scoring** reweighted so the tiers (long-CD / standard /
-  short-CD / high-control) split the expected kick volume **10 / 20 / 30 / 40** — higher-control kits
+- **[CHANGE]** **Mythic Ledger - interrupt scoring** reweighted so the tiers (long-CD / standard /
+  short-CD / high-control) split the expected kick volume **10 / 20 / 30 / 40** - higher-control kits
   are expected to carry more.
-- **[CHANGE]** **Mythic Ledger — scoring weights are now static and uniform across roles.** Every role
+- **[CHANGE]** **Mythic Ledger - scoring weights are now static and uniform across roles.** Every role
   is graded **Throughput 35% · Interrupts + Dispels 25% · Survival 20% · Death Impact 20%**. The two
   utility categories share the 25% evenly when both apply; if a spec only has one (or the dungeon has
   nothing for it), the whole 25% stays on the one it can affect. **Role Contribution is retired to 0%**
   for now (its targets can be tuned later). Your saved runs are automatically rescored.
-- **[CHANGE]** **Mythic Ledger — Survival and Death Impact always weigh the same.** Each role's
-  Survival and Death Impact category carries exactly equal weight — and stays equal even when a utility
-  category (interrupts / dispels) doesn't apply and its weight is redistributed — so avoiding damage and
+- **[CHANGE]** **Mythic Ledger - Survival and Death Impact always weigh the same.** Each role's
+  Survival and Death Impact category carries exactly equal weight - and stays equal even when a utility
+  category (interrupts / dispels) doesn't apply and its weight is redistributed - so avoiding damage and
   not dying always count equally toward your grade.
-- **[NEW]** **Mythic Ledger — timestamps show the time of day.** Every run date now shows the local
+- **[NEW]** **Mythic Ledger - timestamps show the time of day.** Every run date now shows the local
   time next to it, with a new **Date & Time** setting to choose the date format (NA `mm/dd/yy`, ISO, or
   EU) and a 12- or 24-hour clock.
-- **[CHANGE]** **Mythic Ledger — a clean run scores full Survival.** If you took **no avoidable damage**
+- **[CHANGE]** **Mythic Ledger - a clean run scores full Survival.** If you took **no avoidable damage**
   on a tracked run, that now counts as a true 0% avoidable share (a perfect Survival score) rather than
   a neutral "no data" estimate.
-- **[NEW]** **Mythic Ledger — fairer dispel scoring.** Researched against Midnight's talent trees:
-  almost every DPS/tank dispel is a **talent**, not baseline — Consume Magic, Remove Corruption,
+- **[NEW]** **Mythic Ledger - fairer dispel scoring.** Researched against Midnight's talent trees:
+  almost every DPS/tank dispel is a **talent**, not baseline - Consume Magic, Remove Corruption,
   Cauterizing Flame, Tranquilizing Shot, Remove Curse, Detox, Cleanse Toxins, Purify Disease, Cleanse
   Spirit, Singe Magic (only Rogue's Shiv is baseline). The ledger talent-inspects the party at the start
   of a run; a member who never specced their dispel (and cast none) is scored **N/A**, not penalized,
   and their review names the ability they could talent.
-- **[NEW]** **Mythic Ledger — scoreboard "vs your best".** The end-of-run scoreboard shows your time
-  against your best for that exact **dungeon + character + spec + key level** — a new best, how far off
+- **[NEW]** **Mythic Ledger - scoreboard "vs your best".** The end-of-run scoreboard shows your time
+  against your best for that exact **dungeon + character + spec + key level** - a new best, how far off
   you were, or your first timed clear. The party table also shows **per-stat deltas** (DPS, HPS, damage
   taken, deaths, interrupts, dispels, avoidable) next to your row **and next to any teammate you've run
-  this key with before** — each compared to that player's OWN best run of this key (matched by character
+  this key with before** - each compared to that player's OWN best run of this key (matched by character
   + spec, from your saved history).
-- **[NEW]** **Mythic Ledger — `/tap changekey`.** Arms a one-shot reminder that pops over your next
+- **[NEW]** **Mythic Ledger - `/tap changekey`.** Arms a one-shot reminder that pops over your next
   run's scoreboard to change your keystone.
-- **[BUG FIX]** **Mythic Ledger — recap spam.** The returning-player recap no longer toasts your whole
+- **[BUG FIX]** **Mythic Ledger - recap spam.** The returning-player recap no longer toasts your whole
   group at the end of a run.
-- **[BUG FIX]** **Mythic Ledger — scoreboard timeline labels** (0:00 / total time) no longer tuck
+- **[BUG FIX]** **Mythic Ledger - scoreboard timeline labels** (0:00 / total time) no longer tuck
   under the footer buttons.
-- **[BUG FIX]** **Mythic Ledger — utility scoring.** Meeting your **interrupt / dispel target** now
-  scores full even on a low-sample ("Limited") run — a met target was being dragged toward the neutral
+- **[BUG FIX]** **Mythic Ledger - utility scoring.** Meeting your **interrupt / dispel target** now
+  scores full even on a low-sample ("Limited") run - a met target was being dragged toward the neutral
   score (e.g. **93** instead of 100). Low confidence now only lifts a weak showing toward neutral; it
   never docks a target you actually hit.
+- **[BUG FIX]** **Mythic Ledger - runs that finish on trash now capture stats.** When the **last boss
+  didn't complete the key** (you were short on enemy forces and went back to clear trash), the run was
+  saved while you were still in combat - and the Midnight meter only reads out of combat, so the final
+  DPS/HPS/interrupt/dispel numbers came back empty. Finalization now waits for combat to actually drop
+  before reading the meter. Boss splits were always captured correctly; this fixes the run totals.
 
 ### Modules
 
-- **[CHANGE]** **Combat Alerts — Settings reorganized** into **Sound**, **Performance**, **Backup &
+- **[CHANGE]** **Combat Alerts - Settings reorganized** into **Sound**, **Performance**, **Backup &
   Data**, and **Minimap** sections, and the **Alerts** tab now names the **active profile** (shared
   account-wide vs private to this character) and how many alerts it holds.
 
@@ -80,15 +119,15 @@ Third beta. A big visual + accuracy pass on **Mythic Ledger**, plus a round of p
 fixes that every module inherits. Each module also lists its own changes in its in-game **What's
 New** (`/tap` → module → *What's New*).
 
-- **[CHANGE]** **Mythic Ledger — hero-card pages.** The character overview's **By Spec** and **By
+- **[CHANGE]** **Mythic Ledger - hero-card pages.** The character overview's **By Spec** and **By
   Dungeon** breakdowns are now rich hero cards (class-colored spec cards with spec icons; dungeon
   is a hero-card grid with a **type-to-filter** box (3+ letters) beside the season selector.
-- **[BUG FIX]** **Mythic Ledger — boss icons** now load on the post-run scoreboard and on
+- **[BUG FIX]** **Mythic Ledger - boss icons** now load on the post-run scoreboard and on
   previously-recorded runs (they were blank until the Encounter Journal was queried correctly), and
   the dungeon background art now covers the whole scoreboard.
-- **[BUG FIX]** **Mythic Ledger — average deaths** now count only **your** deaths per run (it was
+- **[BUG FIX]** **Mythic Ledger - average deaths** now count only **your** deaths per run (it was
   averaging the entire party). The Runs page still reports total party deaths.
-- **[CHANGE]** **Mythic Ledger — scoring.** Interrupts and dispels were rescored for Midnight:
+- **[CHANGE]** **Mythic Ledger - scoring.** Interrupts and dispels were rescored for Midnight:
   per-spec interrupt cooldowns corrected, and DPS/tanks are now credited for the dispels they bring
   (healers aren't the only ones expected to dispel).
 - **[BUG FIX]** **Appearance.** Custom theme colors now save correctly from the color picker; the
@@ -110,61 +149,61 @@ Second beta. A brand-new module (Mythic Ledger), a platform look & feel overhaul
 updates to the modules that already shipped in beta.1. Each module also lists its own changes in its
 in-game **What's New** (`/tap` → module → *What's New*).
 
-- **[NEW]** **Mythic Ledger** — a new, private, account-wide Mythic+ journal. It records every timed,
+- **[NEW]** **Mythic Ledger** - a new, private, account-wide Mythic+ journal. It records every timed,
   depleted, or abandoned key automatically (sorted by character), remembers who you've run keys with,
-  and can give a short, **private** heads-up when you group with them again. Every run is **graded** —
+  and can give a short, **private** heads-up when you group with them again. Every run is **graded** -
   an easy-to-read, fair score for each player covering damage & healing, interrupts, dispels, staying
-  out of the bad stuff, and deaths — and clicking a player opens a full **review**: their key stats, a
+  out of the bad stuff, and deaths - and clicking a player opens a full **review**: their key stats, a
   breakdown of how the grade was earned, and plain-language tips on what they did well and what to
   work on. Plus run/dungeon/character/player pages, personal bests, per-boss stats, a post-run
   scoreboard, and easy backup & sharing. Stats come from the game's own damage meter (with the basics
   still tracked if it isn't available).
 - **[NEW]** **Appearance, reworked.** In `/tap` → Settings the look is now two independent choices:
-  a **shape** (sharp / rounded) and a **color scheme** — a neutral greyscale ramp (Obsidian,
+  a **shape** (sharp / rounded) and a **color scheme** - a neutral greyscale ramp (Obsidian,
   Graphite, Nickel…), **light** themes (Daylight, Parchment), the styled set (Modern/Blizzard/Neon),
-  or a WoW-**expansion** palette — plus a full **Custom** editor for every color. Add a **Menu
+  or a WoW-**expansion** palette - plus a full **Custom** editor for every color. Add a **Menu
   scale** slider to size the whole window.
-- **[CHANGE]** **Cleaner module pages** — a selected module's name now shows in the window title
+- **[CHANGE]** **Cleaner module pages** - a selected module's name now shows in the window title
   instead of a repeated in-page header, leaving more room for its settings.
 - **[BUG FIX]** Dropdown/menu backgrounds and text now follow the theme on a live swap (fixes stale
   colors on the light themes); shape changes apply to every widget.
 - **[CHANGE]** Consistent branding: every add-on shows the shared platform logo and a `Twisteds …`
   name in the AddOns list.
 - **[KNOWN]** Mythic Ledger targets Retail Midnight; some live meter/API details are still being
-  verified in game. Metrics the meter can't supply show as "—", never a fake zero.
+  verified in game. Metrics the meter can't supply show as "-", never a fake zero.
 
 ### Updates to existing modules
 
-- **Combat Alerts** — **per-character alert profiles** (switch a character between Account-wide and
+- **Combat Alerts** - **per-character alert profiles** (switch a character between Account-wide and
   This character in the Profile section, so alerts are no longer shared across all your toons);
   spell/item **Find** search (spellbook, auras, gear, bags, and the game database) with a live icon;
   fixed slider spacing in the alert editor.
-- **Rotation Assistant** — `/tap rotation` and `/rcue` slash commands; the cue now follows your
+- **Rotation Assistant** - `/tap rotation` and `/rcue` slash commands; the cue now follows your
   chosen Platform font.
-- **Focus Target Interrupt** — the marker bar now remembers your **saved focus marker** (set it out
+- **Focus Target Interrupt** - the marker bar now remembers your **saved focus marker** (set it out
   of combat with a chat confirmation; in combat it just marks your target).
 
 ## 1.0.0-beta.1
 
 First public release of the platform. Everything ships as one download.
 
-- **[NEW]** **Twisteds Addon Platform** — a single hub (`/tap`) that hosts every tool under one
+- **[NEW]** **Twisteds Addon Platform** - a single hub (`/tap`) that hosts every tool under one
   shared look, with live on/off toggles per module and a built-in "What's New" for each.
-- **[NEW]** **Combat Alerts** — build your own rule-based audible & visual cues (no target, out of
+- **[NEW]** **Combat Alerts** - build your own rule-based audible & visual cues (no target, out of
   range, aggro, pet down, item ready). Includes a spell/item search backed by an optional bundled
   database. *(Grew out of the standalone "Twisteds Combat Cues".)*
-- **[NEW]** **Focus Target Interrupt** — one-key focus + mark macro, an on-screen raid-marker bar
+- **[NEW]** **Focus Target Interrupt** - one-key focus + mark macro, an on-screen raid-marker bar
   (movable, resizable, recolorable, row or column), and auto-detected interrupt/stun macros for
   your spec and talents.
-- **[NEW]** **Rotation Assistant** — draws the keybind of Blizzard's suggested next ability on
+- **[NEW]** **Rotation Assistant** - draws the keybind of Blizzard's suggested next ability on
   screen (show-only), with cast-vs-instant, GCD sweep, out-of-range, and out-of-resource indicators.
-- **[NEW]** **TAP&#95;GameDB** — an optional, load-on-demand spell/item name database, loaded
+- **[NEW]** **TAP&#95;GameDB** - an optional, load-on-demand spell/item name database, loaded
   centrally by the platform only when a search needs it.
 
 ### Notes
 
-- **[CHANGE]** The old standalone *Twisteds Combat Cues* has been split into two focused modules —
-  **Combat Alerts** and **Focus Target Interrupt** — and rebuilt on the shared platform UI.
+- **[CHANGE]** The old standalone *Twisteds Combat Cues* has been split into two focused modules -
+  **Combat Alerts** and **Focus Target Interrupt** - and rebuilt on the shared platform UI.
 - **[CHANGE]** Alert **group-range** checks are hidden: Blizzard's API changes make them unreliable
   across all content, so alerts prefer a spell-range check to your target instead.
 - **[KNOWN]** Exported alert strings from the old add-on still import (the `TCCX1!` format is

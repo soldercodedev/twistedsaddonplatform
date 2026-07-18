@@ -27,10 +27,22 @@ function Comp.Summarize(players)
         shareDPS = 0, shareHPS = 0,
         members = {},
     }
+    -- Pre-pass: detect support/buff DPS (Augmentation) so DPS shares can be reshaped (aug down,
+    -- teammates up). Stored on the summary so the per-player baseline uses the SAME adjusted shares.
+    local A = Cfg.throughput.augmentation
+    local augCount, nDPS = 0, 0
+    for _, p in ipairs(players or {}) do
+        if p.role == "DAMAGER" then
+            nDPS = nDPS + 1
+            if A and A.specs[p.specID] then augCount = augCount + 1 end
+        end
+    end
+    sum.augAdjust = (augCount > 0) and { count = augCount, nNonAugDPS = nDPS - augCount } or nil
+
     for _, p in ipairs(players or {}) do
         local prof = Cap.Get(p.specID, p.role)
-        sum.shareDPS = sum.shareDPS + Cfg.ThroughputShare("dps", p.role, p.specID)
-        sum.shareHPS = sum.shareHPS + Cfg.ThroughputShare("hps", p.role, p.specID)
+        sum.shareDPS = sum.shareDPS + Cfg.ThroughputShare("dps", p.role, p.specID, sum.augAdjust)
+        sum.shareHPS = sum.shareHPS + Cfg.ThroughputShare("hps", p.role, p.specID, sum.augAdjust)
         local ip = (prof.interrupt and prof.interrupt.profile) or "NONE"
         local dp = (prof.dispel and prof.dispel.profile) or "NONE"
         local entry = { specID = p.specID, role = p.role, interruptProfile = ip, dispelProfile = dp,

@@ -5,6 +5,11 @@
 # THIRD_PARTY_NOTICES) belong in the repo.
 # ─────────────────────────────────────────────────────────────────────────────
 
+/betaportal/
+
+# Local agent doc: how to pull beta run logs from the portal API (never shipped)
+/PULL_LOGS.md
+
 # Reference copy of the old standalone addon (kept locally, never shipped)
 /_TCC_source/
 

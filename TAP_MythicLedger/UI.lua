@@ -2081,6 +2081,35 @@ local function renderSettings(b, C, x, y, w, win)
             sub = "When off, no runs are recorded and recaps stop. Your saved history is kept." })
     end
 
+    b:Sub("TOOLTIPS", x, y); y = y - 30
+    toggle("Show my history with a player on their tooltip", function() return s.playerTooltip ~= false end,
+        function(v) s.playerTooltip = v end,
+        "Adds your shared Mythic+ history (keys together, timed %, best key, averages, your notes) to a "
+        .. "player's Blizzard tooltip - on party/raid frames & nameplates, the group finder, /who, the "
+        .. "guild roster, community lists, and your friends list - only for people you've actually keyed with.")
+
+    -- Per-surface toggles (only meaningful while the master switch above is on, so they show only then).
+    if s.playerTooltip ~= false then
+        local surf = s.tooltipSurfaces
+        if type(surf) ~= "table" then surf = {}; s.tooltipSurfaces = surf end
+        b:Label("Show on:", x + 20, y - 2, C.subtext); y = y - 24
+        local SURFACES = {
+            { "unit",      "Unit frames & nameplates", "Party/raid frames, nameplates, and world unit tooltips." },
+            { "lfg",       "Group finder",             "Search-result entries in the Mythic+ group finder." },
+            { "friends",   "Friends list",             "Your friends-list hover tooltip." },
+            { "who",       "/who results",             "Rows in the /who results window." },
+            { "guild",     "Guild roster",             "Rows in the guild roster." },
+            { "community", "Communities",              "Member rows in community / club lists." },
+        }
+        for _, it in ipairs(SURFACES) do
+            local key, lbl, tip = it[1], it[2], it[3]
+            local tg = b:Toggle(x + 24, y, surf[key] ~= false, function(v) surf[key] = v; win:Refresh() end)
+            b.theme:SetTip(tg, lbl, tip)
+            b:Label(lbl, x + 70, y - 2, C.text); y = y - 28
+        end
+        y = y - 4
+    end
+
     b:Sub("STAT TILES", x, y); y = y - 30
     b:Label("Tile style", x, y - 2, C.subtext)
     T(b, b:Dropdown(x + 90, y), "Stat tile style",

@@ -17,6 +17,15 @@ local DEFAULTS = {
     settings = {
         trackAbandoned     = true,
         postRunSummary     = true,
+        playerTooltip      = true,      -- master: add your shared run history to a player's Blizzard tooltip
+        tooltipSurfaces = {             -- which tooltip surfaces get the ledger block (each defaults on)
+            unit      = true,           -- unit frames / nameplates / world
+            lfg       = true,           -- group-finder search entries
+            friends   = true,           -- friends list
+            who       = true,           -- /who results
+            guild     = true,           -- guild roster
+            community = true,           -- community member lists
+        },
         postRunAfterLoot   = false,     -- true = wait to pop the summary until you loot the run-end chest
         postRunDelay       = 5,         -- seconds to wait after the trigger before the summary pops (0 = instant)
         confirmAbandonSave = true,

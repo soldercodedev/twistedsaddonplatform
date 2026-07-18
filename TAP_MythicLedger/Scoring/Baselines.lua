@@ -34,9 +34,10 @@ function Base.EffectiveGroupTotals(players, summary, raw)
     local out = { dps = 0, hps = 0, interrupts = raw.interrupts, dispels = raw.dispels }
     local sDPS, sHPS = (summary and summary.shareDPS) or 0, (summary and summary.shareHPS) or 0
     local gDPS, gHPS = raw.dps or 0, raw.hps or 0
+    local aug = summary and summary.augAdjust
     for _, p in ipairs(players or {}) do
-        local shD = Cfg.ThroughputShare("dps", p.role, p.specID)
-        local shH = Cfg.ThroughputShare("hps", p.role, p.specID)
+        local shD = Cfg.ThroughputShare("dps", p.role, p.specID, aug)
+        local shH = Cfg.ThroughputShare("hps", p.role, p.specID, aug)
         local expD = (sDPS > 0 and gDPS > 0 and shD > 0) and (gDPS * shD / sDPS) or nil
         local expH = (sHPS > 0 and gHPS > 0 and shH > 0) and (gHPS * shH / sHPS) or nil
         out.dps = out.dps + (expD and math.min(p.dps or 0, expD) or (p.dps or 0))
@@ -57,8 +58,8 @@ function Base.Throughput(norm, summary, groupTotals)
     local gDPS, gHPS = groupTotals.dps or 0, groupTotals.hps or 0
     local sDPS, sHPS = summary.shareDPS or 0, summary.shareHPS or 0
 
-    local myDPSshare = Cfg.ThroughputShare("dps", role, norm.specID)
-    local myHPSshare = Cfg.ThroughputShare("hps", role, norm.specID)
+    local myDPSshare = Cfg.ThroughputShare("dps", role, norm.specID, summary.augAdjust)
+    local myHPSshare = Cfg.ThroughputShare("hps", role, norm.specID, summary.augAdjust)
 
     local expDPS = (sDPS > 0 and gDPS > 0 and myDPSshare > 0) and (gDPS * myDPSshare / sDPS) or nil
     local expHPS = (sHPS > 0 and gHPS > 0 and myHPSshare > 0) and (gHPS * myHPSshare / sHPS) or nil

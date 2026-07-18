@@ -7,52 +7,18 @@ ML.CHANGELOG = [==[
 
 ## 1.0.0-beta.5
 
-A big accuracy pass on the scoring engine, a new at-a-glance **Group Utility** panel, and a couple of
-capture fixes. We pulled a batch of real logged keys and used the actual numbers to bring interrupts,
-dispels, throughput and survival in line with what really happens in a dungeon. Everything below
-**re-scores your existing runs automatically**, so your history updates to the new math on login.
+A scoring accuracy pass, two new features - a **Group Utility** panel and **shared-history player tooltips** - and a couple of capture fixes. Scoring changes below **re-score your existing runs automatically** on login.
 
-- **[NEW]** **At-a-glance Group Utility.** The run details page and the end-of-run scoreboard now show a
-  **Group Utility** panel - your party's total **interrupts**, **target buffs** purged/soothed, and
-  **debuffs** cleansed, each as landed vs expected. Hover the dispel tiles to see exactly which enemy
-  buffs and player debuffs were dispellable in that dungeon, with spell icons. (The meter only reports one
-  combined dispel count, so the purge-vs-cleanse split is attributed by each player's capability - single-
-  axis dispellers are exact, dual-axis ones split by their expected share.)
-- **[CHANGE]** **Interrupt & dispel expectations are now built from real runs.** Each dungeon's expected
-  kicks and dispels used to be a rough estimate; they're now calibrated to logged data, per dungeon -
-  some dungeons simply throw more interruptible casts than others, and your target reflects that. The
-  old model badly under-counted how much a coordinated group actually kicks, so expectations are higher
-  and more realistic across the board. These will keep getting refined as more runs come in.
-- **[CHANGE]** **Time in combat now shapes interrupt & dispel expectations.** If you blast a pack - or a
-  boss - down before its casts come around, there was simply less to interrupt, and the score knows that
-  now. Trash expectations scale with how long the run took; each **boss** scales with how long that boss
-  was actually up, since its mechanics recycle the longer the fight runs - a slow kill offers more kicks
-  and dispels than a burst, and a boss dropped before its cast comes around offers almost none. Same
-  dungeon, a 19-minute key and a 26-minute key are no longer held to the same number.
-- **[CHANGE]** **Carrying a slacker no longer hands them a free pass.** If a teammate over-performs and
-  covers interrupts/dispels you never got a chance at, you're still not punished for a cast that was
-  gone before you reached it. But the old system forgave that shortfall **completely** - so a player who
-  just wasn't pressing their button could ride their group to a perfect Utility score. There's now a
-  middle ground: teammates covering for you helps, but only **halfway**. Plainly under-use your kit and
-  it will show up.
-- **[CHANGE]** **Tank damage counts for more.** Measuring logged runs against the model, tanks were
-  contributing a lot more of the group's damage than we were crediting them for - so tank Throughput was
-  scoring a touch too easily. The role split was rebalanced to match reality (and DPS off-healing now
-  counts for a little more, too).
-- **[CHANGE]** **Party members are scored on their real spec when we can see it.** A pug's spec isn't
-  broadcast to addons, so interrupts/throughput ran off a generic class guess - which could credit, say,
-  a Beast Mastery Hunter with a 15-second kick it doesn't have. We now use the spec from the start-of-run
-  talent inspection when it lands (and store it), and for an un-inspected Hunter DPS default to the far-
-  more-common Counter Shot (long cooldown) rather than assuming a short kick.
-- **[CHANGE]** **Survival is a bit more forgiving.** The grace band for avoidable damage widened
-  slightly (nobody plays perfectly clean), and the point where Survival bottoms out moved from **40% to
-  50%** of your total damage taken being avoidable. Same steep "don't stand in it" curve - just a little
-  more breathing room before it bites.
-- **[BUG FIX]** **Runs that finish on trash now record their stats.** When a key completed on **trash**
-  instead of the last boss (short on enemy forces, went back to clear), the run was saved while you were
-  still in combat - and the Midnight meter only reads out of combat, so DPS/HPS/interrupt/dispel numbers
-  came back empty. Finalizing now waits for combat to drop first. Boss splits were always fine; this
-  fixes the run totals.
+- **[NEW]** **At-a-glance Group Utility.** Run details and the scoreboard now show a **Group Utility** panel: party totals for **interrupts**, **buffs purged/soothed**, and **debuffs cleansed**, each landed vs expected. Hover the dispel tiles for what was dispellable, with icons.
+- **[NEW]** **Your shared history, right on their tooltip.** Mouse over anyone you've keyed with - frames, group finder, /who, guild, communities, friends - and their tooltip shows your shared history: keys together, timed %, best key, **average score**, and your notes. Sits **under** RaiderIO without replacing it; toggle each surface in **Settings > Tooltips**.
+- **[CHANGE]** **Interrupt & dispel expectations are built from real runs.** Each dungeon's expected kicks and dispels are now calibrated from logged data instead of estimates - and higher, since the old model under-counted a coordinated group. The last untuned dungeons (Skyreach, Windrunner Spire, Nexus-Point Xenas) are dialed in too.
+- **[CHANGE]** **Time in combat shapes interrupt & dispel expectations.** They now scale with time in combat - trash with run length, each **boss** with how long it was up. A 19-minute key and a 26-minute key are no longer held to the same number.
+- **[CHANGE]** **Carrying a slacker no longer hands them a free pass.** A teammate covering interrupts/dispels for you now only helps **halfway** - the old system forgave the shortfall completely, so a lazy player could ride the group to a perfect Utility score.
+- **[CHANGE]** **Tank damage counts for more.** Tanks contribute more of the group's damage than we credited, so tank Throughput scored too easily. Rebalanced to match; DPS off-healing counts for a little more too.
+- **[CHANGE]** **Augmentation Evokers are scored as the support spec they are.** An Aug's Throughput bar now drops to about **half** a normal DPS's, with that share handed to the teammates it buffs - most to damage-dealers, a little to tank and healer. It shouldn't be graded on personal damage when its job is pumping everyone else's.
+- **[CHANGE]** **Party members are scored on their real spec when we can see it.** We now use the start-of-run talent inspection when it lands instead of a class guess - so a Beast Mastery Hunter isn't credited with a kick it doesn't have. Un-inspected Hunter DPS defaults to Counter Shot (long cooldown).
+- **[CHANGE]** **Survival is a bit more forgiving.** A wider avoidable-damage grace band, and it now bottoms out at **50%** of your damage taken being avoidable (was 40%).
+- **[BUG FIX]** **Runs that finish on trash now record their stats.** A key that completed on **trash** instead of the last boss saved while still in combat, so the Midnight meter (out-of-combat only) returned empty totals. Finalizing now waits for combat to drop; boss splits were unaffected.
 
 ## 1.0.0-beta.4
 

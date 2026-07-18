@@ -96,7 +96,20 @@ Scoring.Config = Config
 --      (mergePartyStats) and preferred at scoring time (Normalize, retroactive via run.dispelCapture). For
 --      an un-inspected member whose class DPS specs disagree on interrupt tier, a per-class representative
 --      is used (Hunter DPS -> BM / LONG_CD) instead of the blanket STANDARD guess. Retroactive rescore.
-Config.version = 30
+-- v31: Skyreach + Windrunner Spire interrupt supply corrected from placeholder estimates to observed data.
+--      Both trash.interruptFrequency were guesses ("no +10 data yet"): Skyreach 0.335 -> 1.15, Windrunner
+--      Spire 0.38 -> 2.0 (boss-subtracted trash kicks/min ~1.25 / ~2.3 observed, held slightly under given
+--      n=2 each). The old values were ~4-6x too low, so interrupt scores in those two dungeons were badly
+--      inflated. Retroactive rescore.
+-- v32: Augmentation Evoker (support/buff DPS) is now throughput-adjusted. An aug is expected to do only
+--      half a normal DPS's personal damage (it inflates everyone else's), and the freed share is handed to
+--      the teammates it pumps - split 0.35 across the non-aug DPS, 0.10 to the tank, 0.05 to the healer
+--      (sums to the 0.5 the aug gave up, so the group's total expected damage is conserved and just
+--      redistributed). See throughput.augmentation. Only affects groups containing an aug. Retroactive rescore.
+-- v33: Nexus-Point Xenas interrupt supply corrected from placeholder to observed data. trash.interruptFrequency
+--      0.385 -> 1.40 (obs ~1.44 boss-subtracted trash kicks/min, n=2 real +10). The last "no data yet" guess;
+--      old value was ~3.7x too low, so interrupt scores there were badly inflated. Retroactive rescore.
+Config.version = 33
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -499,14 +512,42 @@ Config.throughput = {
     -- Healer HPS soft cap: above softCapRatio of baseline, extra HPS yields sharply less (excess
     -- healing usually = avoidable damage taken, which is penalized under survival instead).
     healerSoftCapRatio = 1.15,
+    -- Support / buff DPS (e.g. Augmentation Evoker) do less PERSONAL damage because they inflate
+    -- everyone else's. We drop their throughput bar to `selfShare` of a normal DPS and hand the freed
+    -- share to the teammates they're pumping - so the aug isn't punished for buffing, and the buffed
+    -- teammates aren't over-credited for numbers the aug is really producing. `redistribute` deltas are
+    -- ADDED to each role's DPS share and sum to (1 - selfShare), so the group's total expected damage is
+    -- conserved (the DAMAGER delta is split evenly across the non-aug DPS). DPS shares only - it's a
+    -- damage buff, so HPS bars are untouched. Applied per aug present (M+ is effectively always <= 1).
+    augmentation = {
+        specs = { [1473] = true },   -- Augmentation Evoker
+        selfShare = 0.5,             -- an aug's personal bar = half a normal DPS...
+        redistribute = { DAMAGER = 0.35, TANK = 0.10, HEALER = 0.05 },  -- ...the freed 0.5 goes here
+    },
 }
 
 -- A player's SHARE weight for a metric (drives the group-relative expected value). Deterministic.
-function Config.ThroughputShare(metric, role, specID)
+-- `aug` (optional) = the run's Augmentation context { count, nNonAugDPS } from Comp.Summarize; when a
+-- support/buff DPS is present it reshapes the DPS shares (aug down, teammates up) - see throughput.augmentation.
+function Config.ThroughputShare(metric, role, specID, aug)
     local gs = Config.throughput.groupShare[metric]
     local base = (gs and gs[role or "DAMAGER"]) or 0
     if metric == "hps" and role == "TANK" then
         base = base * (Config.throughput.tankHealiness[specID] or 1.0)
+    end
+    -- Augmentation (support DPS) reshapes DPS shares only: the aug's bar drops, the freed share is
+    -- handed to the teammates it buffs. Conserves the total DPS share so gDPS is redistributed, not lost.
+    if metric == "dps" and aug and (aug.count or 0) > 0 then
+        local A = Config.throughput.augmentation
+        if role == "DAMAGER" and A.specs[specID] then
+            base = base * A.selfShare                                        -- the aug itself
+        elseif role == "DAMAGER" and (aug.nNonAugDPS or 0) > 0 then
+            base = base + (A.redistribute.DAMAGER or 0) * aug.count / aug.nNonAugDPS
+        elseif role == "TANK" then
+            base = base + (A.redistribute.TANK or 0) * aug.count
+        elseif role == "HEALER" then
+            base = base + (A.redistribute.HEALER or 0) * aug.count
+        end
     end
     return base
 end
