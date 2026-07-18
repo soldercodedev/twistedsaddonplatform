@@ -2,7 +2,7 @@
 ## Title: |cffa06cf0TAP:|r Combat Alerts
 ## Notes: Combat-safe, rule-based audible & visual alerts, as a module of the Twisteds Addon Platform. Configure with /tap.
 ## Author: Twistedfury-Zul'jin
-## Version: 1.0.0-beta.3
+## Version: 1.0.0
 ## Category: Twisteds Combat Alerts
 ## SavedVariables: TAP_CombatAlertsDB
 ## SavedVariablesPerCharacter: TAP_CombatAlertsCharDB

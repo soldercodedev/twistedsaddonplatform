@@ -10,6 +10,10 @@ if not Suite then return end
 local CHANGELOG = [==[
 # Focus Target Interrupt - What's New
 
+## 1.0.0
+
+- **[CHANGE]** Out of beta - Focus Target Interrupt is now a stable 1.0 release.
+
 ## 1.0.0-beta.3
 
 - **[CHANGE]** **Tabbed layout.** The page is now split into tabs - **Macros**, **Marker Palette**,

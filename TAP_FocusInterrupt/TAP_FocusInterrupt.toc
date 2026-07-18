@@ -3,7 +3,7 @@
 ## Notes: Focus + mark macros, an on-screen raid-marker palette, focus call-outs, and auto-detected interrupt / stun macros for your spec. A module of the Twisteds Addon Platform - configure with /tap.
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
 ## Author: Twistedfury-Zul'jin
-## Version: 1.0.0-beta.3
+## Version: 1.0.0
 ## Category: Twisteds Focus Target Interrupt
 ## X-Curse-Project-Name: TAP_FocusInterrupt
 ## Dependencies: TAP

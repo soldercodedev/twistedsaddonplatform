@@ -4,6 +4,10 @@ local _, TCC = ...
 TCC.CHANGELOG = [==[
 # Twisteds Combat Alerts - What's New
 
+## 1.0.0
+
+- **[CHANGE]** Out of beta - Twisteds Combat Alerts is now a stable 1.0 release.
+
 ## 1.0.0-beta.3
 
 - **[CHANGE]** **Tabbed layout.** The page is now split into tabs - **Alerts**, **Profiles**, and

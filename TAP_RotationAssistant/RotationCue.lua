@@ -1124,11 +1124,13 @@ local function Settings(m, b, x, y, w, win)
             cy = cy - 16
         end
 
-        -- Compatibility note (bottom of the Behavior tab).
+        -- Compatibility note (bottom of the Behavior tab) - accent + outlined so it pops, matching
+        -- the What's New callout.
         cy = cy - 6
-        local _, nh = b:Wrap("Note: the cue reads keybinds from Action Bars 1-5 only - the bars listed "
+        local nfs, nh = b:Wrap("Note: the cue reads keybinds from Action Bars 1-5 only - the bars listed "
             .. "under Action Bars in the keybinding editor. Keys bound solely on third-party action-bar "
-            .. "addons may not be picked up.", x, cy, w - 2, C.subtext, 10)
+            .. "addons may not be picked up.", x, cy, w - 2, C.accent, 10)
+        nfs:SetFont(b.theme.FONT, 10, "OUTLINE")
         cy = cy - (nh + 8)
         return cy
     end
