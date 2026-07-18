@@ -144,7 +144,7 @@ end
 ----------------------------------------------------------------------
 -- Three opt-in card styles (opts.style) sharing one formula - label / big value / supporting
 -- subtext / icon - with distinct treatments. Used by the Mythic Ledger Overview (chosen in its
--- Settings); any caller that omits opts.style gets the original behaviour below untouched.
+-- Settings); any caller that omits opts.style gets the original behavior below untouched.
 --   "clean"   - flat card, thin accent-tinted border, minimal corner glyph, one subtext line
 --   "panel"   - darker "stone" card, framed accent icon badge, value glow, accent gem + rank meter
 --   "compact" - flat card, big value, a two-line data footer (Best / range / last-N / this week)

@@ -124,7 +124,7 @@ local driver                 -- event-only driver frame (the poll is a C_Timer t
 local slotToButton = {}      -- reverse map: action slot -> the action button frame that owns it
 local keyCache = {}          -- spellID -> resolved key string (false = looked-up-but-unbound)
 local glowing = {}           -- spellID -> true while its proc (spell activation overlay) is up
-local uiTab = "behaviour"     -- active settings page (docked top-nav): behaviour | indicators | appearance
+local uiTab = "behavior"     -- active settings page (docked top-nav): behavior | indicators | appearance
 local testMode = false       -- preview mode (settings page / placement) - shows the cue on-demand
 local placing = false        -- true only while in placement mode (the ONLY time the cue is draggable)
 local inCombat = false       -- tracked from REGEN events (reliable, unlike InCombatLockdown timing)
@@ -223,6 +223,38 @@ local function keyForButton(btn)
     return nil
 end
 
+-- The standard Blizzard binding command for an ACTION SLOT (1-120), by the fixed slot range each bar
+-- owns. This lets us resolve a keybind straight from the slot FindSpellActionButtons reports even when
+-- NO button frame was harvested for it (a bar addon we don't recognise, or a bar whose frames aren't
+-- named/registered where we look - the "NO BUTTON MAPPED -> ?" case). Each MultiBar owns a contiguous
+-- 12-slot block; the main bar (1-12) assumes page 1 / no active bonus bar, which is the common case.
+local SLOT_RANGES = {
+    { 1,  "ACTIONBUTTON" },            -- 1-12   Action Bar 1 (main, page 1)
+    { 25, "MULTIACTIONBAR3BUTTON" },   -- 25-36  Right bar
+    { 37, "MULTIACTIONBAR4BUTTON" },   -- 37-48  Left bar
+    { 49, "MULTIACTIONBAR2BUTTON" },   -- 49-60  Bottom Right bar
+    { 61, "MULTIACTIONBAR1BUTTON" },   -- 61-72  Bottom Left bar
+    { 73, "MULTIACTIONBAR5BUTTON" },   -- 73-84  Action Bar 6
+    { 85, "MULTIACTIONBAR6BUTTON" },   -- 85-96  Action Bar 7
+    { 97, "MULTIACTIONBAR7BUTTON" },   -- 97-108 Action Bar 8
+}
+local function commandForSlot(slot)
+    if type(slot) ~= "number" then return nil end
+    for _, r in ipairs(SLOT_RANGES) do
+        local base = r[1]
+        if slot >= base and slot <= base + 11 then return r[2] .. (slot - base + 1) end
+    end
+    return nil
+end
+
+-- Keybind for an action SLOT via its standard binding command (fallback for keyForButton).
+local function keyForSlot(slot)
+    local cmd = commandForSlot(slot)
+    if not cmd then return nil end
+    local key = GetBindingKey(cmd)
+    return key and abbrev(key) or nil
+end
+
 -- Harvest every LibActionButton-1.0 instance (ElvUI/Bartender/Dominos each embed their own copy).
 local function harvestLAB(add)
     local LibStub = _G.LibStub
@@ -272,10 +304,11 @@ local function keybindForSpell(spellID)
         for _, slot in ipairs(slots) do
             if UIF.CanRead(slot) then
                 local btn = slotToButton[slot]
-                if btn then
-                    local k = keyForButton(btn)
-                    if k then resolved = k; break end
-                end
+                -- Prefer the live button's key; fall back to the slot's standard binding command when no
+                -- button frame was harvested for that slot (e.g. an unrecognised bar addon) so it still
+                -- resolves instead of showing "?".
+                local k = (btn and keyForButton(btn)) or keyForSlot(slot)
+                if k then resolved = k; break end
             end
         end
     end
@@ -846,7 +879,7 @@ end
 -- `win` (the manager window) lets us re-render when a control changes what's shown (e.g.
 -- picking the Custom text position reveals the X / Y sliders).
 local TAB_TIPS = {
-    behaviour  = "When the cue shows, who it shows for, performance, and placement.",
+    behavior  = "When the cue shows, who it shows for, performance, and placement.",
     indicators = "On-icon feedback: cast vs instant, GCD sweep, out of range, and can't-afford.",
     appearance = "Icon shape/size, border, keybind text, and a live preview.",
     settings   = "Enable or disable the module, and the minimap button.",
@@ -910,9 +943,9 @@ local function Settings(m, b, x, y, w, win)
     end
 
     -- Sections as grid cells: fn(cellX, cellWidth, cellTopY) -> ending y.
-    local function behaviourCell(cx, cw, cy)
+    local function behaviorCell(cx, cw, cy)
         local P = pen(cx, cw, cy)
-        P:sub("BEHAVIOUR")
+        P:sub("BEHAVIOR")
         P:toggle("Only on a visible button", "visibleOnly", false,
             "Only suggest an ability that's on a currently-visible action button.")
         local tg = b:Toggle(P.x, P.y, s.showGlow ~= false, function(v) s.showGlow = v; refresh() end)
@@ -1058,9 +1091,9 @@ local function Settings(m, b, x, y, w, win)
     -- the appearance controls so it updates live as you drag the sliders.
     if not preview then preview = buildCueFrame(b.content) end
 
-    -- Behaviour page: Behaviour + Visibility cells, then the full-width Performance / Minimap / actions.
-    local function renderBehaviour(cy)
-        cy = b:Grid(x, cy, { behaviourCell, visibilityCell }, { columns = 2, gap = 24, width = w, minColWidth = 240 })
+    -- Behavior page: Behavior + Visibility cells, then the full-width Performance / Minimap / actions.
+    local function renderBehavior(cy)
+        cy = b:Grid(x, cy, { behaviorCell, visibilityCell }, { columns = 2, gap = 24, width = w, minColWidth = 240 })
         cy = cy - 8
 
         -- Performance (full width)
@@ -1090,6 +1123,13 @@ local function Settings(m, b, x, y, w, win)
             b:Label("|cffffaa00Note:|r C_AssistedCombat.GetNextCastSpell isn't available on this client.", x, cy, C.subtext, 10)
             cy = cy - 16
         end
+
+        -- Compatibility note (bottom of the Behavior tab).
+        cy = cy - 6
+        local _, nh = b:Wrap("Note: the cue reads keybinds from Action Bars 1-5 only - the bars listed "
+            .. "under Action Bars in the keybinding editor. Keys bound solely on third-party action-bar "
+            .. "addons may not be picked up.", x, cy, w - 2, C.subtext, 10)
+        cy = cy - (nh + 8)
         return cy
     end
     -- Preview strip: the four indicators laid 4-across, each a demo cue styled from the Appearance
@@ -1124,7 +1164,7 @@ local function Settings(m, b, x, y, w, win)
         cy = b:Grid(x, cy, { iconCell, borderCell, keybindCell, previewCell }, { columns = 2, gap = 22, width = w, minColWidth = 240 })
         return cy - 8
     end
-    -- SETTINGS page: the master enable/disable and the minimap button (moved here from Behaviour).
+    -- SETTINGS page: the master enable/disable and the minimap button (moved here from Behavior).
     local function renderSettings(cy)
         cy = b:ModuleToggle(x, cy, w, m, { onToggle = function() if win then win:Refresh() end end,
             sub = "When off, the on-screen cue is hidden and all its checks stop; your settings are kept." })
@@ -1145,7 +1185,7 @@ local function Settings(m, b, x, y, w, win)
     if win and win.SetTopNav then
         win:SetTopNav({
             items = {
-                { key = "behaviour",  label = "Behaviour",  icon = "adjustments-horizontal" },
+                { key = "behavior",  label = "Behavior",  icon = "adjustments-horizontal" },
                 { key = "indicators", label = "Indicators", icon = "activity" },
                 { key = "appearance", label = "Appearance", icon = "palette" },
                 { key = "settings",   label = "Settings",   icon = "settings" },
@@ -1170,7 +1210,7 @@ local function Settings(m, b, x, y, w, win)
     elseif uiTab == "settings" then
         y = renderSettings(y)
     else
-        y = renderBehaviour(y)
+        y = renderBehavior(y)
     end
     return y
 end
@@ -1181,9 +1221,13 @@ end
 local CHANGELOG = [==[
 # Rotation Assistant - What's New
 
-## 1.0.0-beta.3
+## 1.0.0
 
-- **[CHANGE]** **Tabbed layout.** The page is now split into tabs - **Behaviour**, **Indicators**,
+- **[CHANGE]** Out of beta - Rotation Assistant is now a stable 1.0 release.
+- **[NOTE]** The on-screen cue reads keybinds from **Action Bars 1-5** only - the bars listed under
+  Action Bars in the keybinding editor. Keys bound solely on third-party action-bar addons may not
+  be picked up.
+- **[CHANGE]** **Tabbed layout.** The page is now split into tabs - **Behavior**, **Indicators**,
   **Appearance**, and **Settings** - docked under the title bar, instead of one long scrolling page.
   Everything's in the same place, just quicker to get to.
 - **[BUG FIX]** Picks up the latest shared appearance fixes - custom theme colors now save correctly
@@ -1314,9 +1358,10 @@ SlashCmdList["TWROTCUE"] = function()
             p("  slot <secret>")
         else
             local btn = slotToButton[slot]
-            p(("  slot %s -> %s  key=%s"):format(tostring(slot),
+            p(("  slot %s -> %s  btnKey=%s  slotKey=%s (%s)"):format(tostring(slot),
                 btn and (btn:GetName() or "unnamed") or "|cffff6666NO BUTTON MAPPED|r",
-                tostring(btn and keyForButton(btn))))
+                tostring(btn and keyForButton(btn)), tostring(keyForSlot(slot)),
+                tostring(commandForSlot(slot) or "no std binding")))
         end
     end
     p("resolved keybind: " .. tostring(keybindForSpell(id)))

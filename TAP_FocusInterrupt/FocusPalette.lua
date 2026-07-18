@@ -2,7 +2,7 @@
 -- The on-screen marker palette (Focus Tools): a small movable bar of the 8 raid markers. Each
 -- button is SECURE (macrotext = /focus + /tm ~i), so clicking one focuses + marks your target
 -- live, even in combat, and makes it your focus marker. Extracted from the old self-skinned UI
--- and re-skinned on the suite theme; the behaviour is unchanged.
+-- and re-skinned on the suite theme; the behavior is unchanged.
 
 local addonName, FTI = ...
 local UIF   = _G.UIFoundry
