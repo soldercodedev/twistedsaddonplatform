@@ -184,9 +184,9 @@ end
 local function renderChangelog(content, wrapW, blocks)
     local C = theme.C
     local y = -4
-    local function line(size, color, w2, xoff, s)
+    local function line(size, color, w2, xoff, s, flags)
         local fs = content:CreateFontString(nil, "OVERLAY")
-        fs:SetFont(theme.FONT, size); fs:SetJustifyH("LEFT"); fs:SetWordWrap(true); fs:SetWidth(w2)
+        fs:SetFont(theme.FONT, size, flags); fs:SetJustifyH("LEFT"); fs:SetWordWrap(true); fs:SetWidth(w2)
         fs:SetText(s); fs:SetTextColor(color[1], color[2], color[3])
         fs:SetPoint("TOPLEFT", xoff, y)
         y = y - (fs:GetStringHeight() or size) - 5
@@ -199,13 +199,18 @@ local function renderChangelog(content, wrapW, blocks)
             y = y - 4; line(11, C.subtext, wrapW, 4, txt:upper())
         elseif blk.kind == "bullet" then
             local tag = blk.tag and blk.tag:upper()
-            local prefix = ""
-            if tag then
-                local c = TAG_COLOR[tag] or C.subtext
-                prefix = string.format("|cff%02x%02x%02x[%s]|r  ",
-                    math.floor(c[1] * 255), math.floor(c[2] * 255), math.floor(c[3] * 255), tag)
+            if tag == "NOTE" then
+                -- A callout: the whole line in the theme accent, outlined so it reads as bold and pops.
+                line(12, C.accent, wrapW - 14, 14, "|cff888888-|r  " .. txt, "OUTLINE")
+            else
+                local prefix = ""
+                if tag then
+                    local c = TAG_COLOR[tag] or C.subtext
+                    prefix = string.format("|cff%02x%02x%02x[%s]|r  ",
+                        math.floor(c[1] * 255), math.floor(c[2] * 255), math.floor(c[3] * 255), tag)
+                end
+                line(12, C.text, wrapW - 14, 14, "|cff888888-|r  " .. prefix .. txt)
             end
-            line(12, C.text, wrapW - 14, 14, "|cff888888-|r  " .. prefix .. txt)
         else
             line(12, C.text, wrapW, 4, txt)
         end

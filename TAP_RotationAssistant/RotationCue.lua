@@ -1227,6 +1227,9 @@ local CHANGELOG = [==[
 - **[NOTE]** The on-screen cue reads keybinds from **Action Bars 1-5** only - the bars listed under
   Action Bars in the keybinding editor. Keys bound solely on third-party action-bar addons may not
   be picked up.
+
+## 1.0.0-beta.3
+
 - **[CHANGE]** **Tabbed layout.** The page is now split into tabs - **Behavior**, **Indicators**,
   **Appearance**, and **Settings** - docked under the title bar, instead of one long scrolling page.
   Everything's in the same place, just quicker to get to.
