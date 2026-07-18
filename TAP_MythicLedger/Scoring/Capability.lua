@@ -270,17 +270,33 @@ local function fallback(role)
     }
 end
 
--- Get the capability profile for a spec id. When the id is unknown, recover from class+role (so a real
--- capture missing the exact spec still resolves e.g. Shaman/Healer -> Restoration) before the generic,
--- role-only fallback. `classFile` is optional but lets that recovery run.
-function Cap.Get(specID, role, classFile)
-    if specID and profiles[specID] then return profiles[specID] end
-    return resolveByClassRole(classFile, role) or fallback(role)
+-- REPRESENTATIVE spec for a (class, role) whose specs disagree on their interrupt kit (so
+-- resolveByClassRole refuses to guess). Picks the build that dominates M+, so an un-inspected pug scores
+-- closer to reality than the blanket STANDARD 15s fallback. Only ambiguous DPS classes need an entry:
+--   * HUNTER DAMAGER -> Beast Mastery (253): BM + MM both use LONG_CD Counter Shot (24s); Survival's 15s
+--     Muzzle is rare in M+, so LONG_CD is the safer default than crediting a 15s kick.
+-- (Druid DAMAGER is genuinely split - Balance LONG_CD vs Feral STANDARD - so it's left to the generic
+--  fallback rather than guessing one over the other.)
+local classRoleDefault = {
+    HUNTER = { DAMAGER = 253 },
+}
+local function representative(classFile, role)
+    local sp = classFile and role and classRoleDefault[classFile] and classRoleDefault[classFile][role]
+    return sp and profiles[sp] or nil
 end
 
--- The canonical spec id for a class+role when the exact spec is unknown (nil if ambiguous/unknown).
+-- Get the capability profile for a spec id. When the id is unknown, recover from class+role: first the
+-- unambiguous resolve (e.g. Shaman/Healer -> Restoration), then a per-class representative for ambiguous
+-- DPS (Hunter DPS -> BM/LONG_CD), then the generic role-only fallback. `classFile` enables that recovery.
+function Cap.Get(specID, role, classFile)
+    if specID and profiles[specID] then return profiles[specID] end
+    return resolveByClassRole(classFile, role) or representative(classFile, role) or fallback(role)
+end
+
+-- The canonical spec id for a class+role when the exact spec is unknown: the unambiguous resolve, else a
+-- per-class representative for ambiguous DPS, else nil.
 function Cap.ResolveSpec(classFile, role)
-    local rec = resolveByClassRole(classFile, role)
+    local rec = resolveByClassRole(classFile, role) or representative(classFile, role)
     return rec and rec.specID or nil
 end
 

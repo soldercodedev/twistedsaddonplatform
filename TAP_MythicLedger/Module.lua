@@ -189,4 +189,10 @@ _G.TAPMythicLedger = {
     InspectDispels = function(onLine, onDone)
         if ML.Inspect and ML.Inspect.Run then return ML.Inspect.Run({ onLine = onLine, onDone = onDone }) end
     end,
+    -- DEV: the live scoring namespace (Config incl. supplyScale + SeasonProfile, SeasonData, Distribute,
+    -- Score). Used by the /mldev tune panel to edit seasonal interrupt/dispel frequencies in memory and
+    -- re-score. Writing to it affects scoring immediately (until /reload re-reads the files).
+    Scoring = ML.Scoring,
+    -- DEV: the stored run history (read use only), so the tuner can rescore your latest real run live.
+    Runs = function() return (ML.DB and ML.DB.Runs and ML.DB.Runs()) or {} end,
 }

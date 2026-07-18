@@ -97,3 +97,17 @@ end
 function Store.Invalidate(runId)
     if runId then fullMemo[runId] = nil else wipe(fullMemo) end
 end
+
+-- Drop ALL cached scores - the session memo AND the persisted per-run summaries - WITHOUT recomputing
+-- here (recompute happens lazily on next render). Lets an in-memory tuning edit (which changes the season
+-- data but NOT Config.version, so the caches would otherwise stay valid) flow straight through to the UI:
+-- the next time a run is shown, its score is recomputed from the CURRENT config/season numbers. The dev
+-- Season Tuner calls this after every edit; RescoreAll is the heavier, eager sibling that also repersists
+-- and re-marks best runs.
+function Store.InvalidateAll()
+    wipe(fullMemo)
+    if Scoring.Learned then Scoring.Learned.Invalidate() end
+    local sc = scoreCache()
+    if sc then sc.runs = {} end
+end
+Scoring.InvalidateScores = Store.InvalidateAll

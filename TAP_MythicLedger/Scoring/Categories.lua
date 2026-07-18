@@ -10,7 +10,6 @@ Scoring.Categories = Cat
 
 local Cfg  = Scoring.Config
 local Cap  = Scoring.Capability
-local Comp = Scoring.Composition
 local Base = Scoring.Baselines
 
 -- Contribution curve (shared interrupts/dispels): ratio -> raw score (0..maxInternal).
@@ -20,22 +19,13 @@ local function curveScore(ratio)
     return Cfg.clamp(s, 0, c.maxInternal)
 end
 
--- Confidence blend toward a neutral score (confidence in [0,1]) - but it only ever HELPS. A low group
--- sample forgives a weak showing by pulling it UP toward neutral; it NEVER drops a score below what was
--- actually earned. Meeting your target (raw 100) stays 100 even on a low-sample run: you can't be docked
--- because the run simply didn't offer many chances - that's outside your control, the same reason a
--- teammate doing more never lowers your score. So once the raw sits at/above neutral, confidence is a
--- no-op; it only lifts sub-neutral scores.
-local function blendConfidence(score, neutral, confidence)
-    local blended = neutral + (score - neutral) * Cfg.clamp(confidence, 0, 1)
-    return math.max(score, blended)
-end
-
 ----------------------------------------------------------------------
--- Interrupt contribution. Expected = minutes * specRate * compModifier. Never accuracy/responsibility.
--- groupInterruptTotal (sum of available party interrupts) drives confidence (low sample -> neutral).
+-- Interrupt contribution. Expected is the player's fair share of the RUN'S KICK SUPPLY, computed once at
+-- the run level (Scoring/Distribute.lua): season kick frequency (trash + killed bosses) capped by group
+-- capacity, split by interrupt cooldown, with sniping redistribution. This scorer just compares actual vs
+-- that expected. groupInterruptTotal (sum of available party interrupts) is surfaced as sample context.
 ----------------------------------------------------------------------
-function Cat.Interrupt(norm, summary, groupInterruptTotal)
+function Cat.Interrupt(norm, summary, groupInterruptTotal, distExpected)
     local prof = Cap.Get(norm.specID, norm.role)
     local profileKey = (prof.interrupt and prof.interrupt.profile) or "NONE"
     local pcfg = Cfg.interruptProfiles[profileKey] or Cfg.interruptProfiles.NONE
@@ -63,28 +53,37 @@ function Cat.Interrupt(norm, summary, groupInterruptTotal)
         end
     end
 
-    local minutes = (norm.durationSeconds or 0) / 60
-    -- Per-spec expected kicks/minute from this spec's real availability (CD + rotational extra stops),
-    -- not a flat per-profile number. Fall back to the coarse profile rate only if there's no CD data.
-    local rate, availPerMin = Cfg.InterruptRatePerMinute(prof.interrupt)
-    if not rate or rate <= 0 then rate = pcfg.ratePerMinute end
-    -- Names of the extra stops that contributed to the rate (for the "how targets were set" explanation).
+    -- Kit description for the "how targets were set" explanation (spell + CD + counted extra stops).
+    local irSpell = prof.interrupt and prof.interrupt.spellName
+    local irCD    = prof.interrupt and prof.interrupt.cooldownSeconds
     local extras
     for _, stop in ipairs((prof.interrupt and prof.interrupt.additionalStops) or {}) do
         if Cfg.interrupt.countedStopTypes[stop.stopType] then extras = (extras and (extras .. ", ") or "") .. (stop.spellName or "?") end
     end
-    local irSpell = prof.interrupt and prof.interrupt.spellName
-    local irCD = prof.interrupt and prof.interrupt.cooldownSeconds
-    local compMod, compDetail = Comp.InterruptModifier(norm, summary)
-    local expected = minutes * rate * compMod
     local cconf = Cfg.confidence.interrupt
     local neutral = cconf.neutralScore
+
+    -- Expected comes ENTIRELY from the run-level group distribution. No distribution (a standalone call
+    -- with no run context, or a dungeon we have no season profile for) -> no fair target exists, so we
+    -- don't grade utility: N/A, weight redistributed (never a zero for missing model).
+    if not (distExpected and type(distExpected.expected) == "number") then
+        return { applicable = false, profile = profileKey, noModel = true, interrupt = prof.interrupt,
+                 interruptSpell = irSpell, interruptCD = irCD, interruptExtras = extras,
+                 reason = "No interrupt expectation could be computed for this run." }
+    end
+    -- A share redistributed to ~nothing means teammates covered the kicks here - N/A, not a zero.
+    if distExpected.expected < 0.5 then
+        return { applicable = false, profile = profileKey, coveredByTeam = true, interrupt = prof.interrupt,
+                 interruptSpell = irSpell, interruptCD = irCD, interruptExtras = extras,
+                 reason = "Teammates covered the interrupts here - no fair share fell to you." }
+    end
+    local expected = distExpected.expected
+    local share, supply = distExpected.share, distExpected.supply
 
     -- No interrupt data recorded for this player -> can't grade; sit at neutral, confidence 0.
     if norm.interrupts == nil then
         return { applicable = true, profile = profileKey, score = neutral, rawScore = neutral,
-                 confidence = 0, expected = expected, actual = nil, compModifier = compMod,
-                 compDetail = compDetail, minutes = minutes, rate = rate, availPerMin = availPerMin,
+                 confidence = 0, expected = expected, actual = nil, share = share, supply = supply,
                  interruptSpell = irSpell, interruptCD = irCD, interruptExtras = extras,
                  note = "No interrupt data was recorded for this player." }
     end
@@ -94,21 +93,22 @@ function Cat.Interrupt(norm, summary, groupInterruptTotal)
     local raw = curveScore(ratio)
     local capped = math.min(raw, Cfg.contributionCurve.categoryCap)
 
-    -- Confidence: enough total interrupts in the run to trust the comparison?
+    -- Confidence is NOT applied to interrupts: the group-distributed target is accurate (boss-time is
+    -- implicit in the season supply), so a genuine 0 stays a 0. Surfaced purely as sample context.
     local confidence = Cfg.clamp((groupInterruptTotal or 0) / cconf.minGroupSample, 0, 1)
-    local final = blendConfidence(capped, neutral, confidence)
 
-    return { applicable = true, profile = profileKey, score = final, rawScore = raw, cappedScore = capped,
-             confidence = confidence, expected = expected, actual = actual, ratio = ratio,
-             compModifier = compMod, compDetail = compDetail, minutes = minutes, rate = rate,
-             availPerMin = availPerMin, interruptSpell = irSpell, interruptCD = irCD, interruptExtras = extras,
+    return { applicable = true, profile = profileKey, score = capped, rawScore = raw, cappedScore = capped,
+             confidence = confidence, confidenceApplied = false, expected = expected, actual = actual, ratio = ratio,
+             share = share, supply = supply, capacity = distExpected.capacity,
+             dungeonSupply = distExpected.dungeonSupply, groupCapacity = distExpected.groupCapacity,
+             interruptSpell = irSpell, interruptCD = irCD, interruptExtras = extras,
              neutral = neutral, groupTotal = groupInterruptTotal }
 end
 
 ----------------------------------------------------------------------
 -- Dispel contribution. Same shape, dispel profile/rate/neutral.
 ----------------------------------------------------------------------
-function Cat.Dispel(norm, summary, groupDispelTotal)
+function Cat.Dispel(norm, summary, groupDispelTotal, distExpected)
     local prof = Cap.Get(norm.specID, norm.role)
     local profileKey = (prof.dispel and prof.dispel.profile) or "NONE"
     local pcfg = Cfg.dispelProfiles[profileKey] or Cfg.dispelProfiles.NONE
@@ -139,34 +139,35 @@ function Cat.Dispel(norm, summary, groupDispelTotal)
         end
     end
 
-    -- Dungeon dispel-type gate: if NOTHING this spec's dispel can touch appears in this dungeon, don't
-    -- expect dispels at all (N/A, weight redistributed) rather than punishing a gated tool with no
-    -- valid target. Unknown dungeon = eligible (never restrict); see Config.dungeonDispelTypes.
-    if not Cfg.DungeonDispelEligible(norm.dungeonName, Cfg.DispelTypeSet(prof.dispel)) then
-        return { applicable = false, profile = profileKey, dungeonGated = true,
-                 reason = "This dungeon has no debuffs this spec can dispel.",
-                 dispel = prof.dispel }
-    end
-
-    local minutes = (norm.durationSeconds or 0) / 60
-    local rate = pcfg.ratePerMinute
-    local compMod, compDetail = Comp.DispelModifier(norm, summary)
-    -- Dungeon dispel DEMAND: scale expected by how dispel-heavy THIS dungeon is for the types this spec
-    -- can address (max weight among its present types; 1.0 when unlisted). Magic-heavy dungeons expect
-    -- more dispels, light ones fewer - so a quiet run in Skyreach isn't judged against a Magisters load.
-    local specTypes = Cfg.DispelTypeSet(prof.dispel)
-    local demand = Cfg.DungeonDispelDemand(norm.dungeonName, specTypes)
-    local expected = minutes * rate * compMod * demand
     -- What this spec could have dispelled/purged here (specific effects with spell ids + Dispel/Purge/
     -- Soothe action), so the run review can coach with the ability + target icons instead of "no dispels".
     local dispelTargets = Cfg.DungeonDispelTargets(norm.dungeonName, prof.dispel)
     local cconf = Cfg.confidence.dispel
     local neutral = cconf.neutralScore
 
+    -- Expected comes ENTIRELY from the run-level group distribution: a per-SCHOOL x AXIS supply from the
+    -- season profile (defensive cleanse vs offensive purge/soothe), split only among the members who can
+    -- address each school, plus sniping redistribution. This is where the dual-axis fairness now lives -
+    -- a purge-only spec only draws from purge/soothe supply, a cleanse-only spec only from debuff supply,
+    -- so neither is penalised for work it structurally cannot do. No distribution (standalone call, or a
+    -- dungeon with no season profile) -> no fair target: N/A, weight redistributed (never a zero).
+    if not (distExpected and type(distExpected.expected) == "number") then
+        return { applicable = false, profile = profileKey, noModel = true, dispel = prof.dispel,
+                 dispelTargets = dispelTargets,
+                 reason = "No dispel expectation could be computed for this run." }
+    end
+    -- Redistributed/allocated to ~nothing => this dungeon had nothing this spec can dispel, or teammates
+    -- covered it => N/A, not a zero.
+    if distExpected.expected < 0.5 then
+        return { applicable = false, profile = profileKey, coveredByTeam = true, dispel = prof.dispel,
+                 dispelTargets = dispelTargets,
+                 reason = "No fair share of dispels here - nothing this spec could cleanse/purge, or teammates covered it." }
+    end
+    local expected = distExpected.expected
+
     if norm.dispels == nil then
         return { applicable = true, profile = profileKey, score = neutral, rawScore = neutral,
-                 confidence = 0, expected = expected, actual = nil, compModifier = compMod,
-                 compDetail = compDetail, minutes = minutes, rate = rate, demand = demand,
+                 confidence = 0, expected = expected, actual = nil,
                  dispel = prof.dispel, dispelTargets = dispelTargets,
                  note = "No dispel data was recorded for this player." }
     end
@@ -175,13 +176,13 @@ function Cat.Dispel(norm, summary, groupDispelTotal)
     local ratio = (expected > 0) and (actual / expected) or (actual > 0 and 2.0 or 0)
     local raw = curveScore(ratio)
     local capped = math.min(raw, Cfg.contributionCurve.categoryCap)
+    -- Confidence surfaced as sample context only; not applied - the group-distributed per-school target is
+    -- accurate (boss-time implicit in the season supply), so a genuine 0 stays a 0 (matches interrupts).
     local confidence = Cfg.clamp((groupDispelTotal or 0) / cconf.minGroupSample, 0, 1)
-    local final = blendConfidence(capped, neutral, confidence)
 
-    return { applicable = true, profile = profileKey, score = final, rawScore = raw, cappedScore = capped,
-             confidence = confidence, expected = expected, actual = actual, ratio = ratio,
-             compModifier = compMod, compDetail = compDetail, minutes = minutes, rate = rate,
-             demand = demand, dispel = prof.dispel, dispelTargets = dispelTargets,
+    return { applicable = true, profile = profileKey, score = capped, rawScore = raw, cappedScore = capped,
+             confidence = confidence, confidenceApplied = false, expected = expected, actual = actual, ratio = ratio,
+             dispel = prof.dispel, dispelTargets = dispelTargets,
              neutral = neutral, groupTotal = groupDispelTotal }
 end
 

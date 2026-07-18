@@ -54,7 +54,49 @@ Scoring.Config = Config
 --      both apply; if only one applies the other's share moves to it so the utility bucket stays 25%; if
 --      neither applies the 25% goes to throughput + survival. roleContribution retired to 0 weight for all
 --      roles (targets tuned via knobs later, not weights). Retroactive rescore.
-Config.version = 20
+-- v21: interrupt expectation now excludes no-kick boss encounter time + a per-dungeon trash-demand knob;
+--      no interrupt/dispel data on a TRACKED run scores a real 0 (was neutral); interrupt confidence blend
+--      removed. Dispel demand split into DEFENSIVE (cleanse) vs OFFENSIVE (purge/soothe) axes so a
+--      single-axis spec is only measured on what it can do. Retroactive rescore.
+-- v22: interrupt + dispel expected are now GROUP-DISTRIBUTED - a per-run supply (dungeon caster/dispel
+--      density, capped by group cooldown capacity) split by capability share (per-school for dispels),
+--      with sniping redistribution (over-performers capped, under-performers who were sniped not docked).
+--      Replaces the old flat per-spec estimate + bounded composition nudge. Retroactive rescore.
+-- v23: interrupt/dispel SUPPLY now comes from the season utility profile (Scoring/Seasons/*.lua) as a
+--      trash block + one block per boss, so boss-time handling is implicit (no dead-time subtraction).
+--      Per-encounter interruptFrequency + per-school partyDebuffFrequencies (defensive) /
+--      targetBuffFrequencies (offensive purge+enrage) x per-source scale (Config.supplyScale) set the pool;
+--      the capability-share + sniping distribution is unchanged. Retires dungeonInterrupt / noKickBosses /
+--      dispelContentBosses / dungeonDispelTypes and the flat standalone fallback. Retroactive rescore.
+-- v24: throughput role shares recalibrated from 17 observed Midnight S1 runs (85 player-rows): TANK dps
+--      share 0.35 -> 0.55 and HEALER dps 0.08 -> 0.12 (tank damage was under-credited); TANK hps 0.62 ->
+--      0.51 and DAMAGER hps 0.04 -> 0.09. staticReference (metadata-only fallback) dropped to observed
+--      early-season medians. Group-relative + gear-agnostic as before. Retroactive rescore.
+-- v25: interrupt/dispel SUPPLY + CAPACITY calibrated to the same 17 observed runs. Season trash weights
+--      (Seasons/MidnightS1) set so modeled kick/dispel supply ~= observed per-dungeon totals at +10; and
+--      the capacity cap raised (kickUtil 0.075 -> 0.15; dispel rates ~+40%) so a normal group's cooldowns
+--      no longer clip the recalibrated supply below what groups actually land. Retroactive rescore.
+-- v26: snipe redistribution is no longer all-or-nothing. New Config.snipeForgiveness (0..1, default 0.5)
+--      scales how much a teammate's over-performance excuses an under-performer's shortfall, so a player
+--      who plainly under-used their kit (e.g. a tank landing 5 of a ~12 share while short-CD teammates
+--      over-kicked) is flagged instead of pulled to a perfect score. Retroactive rescore.
+-- v27: survival curve loosened - grace 2.5% -> 3.5%, and it now hits 0 at a 50% avoidable share (was 40%).
+--      Same front-loaded shape, just more forgiving. Retroactive rescore.
+-- v28: interrupt/dispel supply is now DURATION-AWARE. TRASH frequencies became a per-MINUTE density
+--      (multiplied by run minutes in Distribute.accumulate) so a fast clear has less combat time = fewer
+--      castable events = lower supply; BOSS blocks stay per-kill. Season trash weights (MidnightS1)
+--      re-expressed as observed kicks/dispels per minute; trashKick/trashDispel scales -> 1.0. Fixes fast
+--      runs being judged against the same expected as slow ones. Retroactive rescore.
+-- v29: BOSS supply is now time-aware too. A boss's mechanics recycle while it's up, so its kick/dispel
+--      supply scales by how long the boss was actually engaged (b.totalTime) vs a reference fight length
+--      (supplyScale.bossRefSeconds = 90s) - a slow kill offers more than a burst; a boss dropped before its
+--      cast comes around offers almost none. Was a flat per-kill count. Retroactive rescore.
+-- v30: party-member SPEC now flows into scoring. The live inspect (Inspect.lua / GetInspectSpecialization)
+--      already captured pug specs but they were discarded for scoring - now they're stored on the member
+--      (mergePartyStats) and preferred at scoring time (Normalize, retroactive via run.dispelCapture). For
+--      an un-inspected member whose class DPS specs disagree on interrupt tier, a per-class representative
+--      is used (Hunter DPS -> BM / LONG_CD) instead of the blanket STANDARD guess. Retroactive rescore.
+Config.version = 30
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -108,16 +150,18 @@ Config.redistribution = {
 -- Warrior (14s Pummel), which is more than a Counter Shot Hunter (24s). ratePerMinute is kept only as a
 -- coarse FALLBACK for records with no cooldown data. Sources: warcraft.wiki.gg/wiki/Interrupt.
 ----------------------------------------------------------------------
--- Coarse fallback rates, tuned to a 1:2:3:4 spread so the profiles' relative EXPECTED kick shares are
--- LONG_CD 10% / STANDARD 20% / SHORT_CD 30% / HIGH_CONTROL 40%. STANDARD stays 0.30 (the kickUtil
--- calibration point: a plain 15s kicker = 60/15 x 0.075 = 0.30), so per-spec CD-derived rates are
--- unchanged; only the no-CD-data fallback and the coarse profile weighting move.
+-- Tiers by INTERRUPT COOLDOWN. ratePerMinute here is a FALLBACK only (used when a record has no cooldown
+-- - which no live spec has, so it's effectively documentation). Set on a time vector: SHORT (12-15s) 0.45,
+-- STANDARD (15-30s) = half of SHORT (0.225), LONG (>30s) = half of STANDARD (0.1125), HIGH_CONTROL 0.60.
+-- That mirrors what the live CD formula already does (rate ~ 1/cd, so double the cooldown ~= half the
+-- rate). The `profile` on each spec is now just this eligibility gate + a display LABEL - the composition
+-- tier nudge that once read it was retired in v22 - so re-tiering a spec changes its label, not its score.
 Config.interruptProfiles = {
-    NONE         = { ratePerMinute = 0.00, scoreEligible = false },
-    LONG_CD      = { ratePerMinute = 0.15, scoreEligible = true },   -- ~24-60s CD, ranged (Counterspell/Counter Shot/Quell/Solar Beam; Resto Shaman's 30s Wind Shear in Midnight)  -- 10% share
-    STANDARD     = { ratePerMinute = 0.30, scoreEligible = true },   -- ~15s CD single interrupt (Kick/Pummel/Rebuke/Mind Freeze/Muzzle/Spear Hand)                              -- 20% share
-    SHORT_CD     = { ratePerMinute = 0.45, scoreEligible = true },   -- <=12s CD (Elemental/Enhancement Wind Shear; Resto's is now 30s -> LONG_CD)                                -- 30% share
-    HIGH_CONTROL = { ratePerMinute = 0.60, scoreEligible = true },   -- 15s interrupt + strong extra ranged stop/silence used rotationally (Prot Pal, DH)                         -- 40% share
+    NONE         = { ratePerMinute = 0.00,   scoreEligible = false },  -- no interrupt
+    LONG_CD      = { ratePerMinute = 0.1125, scoreEligible = true },   -- CD > 30s (Quell 40s, Shadow Silence 45s, Solar Beam 60s)
+    STANDARD     = { ratePerMinute = 0.225,  scoreEligible = true },   -- CD 15-30s (Counterspell / Counter Shot / Spell Lock 24s; Resto Shaman 30s Wind Shear)
+    SHORT_CD     = { ratePerMinute = 0.45,   scoreEligible = true },   -- CD 12-15s (Kick / Pummel / Rebuke / Mind Freeze / Muzzle / Spear Hand; Ele/Enh Wind Shear 12s)
+    HIGH_CONTROL = { ratePerMinute = 0.60,   scoreEligible = true },   -- 15s interrupt + strong rotational extra stop/silence (Prot Pal, DH Vengeance)
 }
 
 ----------------------------------------------------------------------
@@ -129,10 +173,48 @@ Config.interruptProfiles = {
 -- (Shadow's 45s Silence, Balance's 60s Solar Beam) score lower - the differentiation the flat buckets lost.
 ----------------------------------------------------------------------
 Config.interrupt = {
-    kickUtil = 0.075,   -- fraction of raw interrupt AVAILABILITY that becomes an actual kick in M+
+    -- kickUtil raised 0.075 -> 0.15 (2026-07): observed groups landed ~1.9 kicks/min (up to 2.9) with ~4
+    -- interrupters over 20+ min - i.e. ~42-66 kicks/run - but the old cap sat ~24 and CLIPPED them, which
+    -- also stopped the recalibrated season kick supply (Seasons/MidnightS1) from taking effect. 0.15 lifts
+    -- group capacity to ~50-60 so the season supply (not the cap) is the binding limit for a normal group.
+    kickUtil = 0.15,    -- fraction of raw interrupt AVAILABILITY that becomes an actual kick in M+
     stopLikelihood = { HIGH = 0.60, MEDIUM = 0.30, LOW = 0.10 },   -- how often a rotational extra stop is spent interrupting
     countedStopTypes = { INTERRUPT = true, SILENCE = true },        -- a STUN doesn't lock a school like a kick -> not counted
 }
+-- CALIBRATION: per-source scale on the supply pools. TRASH frequencies are a PER-MINUTE density and are
+-- multiplied by run length in Distribute.accumulate, so trashKick/trashDispel are 1.0 (the density is used
+-- directly; kept as global multipliers for tuning). BOSS frequencies are per a REFERENCE fight length
+-- (bossRefSeconds) and are scaled by how long each boss was actually engaged, so a longer fight (mechanics
+-- recycling) offers more kicks/dispels than a fast kill. bossKick/bossDispel are the per-reference-fight
+-- multipliers; bossRefSeconds is the fight length at which a boss contributes its base weight.
+Config.supplyScale = { trashKick = 1.0, bossKick = 1.5, trashDispel = 1.0, bossDispel = 1, bossRefSeconds = 90 }
+
+-- How much a teammate's OVER-performance excuses an under-performer's shortfall when the interrupt/dispel
+-- workload is redistributed (Scoring/Distribute.lua). 1.0 = fully forgiven (a player who under-used their
+-- kit is judged only on what they did, if teammates covered the pool); 0.0 = no forgiveness (judged on
+-- their full capability share). 0.5 is the middle ground: a genuinely-sniped player still isn't docked
+-- hard, but someone who plainly didn't push their button is no longer excused to a perfect score.
+Config.snipeForgiveness = 0.5
+
+-- The season utility profile for the current M+ pool (registered from Scoring/Seasons/*.lua into
+-- ML.Scoring.SeasonData), and a per-dungeon lookup within it. Season selection matches
+-- C_MythicPlus.GetCurrentSeason() to a profile's declared season ids, else uses the sole loaded profile.
+function Config.SeasonProfile()
+    local all = ML.Scoring and ML.Scoring.SeasonData
+    if not all then return nil end
+    local cur = ML.API and ML.API.GetCurrentSeason and ML.API.GetCurrentSeason()
+    local only
+    for _, prof in pairs(all) do
+        only = only or prof
+        if cur and prof.seasons and prof.seasons[cur] then return prof end
+    end
+    return only
+end
+function Config.SeasonDungeon(dungeonName)
+    local prof = Config.SeasonProfile()
+    local nk = Config.NormDungeon(dungeonName)
+    return (prof and prof.dungeons and nk) and prof.dungeons[nk] or nil
+end
 
 -- Expected interrupt CONTRIBUTIONS per minute for one spec's interrupt capability record (Capability.lua).
 -- Returns (ratePerMinute, rawAvailabilityPerMinute). 0 if the spec has no usable interrupt / CD data.
@@ -148,57 +230,31 @@ function Config.InterruptRatePerMinute(rec)
     return avail * ic.kickUtil, avail
 end
 
+-- NOTE: per-dungeon interrupt demand, no-kick bosses, and per-axis dispel boss-time (the old
+-- dungeonInterrupt / noKickBosses / InterruptDeadSeconds / dispelContentBosses / DispelDeadSeconds tables)
+-- are RETIRED. The interrupt/dispel SUPPLY now comes from the season utility profile
+-- (Scoring/Seasons/*.lua, via Config.SeasonDungeon) summed over the trash block + the boss blocks for the
+-- bosses actually killed, so boss-time handling is implicit and exact - no separate dead-time subtraction.
+
 -- Dispel profiles. ratePerMinute = expected dispel CONTRIBUTIONS per minute given dispel access.
 -- Most DPS have only a curse/poison/offensive-purge tool used situationally -> LIMITED. Healers with
 -- full defensive dispel -> STANDARD/HIGH.
+-- Rates bumped ~40% (2026-07): observed groups dispelled ~0.6/min (up to ~1.8 in magic-heavy dungeons)
+-- across ~2 dispellers - i.e. ~0.3/min each, into the mid-0.9/min range - so the old caps clipped the
+-- recalibrated season dispel supply. High-supply dungeons stay dispeller-capacity-bound (2 dispellers
+-- genuinely can't cover 20 debuffs), which is realistic; these just stop clipping the typical case.
 Config.dispelProfiles = {
     NONE         = { ratePerMinute = 0.00, scoreEligible = false },
-    LIMITED      = { ratePerMinute = 0.10, scoreEligible = true },   -- one narrow tool (Remove Curse, Cleanse Toxins, offensive purge only)
-    STANDARD     = { ratePerMinute = 0.22, scoreEligible = true },   -- full defensive dispel (healers, Mistweaver Detox)
-    HIGH_UTILITY = { ratePerMinute = 0.30, scoreEligible = true },   -- broad dispel + Mass Dispel / multi-type (Priest, Preservation)
+    LIMITED      = { ratePerMinute = 0.14, scoreEligible = true },   -- one narrow tool (Remove Curse, Cleanse Toxins, offensive purge only)
+    STANDARD     = { ratePerMinute = 0.30, scoreEligible = true },   -- full defensive dispel (healers, Mistweaver Detox)
+    HIGH_UTILITY = { ratePerMinute = 0.40, scoreEligible = true },   -- broad dispel + Mass Dispel / multi-type (Priest, Preservation)
 }
 
-----------------------------------------------------------------------
--- Per-dungeon dispellable-content TYPES. Dispels are gated to schools/types (magic, curse, poison,
--- disease, enrage), and some dungeons have NOTHING a given tool can touch. A spec whose dispel type
--- doesn't appear in the dungeon shouldn't be expected to dispel: its Dispel category goes N/A (weight
--- redistributed) instead of being punished for having no valid target. COARSE by design - just which
--- of the five types appear in that dungeon, not per-spell or per-boss (we have no combat log, only
--- aggregate counts). Keyed by NORMALISED dungeon name (lowercase, letters+digits only) so it matches
--- the live API name regardless of apostrophes/spacing. Maintained per season from the M+ dispel guide.
---
--- EDITING ASYMMETRY: a wrong `true` is harmless (spec stays eligible; the confidence blend still
--- protects a genuinely quiet run), but a wrong `false` can unfairly BENCH a real dispeller. So only set
--- a type false once CONFIRMED absent; leave it true when unsure. An UNLISTED dungeon = fully eligible;
--- the table only ever RESTRICTS. Sources: Wowhead "Important Dispels in Midnight S1 M+", gerritalex.de.
-----------------------------------------------------------------------
-Config.dungeonDispelTypes = {
-    -- ["<normname>"] = { <type> = false | <demandWeight> },  per dispel type:
-    --     false   -> that type is ABSENT here. GATE: a spec whose only dispel types are all absent -> N/A.
-    --     number  -> PRESENT, carrying a per-type DEMAND weight (1.0 = typical volume; >1 heavy, <1 light).
-    --     omitted -> PRESENT at the default 1.0 demand.
-    --
-    -- PRESENCE is set false only when CONFIRMED absent from the dungeon's WHOLE dispellable inventory.
-    -- Every S1 dungeon has magic content, so magic dispellers are never gated; the gate only benches a
-    -- NARROW tool (curse-only Mage, enrage-only Shiv/Soothe, poison-only) where its type is absent.
-    -- Cross-checked 2026-07 against gerritalex.de's full S1 debuff list and the Wowhead / masterofwarcraft
-    -- dispel guides (agreed, no contradictions). Bleeds aren't standard-dispellable, so a bleed-only
-    -- source does NOT make a type present (Skyreach Blade Rush, Algeth'ar Vile Bite).
-    --
-    -- DEMAND weights come from the COUNT of distinct dispellable debuff SOURCES of each type (a breadth
-    -- proxy - the guides give inventory, not cast frequency), normalised so a typical load = 1.0. Magic is
-    -- the only type with real per-dungeon spread (2-11 sources); other types sit near 1.0 where present. A
-    -- spec's expected dispels scale by the MAX weight among the types it can address here (DungeonDispelDemand).
-    -- These are estimates from breadth, NOT measured casts - recalibrate against real logged runs later.
-    ["magistersterrace"]     = { magic = 1.40, curse = false, poison = false, disease = false, enrage = false }, -- 11 magic (Polymorph, Holy Fire, Umbral Splinters, Void Torrent, Arcane Blade...)
-    ["maisaracaverns"]       = { magic = 1.20, disease = 0.90, enrage = 0.90, curse = false, poison = false },   -- 7 magic (Hex, Spirit Rend, Frost Nova) + disease (Infected Pinions) + enrage (Blood Frenzy)
-    ["nexuspointxenas"]      = { magic = 0.95, curse = 1.00, poison = false, disease = false, enrage = false },  -- 3 magic (Burning Radiance, Transference) + 2 curse (Bad Omens, Creeping Void)
-    ["windrunnerspire"]      = { magic = 0.85, curse = 1.00, poison = 1.05, enrage = 0.90, disease = false },    -- 2 magic (Soul Torment) + 2 curse (Curse of Darkness) + 2 poison (Poison Blades/Spray) + 1 enrage
-    ["algetharacademy"]      = { magic = 0.95, poison = 0.90, enrage = 1.05, curse = false, disease = false },   -- 3 magic (Energy Bomb, Oversurge) + poison (Lasher Toxin) + 2 enrage (Agitation, Raging Screech)
-    ["pitofsaron"]           = { magic = 1.10, curse = 1.00, disease = 1.05, enrage = 0.90, poison = false },    -- 5 magic (Permeating Cold) + 2 curse (Curse of Torment, Shadowbind) + 2 disease (Rotting Strikes) + 1 enrage
-    ["seatofthetriumvirate"] = { magic = 1.00, enrage = 0.90, curse = false, poison = false, disease = false }, -- 4 magic (Rift Essence, Corrupting Touch, Howling Dark) + enrage (Battle Rage)
-    ["skyreach"]             = { magic = 0.85, enrage = 0.90, curse = false, poison = false, disease = false }, -- 2 magic (Rushing Winds, Solar Barrier) + enrage (Wrathful Wind)
-}
+-- NOTE: per-dungeon dispel-type presence/demand weights (the old Config.dungeonDispelTypes) are RETIRED.
+-- Per-school dispel demand now lives in the season profile (Scoring/Seasons/*.lua) as
+-- partyDebuffFrequencies (defensive) / targetBuffFrequencies (offensive purge+enrage), summed over trash +
+-- boss blocks in Distribute.lua. The granular per-effect coaching DB (Config.dungeonDispelDebuffs, below)
+-- still drives the run-review "what you could have cleared" callout.
 
 -- Normalise a dungeon name to its table key (mirrors Compat's boss-name normaliser).
 function Config.NormDungeon(name)
@@ -218,43 +274,11 @@ function Config.DispelTypeSet(dispel)
     return s
 end
 
--- Does a spec's dispel (specTypes set) overlap the dungeon's dispellable content? Unknown dungeon or a
--- type not marked false -> treated as PRESENT (eligible). Empty spec set -> not eligible (nothing to do).
-function Config.DungeonDispelEligible(dungeonName, specTypes)
-    if type(specTypes) ~= "table" or not next(specTypes) then return false end
-    local entry = Config.dungeonDispelTypes[Config.NormDungeon(dungeonName) or ""]
-    if not entry then return true end            -- unlisted dungeon: never restrict
-    for t in pairs(specTypes) do
-        if entry[t] ~= false then return true end   -- this dispel type is present here -> overlap
-    end
-    return false                                  -- none of the spec's dispel types appear in this dungeon
-end
-
--- Per-dungeon dispel DEMAND multiplier for a spec: how dispel-heavy this dungeon is for the TYPES this
--- spec can address, as a scalar on expected dispels. Uses the MAX weight among the spec's present types
--- (your busiest dispellable type sets the pace) so a broad healer isn't inflated just for covering more
--- types, and a narrow tool is judged only on its own type's load. 1.0 for an unlisted dungeon, an empty
--- spec set, or a present type with no explicit weight. Only meaningful when DungeonDispelEligible is true.
-function Config.DungeonDispelDemand(dungeonName, specTypes)
-    if type(specTypes) ~= "table" then return 1.0 end
-    local entry = Config.dungeonDispelTypes[Config.NormDungeon(dungeonName) or ""]
-    if not entry then return 1.0 end             -- unlisted dungeon: neutral demand
-    local best
-    for t in pairs(specTypes) do
-        local v = entry[t]
-        if v ~= false then                        -- a type this spec can dispel that is present here
-            local w = (type(v) == "number") and v or 1.0
-            if not best or w > best then best = w end
-        end
-    end
-    return best or 1.0
-end
-
 ----------------------------------------------------------------------
 -- Per-dungeon dispellable effects, keyed by normalised dungeon name -> dispel type -> list of
--- { name, id, kind }. This is the granular half of the seasonal dispel DB (presence/demand is
--- Config.dungeonDispelTypes above). It lets the run-review coach a player with the exact ability icons
--- (via `id`, the real spell id -> Blizzard tooltip) and split them into what they'd DISPEL vs PURGE:
+-- { name, id, kind }. This is the granular half of the seasonal dispel DB (per-school demand now lives in
+-- the season profile, Scoring/Seasons/*.lua). It lets the run-review coach a player with the exact ability
+-- icons (via `id`, the real spell id -> Blizzard tooltip) and split them into what they'd DISPEL vs PURGE:
 --   kind = "debuff" -> a harmful aura ON A PLAYER, removed by a DEFENSIVE dispel (Dispel)
 --   kind = "buff"   -> a beneficial aura ON AN ENEMY, removed by an OFFENSIVE dispel (Purge; enrage = Soothe)
 --
@@ -263,7 +287,7 @@ end
 -- "Ward / Shield / Barrier / Bolstering / Enhancement / Bloodlust" effects are enemy buffs you Purge;
 -- everything else (CC, DoTs, curses, poisons, diseases) is a player debuff you Dispel. A handful are
 -- best-guesses (Oversurge, Necromantic Infusion, Rushing Winds) - the Blizzard tooltip shows the truth
--- on hover regardless. Keep in sync with the type presence in Config.dungeonDispelTypes each season.
+-- on hover regardless. Keep in sync with the per-school demand in the season profile each season.
 ----------------------------------------------------------------------
 local function dbf(name, id, buff) return { name = name, id = id, kind = buff and "buff" or "debuff" } end
 Config.dungeonDispelDebuffs = {
@@ -323,18 +347,37 @@ function Config.DungeonDispelTargets(dungeonName, dispel)
     local out = {}
     if type(dispel) ~= "table" then return out end
     local nk = Config.NormDungeon(dungeonName)
-    local entry = nk and Config.dungeonDispelTypes[nk]
-    if not entry then return out end             -- unlisted dungeon: no known targets
-    local byType = (nk and Config.dungeonDispelDebuffs[nk]) or {}
+    local byType = nk and Config.dungeonDispelDebuffs[nk]
+    if not byType then return out end            -- unlisted dungeon: no known targets
     local defensive, offensive = dispel.defensive or {}, dispel.offensive or {}
     for _, t in ipairs(DISPEL_TYPE_ORDER) do
-        if entry[t] ~= false then                 -- type present in this dungeon
-            for _, e in ipairs(byType[t] or {}) do
-                if e.kind == "buff" and offensive[t] then
-                    out[#out + 1] = { name = e.name, id = e.id, type = t, action = (t == "enrage") and "Soothe" or "Purge" }
-                elseif e.kind ~= "buff" and defensive[t] then
-                    out[#out + 1] = { name = e.name, id = e.id, type = t, action = "Dispel" }
-                end
+        for _, e in ipairs(byType[t] or {}) do   -- every listed effect of this type IS present in the dungeon
+            if e.kind == "buff" and offensive[t] then
+                out[#out + 1] = { name = e.name, id = e.id, type = t, action = (t == "enrage") and "Soothe" or "Purge" }
+            elseif e.kind ~= "buff" and defensive[t] then
+                out[#out + 1] = { name = e.name, id = e.id, type = t, action = "Dispel" }
+            end
+        end
+    end
+    return out
+end
+
+-- ALL dispellable content in a dungeon, split by AXIS and independent of who's in the group: every enemy
+-- BUFF the party could purge/soothe, and every player DEBUFF it could cleanse. Each entry is
+-- { name, id, type, action } (action = "Purge"/"Soothe"/"Dispel"). Drives the group-utility tile
+-- tooltips ("what was dispellable here"). Empty lists for an unlisted dungeon.
+function Config.DungeonDispellables(dungeonName)
+    local out = { buffs = {}, debuffs = {} }
+    local nk = Config.NormDungeon(dungeonName)
+    local byType = nk and Config.dungeonDispelDebuffs[nk]
+    if not byType then return out end
+    for _, t in ipairs(DISPEL_TYPE_ORDER) do
+        for _, e in ipairs(byType[t] or {}) do
+            if e.kind == "buff" then
+                out.buffs[#out.buffs + 1] = { name = e.name, id = e.id, type = t,
+                    action = (t == "enrage") and "Soothe" or "Purge" }
+            else
+                out.debuffs[#out.debuffs + 1] = { name = e.name, id = e.id, type = t, action = "Dispel" }
             end
         end
     end
@@ -418,11 +461,14 @@ Config.throughput = {
     -- GROUP-RELATIVE baselines (deterministic - no self-learning, so scores match across installs).
     -- Each player's EXPECTED value for a metric = groupTotal(metric) * theirShare / sum(shares).
     -- `groupShare` = the relative amount of a metric each role is expected to contribute.
+    -- Calibrated against 17 observed Midnight S1 runs (85 player-rows, mostly +10): median role ratios
+    -- were TANK dps 0.55 / HEALER dps 0.12 of a DPS, and TANK hps 0.51 / DAMAGER hps 0.09 of a healer -
+    -- so tank DAMAGE was under-credited (0.35) and off-heals under-counted. Ratios (not absolutes) travel
+    -- across gear, so this stays valid as numbers inflate. Refine as more runs accumulate.
     groupShare = {
-        dps = { DAMAGER = 1.00, TANK = 0.35, HEALER = 0.08 },
-        -- HPS counts for healers AND tanks (self-healing). Healer:Tank base ~ 60/40; tanks then
-        -- scaled by spec "healiness" below. DPS off-heals count for very little.
-        hps = { HEALER = 1.00, TANK = 0.62, DAMAGER = 0.04 },
+        dps = { DAMAGER = 1.00, TANK = 0.55, HEALER = 0.12 },
+        -- HPS counts for healers AND tanks (self-healing). Tanks then scaled by spec "healiness" below.
+        hps = { HEALER = 1.00, TANK = 0.51, DAMAGER = 0.09 },
     },
     -- Tank self-healing varies a LOT by spec; this multiplies the TANK hps share (1.0 = a standard
     -- tank). Death Strike / Fel Devastation tanks self-heal far more than a Prot Warrior.
@@ -442,10 +488,13 @@ Config.throughput = {
         TANK    = { dps = 0.60, hps = 0.40 },   -- base; healy tanks lean more on hps (see ThroughputMix)
     },
     -- Static fallback (only used if the group produced no total for a metric, e.g. metadata-only run).
+    -- Set to the observed EARLY-Midnight +10 medians (DPS ~114K / tank ~63K / healer HPS ~58K). These are
+    -- absolute so they drift up with gear - only the metadata-only path uses them, so it's low-stakes; bump
+    -- as the season progresses. Normal runs are group-relative and gear-agnostic.
     staticReference = {
-        DAMAGER = { metric = "dps", value = 900000 },
-        TANK    = { metric = "dps", value = 500000 },
-        HEALER  = { metric = "hps", value = 450000 },
+        DAMAGER = { metric = "dps", value = 114000 },
+        TANK    = { metric = "dps", value = 63000 },
+        HEALER  = { metric = "hps", value = 58000 },
     },
     -- Healer HPS soft cap: above softCapRatio of baseline, extra HPS yields sharply less (excess
     -- healing usually = avoidable damage taken, which is penalized under survival instead).
@@ -479,23 +528,23 @@ end
 -- one survival metric we can calibrate defensibly without learned data. There is no per-minute or
 -- absolute-magnitude component: what matters is how much of everything that hit you was your fault.
 ----------------------------------------------------------------------
--- 2.5% grace = a perfect 100 (nobody plays truly clean), then it DOWNGRADES QUICKLY, hitting 0 once
--- 40% of your total damage taken was avoidable. Standing in the shit is exactly what this punishes.
+-- 3.5% grace = a perfect 100 (nobody plays truly clean), then it DOWNGRADES QUICKLY, hitting 0 once
+-- 50% of your total damage taken was avoidable. Standing in the shit is exactly what this punishes.
 Config.survival = {
-    graceShare = 0.025,   -- avoidable share at/under this = 100 (the curve encodes it; kept for docs/UI)
-    zeroShare  = 0.40,    -- avoidable share at/over this  = 0   (the curve encodes it; kept for docs/UI)
+    graceShare = 0.035,   -- avoidable share at/under this = 100 (the curve encodes it; kept for docs/UI)
+    zeroShare  = 0.50,    -- avoidable share at/over this  = 0   (the curve encodes it; kept for docs/UI)
     -- Avoidable as a fraction of total damage taken (0..1). Flat 100 through the grace band, then a
-    -- steep front-loaded drop to 0 at a 40% share. interp() clamps the ends (>=0.40 -> 0, <=0.025 -> 100).
+    -- steep front-loaded drop to 0 at a 50% share. interp() clamps the ends (>=0.50 -> 0, <=0.035 -> 100).
     avoidableShareCurve = {
         { v = 0.000, s = 100 },
-        { v = 0.025, s = 100 },   -- 2.5% grace -> still perfect
-        { v = 0.05,  s = 87 },    -- ...then it bites, fast
-        { v = 0.08,  s = 72 },
-        { v = 0.12,  s = 55 },
-        { v = 0.18,  s = 36 },
-        { v = 0.25,  s = 22 },
-        { v = 0.32,  s = 10 },
-        { v = 0.40,  s = 0 },     -- 40% of your damage taken was avoidable -> zero
+        { v = 0.035, s = 100 },   -- 3.5% grace -> still perfect
+        { v = 0.07,  s = 87 },    -- ...then it bites, fast
+        { v = 0.10,  s = 72 },
+        { v = 0.15,  s = 55 },
+        { v = 0.23,  s = 36 },
+        { v = 0.31,  s = 22 },
+        { v = 0.40,  s = 10 },
+        { v = 0.50,  s = 0 },     -- 50% of your damage taken was avoidable -> zero
     },
     neutralScore = 80,   -- used only when avoidable or taken data is missing entirely
 }

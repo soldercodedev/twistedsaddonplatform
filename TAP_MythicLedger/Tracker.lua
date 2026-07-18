@@ -23,6 +23,7 @@ local current     = nil    -- in-progress run working table
 local encounters  = nil    -- encounterId -> boss tracking record
 local provider    = nil
 local retries     = 0
+local combatWaits = 0      -- finalize deferrals while still in combat (key completed mid-trash-pull)
 local finalizeTimer, rosterTimer
 local frame
 local runT0                -- GetTime() at run start, so boss kills can be stamped seconds-into-run
@@ -93,8 +94,11 @@ local function mergePartyStats(roster, stats, capture)
         out[#out + 1] = {
             guid = m.guid, name = m.name, realm = m.realm, fullName = m.fullName,
             classFile = m.classFile, classId = m.classId, role = m.role,
-            -- Prefer the live roster spec; else whatever the provider resolved for this member.
-            specId = m.specId or (src and src.specId),
+            -- Prefer the live roster spec; else whatever the provider resolved; else the live-INSPECTED
+            -- spec (Inspect.lua captured it via GetInspectSpecialization). This is how a pug's real spec
+            -- lands on the record when they don't broadcast it, so scoring runs on the actual spec.
+            specId = m.specId or (src and src.specId)
+                or (capture and m.guid and capture[m.guid] and capture[m.guid].specID),
             specIcon = src and src.specIcon,
             guildName = m.guildName, isPlayer = m.isPlayer and true or false,
             mplusScore = m.mplusScore,
@@ -187,7 +191,7 @@ end
 local function cleanup()
     Providers.Counters.Stop()
     cancelTimers()
-    current, encounters, provider, retries = nil, nil, nil, 0
+    current, encounters, provider, retries, combatWaits = nil, nil, nil, 0, 0
 end
 
 ----------------------------------------------------------------------
@@ -584,12 +588,37 @@ local function finalizeRun(stats)
     setState(STATE.IDLE)
 end
 
+-- Cap on how long we'll wait for combat to drop before finalizing anyway (seconds, 1s/poll). Generous:
+-- a trash mop-up to reach 100% forces after the last boss can run a while, but must not wedge the save.
+local MAX_COMBAT_WAITS = 60
+
+local function stillInCombat()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) or false
+end
+
 local function tryFinalize()
+    -- The Midnight meter only reads reliably OUT of combat - in-combat sources come back Secret-wrapped,
+    -- so a read here returns empty (or the local player only), which is exactly the "no metrics" bug when
+    -- a key COMPLETES MID-TRASH (the last boss didn't finish the forces, so we're still fighting when
+    -- CHALLENGE_MODE_COMPLETED fires). Defer the read until combat actually drops, bounded so a stuck
+    -- combat flag can't wedge the save forever. The normal case (key completes right after a boss) just
+    -- passes straight through once combat clears.
+    if stillInCombat() and provider and provider:GetSource() ~= ML.SOURCE.NONE
+        and combatWaits < MAX_COMBAT_WAITS then
+        combatWaits = combatWaits + 1
+        if combatWaits == 1 or combatWaits % 5 == 0 then
+            ML.Log("finalize deferred: still in combat (%ds)", combatWaits)
+        end
+        finalizeTimer = C_Timer.NewTimer(1.0, tryFinalize)
+        return
+    end
+
     retries = retries + 1
     local ctx = runCtx()
     local stats
     if provider then stats = provider:GetRunStats(ctx) end
-    -- Retry a few times while a real meter is expected but not ready yet.
+    -- Retry a few times while a real meter is expected but not ready yet (settling after combat drops).
     if not stats and provider and provider:GetSource() ~= ML.SOURCE.NONE and retries < 4 then
         ML.Log("provider data not ready (try %d); retrying", retries)
         finalizeTimer = C_Timer.NewTimer(1.0, tryFinalize)
@@ -612,8 +641,9 @@ function Tracker.CompleteRun()
     end
     if state == STATE.COMPLETING or state == STATE.COMPLETED then return end
     setState(STATE.COMPLETING)
-    retries = 0
-    -- Brief settle delay so Details!/Blizzard finalize the overall segment before we read it.
+    retries, combatWaits = 0, 0
+    -- Brief settle delay so Details!/Blizzard finalize the overall segment before we read it (and, if the
+    -- key completed mid-trash, tryFinalize then waits for combat to actually drop before reading).
     finalizeTimer = C_Timer.NewTimer(1.5, tryFinalize)
 end
 

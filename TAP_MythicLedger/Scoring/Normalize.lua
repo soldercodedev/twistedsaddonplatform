@@ -21,6 +21,12 @@ function Norm.Player(run, member)
     if not (run and member) then return nil end
     local s = member.stats or {}
     local specID = member.specId or member.specID
+    -- Retroactive: an already-saved run may have a nil member spec but a live-inspected spec sitting in
+    -- run.dispelCapture (Inspect.lua). Prefer it so a rescore runs on the real spec, not a class guess.
+    if not specID and member.guid and type(run.dispelCapture) == "table" then
+        local cap = run.dispelCapture[member.guid]
+        if cap and type(cap.specID) == "number" and cap.specID > 0 then specID = cap.specID end
+    end
     local role = member.role
     if not role and specID and Scoring.Capability then role = Scoring.Capability.Get(specID).role end
     -- Recover a missing spec id from class + role (common in real captures without an inspect) so a
@@ -56,6 +62,8 @@ function Norm.Player(run, member)
         -- Context used by baselines/composition.
         level = num(run.level), mapId = run.mapId, seasonId = run.seasonId,
         dataSource = run.provider or ML.SOURCE and ML.SOURCE.NONE,
+        -- (Interrupt/dispel boss-time is no longer subtracted here: the season supply profile counts only
+        -- the trash + killed-boss blocks, so no-kick / no-dispel boss time is implicitly excluded.)
     }
 
     -- Clean run = the meter tracked you (real combat numbers) but logged no death rows, so deaths reads
@@ -68,6 +76,16 @@ function Norm.Player(run, member)
     -- it - a true 0, not "no data". So Survival scores a confident 0% avoidable share -> 100, instead of
     -- a neutral "no avoidable-damage data" estimate. Only when genuinely tracked (real combat numbers).
     if n.avoidableDamageTaken == nil and (n.dps or n.damageDone or n.hps or n.healing) then n.avoidableDamageTaken = 0 end
+
+    -- Interrupts / dispels: on a TRACKED run (real combat numbers), no interrupt/dispel rows means the
+    -- player landed NONE - a real 0, not "no data". This removes the old neutral benefit-of-the-doubt for
+    -- a confirmed contributor who did nothing. A genuinely UNTRACKED run (no combat stats at all) stays
+    -- nil = unknown, so the category still falls back to neutral rather than zeroing a data outage. The
+    -- dispel N/A gates (no addressable demand this dungeon) still fire first, so a 0 only bites when there
+    -- WAS something the spec could dispel.
+    local tracked = (n.dps or n.damageDone or n.hps or n.healing)
+    if n.interrupts == nil and tracked then n.interrupts = 0 end
+    if n.dispels == nil and tracked then n.dispels = 0 end
 
     -- Effective/active seconds is NOT stored by the meter; approximate from damage/dps when both
     -- exist (Blizzard's dps is over effective combat time). Marked as an estimate for the UI.

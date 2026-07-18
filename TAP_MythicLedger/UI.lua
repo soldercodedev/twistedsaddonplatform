@@ -31,6 +31,17 @@ local function coachIcon(theme, parent, i, size)
     return gi
 end
 
+-- Pooled hoverable spell/aura icons for the GROUP UTILITY tiles (real Blizzard tooltip on hover). Its own
+-- pool so indices never collide with the dispel-coaching icons above.
+local guIconPool = {}
+local function guIcon(theme, parent, i, size)
+    local gi = guIconPool[i]
+    if not gi then gi = theme:GameIcon(parent, { size = size }); guIconPool[i] = gi end
+    if gi:GetParent() ~= parent then gi:SetParent(parent) end
+    gi:SetSize(size, size)
+    return gi
+end
+
 -- Text/accent colors for cards with a forced-dark background (the dungeon-art hero cards). The theme's
 -- own text goes DARK on light mode and vanishes over the art, so these stay light on BOTH themes.
 local ON_ART, ON_ART_SUB = { 0.97, 0.98, 1.0 }, { 0.80, 0.84, 0.92 }
@@ -735,8 +746,9 @@ local function renderRunsList(b, C, x, y, w, win)
     end
     local first, last = pagerBar(b, C, x, y, rowW, #runs, "runs", win); y = y - 42
 
+    -- Date column widened (cDate->cChar) to fit the date + time-of-day stamp without touching the name.
     local cIcon, cDate, cChar, cDun, cKey, cRes, cDur, cDth, cPerf =
-        x + 6, x + 32, x + 118, x + 250, x + 400, x + 442, x + 532, x + 606, x + 648
+        x + 6, x + 32, x + 140, x + 250, x + 400, x + 442, x + 532, x + 606, x + 648
 
     -- Header band + clean, sortable labels (no button chrome).
     b:Box(x, y + 4, rowW, 24, 0.10, 0, C.accent)
@@ -908,6 +920,121 @@ local function renderRunTimeline(b, C, x, y, trackW, run)
     return ty - 90
 end
 
+-- GROUP UTILITY strip (shared by the run-details page and the end-of-run scoreboard): the party's TOTAL
+-- interrupts and the two dispel AXES - enemy-buff PURGES/soothes ("target buffs") and debuff CLEANSES -
+-- each as actual / expected, from Scoring.Distribute.GroupUtility. Per-axis actual is attributed by
+-- capability (a single-axis dispeller's whole count lands on its axis; a dual-axis one is split by its
+-- expected share, since the meter reports only one combined dispel count). A metric with no real
+-- expectation (no season data, or nobody in the group can do it) is dropped. Returns the Y below the strip.
+local GU_METRICS = {
+    { key = "interrupts", label = "INTERRUPTS",      icon = "ban" },
+    { key = "purge",      label = "TARGET BUFFS",    icon = "sparkles" },
+    { key = "cleanse",    label = "DEBUFFS",         icon = "circle-check" },
+}
+-- Which GU_METRICS actually have an expectation worth showing (>= 0.5). Shared by the strip and, on the
+-- scoreboard, the up-front body-height calc.
+local function groupUtilityItems(gu)
+    local items = {}
+    if type(gu) == "table" then
+        for _, m in ipairs(GU_METRICS) do
+            local d = gu[m.key]
+            if d and type(d.expected) == "number" and d.expected >= 0.5 then items[#items + 1] = { m = m, d = d } end
+        end
+    end
+    return items
+end
+local GU_TILE_H = 104  -- tile height (room for the value + the larger effect-icon row); strip also adds a header (28) + trailing gap (14)
+
+-- Hover tooltip for a group-utility tile. The two dispel axes now render the actual effect ICONS on the
+-- tile (each with its own Blizzard spell tooltip on hover), so their tile tip is a one-line descriptor;
+-- interrupts have no per-spell list, so their tip explains how the estimate is formed.
+local function guTileTip(key)
+    if key == "purge" then
+        return { title = "Target buffs — purge / soothe", minWidth = 240, lines = {
+            { text = "Enemy buffs the group could strip here. Hover an icon for its spell tooltip.", color = "subtext" } } }
+    elseif key == "cleanse" then
+        return { title = "Debuffs — cleanse", minWidth = 240, lines = {
+            { text = "Player debuffs the group could cleanse here. Hover an icon for its spell tooltip.", color = "subtext" } } }
+    elseif key == "interrupts" then
+        return { title = "Group interrupts", minWidth = 240, lines = {
+            { text = "Kicks the party landed vs this run's interruptible-cast supply (trash + bosses "
+                .. "killed), capped by the group's interrupt cooldowns.", color = "subtext" } } }
+    end
+end
+
+-- Render the actual dispellable-effect icons along the bottom of a group-utility tile (purge = enemy
+-- buffs to strip, cleanse = player debuffs to remove). Each icon carries the real Blizzard spell tooltip
+-- on hover, and is drawn ABOVE the tile frame so hovering it fires the icon's tooltip while hovering the
+-- tile background still fires the tile's own tooltip. Icons are pooled + marked transient so a re-render
+-- reuses them; a school-coloured 2px border keeps them legible; effects past what the tile can fit
+-- collapse to a "+N" label. `startIdx` threads the shared pool index across both tiles.
+local GU_ICON_SZ = 27   -- 50% larger than the old 18px
+local GU_SCHOOL_COL = {
+    magic   = { 0.31, 0.66, 1.00 }, curse = { 0.75, 0.49, 1.00 }, poison = { 0.29, 0.76, 0.35 },
+    disease = { 0.78, 0.62, 0.40 }, enrage = { 1.00, 0.42, 0.33 },
+}
+local function renderGuIcons(b, tile, tileX, tileTopY, tileW, tileH, list, startIdx)
+    local n = startIdx
+    if type(list) ~= "table" or #list == 0 then return n end
+    local theme, C = b.theme, b.theme.C
+    local pad, step = 12, GU_ICON_SZ + 4
+    local maxIcons = math.floor((tileW - 2 * pad) / step)
+    if maxIcons < 1 then return n end
+    local show, overflow = #list, 0
+    if show > maxIcons then show, overflow = maxIcons - 1, (#list - (maxIcons - 1)) end
+    local iconTop = tileTopY - (tileH - 10 - GU_ICON_SZ)
+    local lvl = ((tile and tile.GetFrameLevel and tile:GetFrameLevel()) or 0) + 5
+    local ix = tileX + pad
+    for i = 1, show do
+        local e = list[i]
+        n = n + 1
+        local gi = guIcon(theme, b.content, n, GU_ICON_SZ)
+        local col = GU_SCHOOL_COL[e.type] or C.border
+        theme:StylePanel(gi, col, col)                        -- solid 2px school-coloured border
+        gi.tex:ClearAllPoints(); gi.tex:SetPoint("TOPLEFT", 2, -2); gi.tex:SetPoint("BOTTOMRIGHT", -2, 2)
+        gi.tex:SetTexCoord(unpack(theme.iconInset))
+        gi:SetFrameLevel(lvl)                                 -- above the tile so its own hover tooltip fires
+        gi:ClearAllPoints(); gi:SetPoint("TOPLEFT", b.content, "TOPLEFT", ix, iconTop)
+        gi:SetAura(e.id); gi:Show(); b:Transient(gi)
+        ix = ix + step
+    end
+    if overflow > 0 then b:Label("+" .. overflow, ix + 1, iconTop - 6, C.subtext, 12) end
+    return n
+end
+
+local function groupUtilityStrip(b, C, x, y, w, run, style, gu)
+    local D = ML.Scoring and ML.Scoring.Distribute
+    gu = gu or (D and D.GroupUtility and D.GroupUtility(run))
+    local items = groupUtilityItems(gu)
+    if #items == 0 then return y end
+    local h = GU_TILE_H
+    local Cfg = ML.Scoring and ML.Scoring.Config
+    local dd = (Cfg and Cfg.DungeonDispellables and Cfg.DungeonDispellables(run and run.dungeonName))
+        or { buffs = {}, debuffs = {} }
+
+    y = b:Section("GROUP UTILITY  ·  landed vs expected", x, y); y = y - 28
+    local gap = 10
+    local tileW = math.floor((w - gap * (#items - 1)) / #items)
+    local iconN = 0
+    for i, it in ipairs(items) do
+        local a, e = it.d.actual or 0, it.d.expected or 0
+        local frac = (e > 0) and (a / e) or 0
+        local accent = (frac >= 0.9 and "33dd66") or (frac >= 0.6 and "e0a030") or "e0655a"
+        local tileX = x + (i - 1) * (tileW + gap)
+        local tile = b:StatTile(tileX, y, {
+            style = style or "compact", width = tileW, height = h, iconSize = 22,
+            label = it.m.label, icon = it.m.icon, accent = accent,
+            value = string.format("%d / %d", math.floor(a + 0.5), math.floor(e + 0.5)),
+            tipData = guTileTip(it.m.key),
+        })
+        -- The two dispel axes show the actual effect icons (real Blizzard tooltip on hover) along the tile
+        -- bottom; interrupts have no per-spell list so they stay value-only.
+        local list = (it.m.key == "purge" and dd.buffs) or (it.m.key == "cleanse" and dd.debuffs) or nil
+        if list then iconN = renderGuIcons(b, tile, tileX, y, tileW, h, list, iconN) end
+    end
+    return y - h - 14
+end
+
 local function renderRunDetails(b, C, x, y, w, win)
     local r = findRun(view.detailRun)
     if not r then view.detailRun = nil; return y end
@@ -944,6 +1071,9 @@ local function renderRunDetails(b, C, x, y, w, win)
         b:Label(aff .. "   ·   " .. Util.dateTime(r.completedAt), tx, y - 96, ON_ART_SUB, 10)
         y = y - bh - 16
     end
+
+    -- Group utility highlight: party interrupts + the two dispel axes, each landed vs expected.
+    y = groupUtilityStrip(b, C, x, y, w, r)
 
     -- Party: one responsive HERO CARD per member (spec portrait + role badge, performance grade, and
     -- the role-relevant throughput). Click a card for that player's full run review; hover for the
@@ -3161,20 +3291,19 @@ function renderPlayerReview(b, C, x, y, w, win)
                 Util.shortNum(t.detail.hps.expected), didV, Util.shortNum(t.detail.hps.value), t.detail.hps.ratio or 0),
             Poss .. " modeled share of the group's total healing. Tanks are expected to self-sustain a portion by spec.")
     end
-    local comp = (Cfg and Cfg.composition) or {}
     local iC = cats.interrupts
     if iC and iC.applicable and iC.expected then
         local kit = iC.interruptSpell and string.format("%s (%ds CD)%s", iC.interruptSpell, iC.interruptCD or 0,
             iC.interruptExtras and (" + " .. iC.interruptExtras) or "") or (iC.profile or "?")
         expl(string.format("Interrupts — ~%.1f target  (%s %s)", iC.expected, landedV, iC.actual and tostring(iC.actual) or "-"),
-            string.format("Tailored to this spec's kick availability - %s gives ~%.2f interrupts/min, × %.0f min × composition %.2f. Composition adjusts for group makeup: below 1.0 when other capable kickers share the load, above 1.0 for a lone interrupter (clamped %.2f-%.2f).",
-                kit, iC.rate or 0, iC.minutes or 0, iC.compModifier or 1, comp.min or 0.85, comp.max or 1.15))
+            string.format("Your fair share of this run's kick supply. The season profile for %s puts ~%.0f kickable casts in reach (trash + the bosses you killed); that pool is split by each spec's kick cooldown — %s draws about %.0f%% of it. A teammate over-capping their share lowers everyone else's target instead of yours.",
+                r.dungeonName or "this dungeon", iC.supply or 0, kit, (iC.share or 0) * 100))
     end
     local dC = cats.dispels
     if dC and dC.applicable and dC.expected then
         expl(string.format("Dispels — ~%.1f target  (%s %s)", dC.expected, didV, dC.actual and tostring(dC.actual) or "-"),
-            string.format("Run length × the spec's %s dispel rate × composition %.2f (same group-makeup adjustment as interrupts).",
-                dC.profile or "?", dC.compModifier or 1))
+            string.format("Your fair share of this run's dispel/purge supply for the schools a %s kit can address. Each school's supply (from the season profile's trash + boss content) is split only among the teammates who can touch that school, so a school only you can cleanse lands entirely on you. Over-capping by a teammate lowers everyone else's target.",
+                dC.profile or "?"))
     end
     if Cfg and Cfg.survival then
         expl(string.format("Survival — %.1f%% avoidable or less = 100, %.0f%%+ = 0",
@@ -3319,6 +3448,12 @@ function UI.ShowScoreboard(run, opts)
     end
     local heroStyle = ({ CLEAN = "clean", PANEL = "panel", COMPACT = "compact" })[DB.Settings().cardStyle] or "compact"
 
+    -- Group-utility strip (interrupts + the two dispel axes vs expected). Computed up front so its height
+    -- can be reserved in the fixed body layout below; nil / no items => no strip, no reserved space.
+    local groupUtil = ML.Scoring and ML.Scoring.Distribute and ML.Scoring.Distribute.GroupUtility
+        and ML.Scoring.Distribute.GroupUtility(run)
+    local guPart = (#groupUtilityItems(groupUtil) > 0) and (28 + GU_TILE_H + 14) or 0
+
     local W, rowH, headerH, colH = 1520, 50, 124, 22   -- headerH has room for the "vs your best" line;
                                                         -- rowH fits a full-size per-stat delta line under each value
     local heroPart = (#heroes > 0) and 88 or 0
@@ -3329,7 +3464,7 @@ function UI.ShowScoreboard(run, opts)
     -- of tucking under them.
     local timePart = timelineOK and 268 or 0
     local newBest = run._newBests and #run._newBests > 0
-    local bodyH = headerH + heroPart + partyPart + colH + math.max(1, #party) * rowH + bossPart + timePart + 12
+    local bodyH = headerH + heroPart + guPart + partyPart + colH + math.max(1, #party) * rowH + bossPart + timePart + 12
 
     local timeStr = Util.duration(run.duration)
     local remStr = run.timeRemaining and ((run.timeRemaining >= 0 and "+" or "-") .. Util.duration(math.abs(run.timeRemaining)))
@@ -3470,6 +3605,9 @@ function UI.ShowScoreboard(run, opts)
                 end
                 y = y - heroPart
             end
+
+            -- Group utility: party interrupts + the two dispel axes, each landed vs expected.
+            y = groupUtilityStrip(b, C, x, y, rowW, run, heroStyle, groupUtil)
 
             y = b:Section("PARTY", x, y); y = y - 28
 

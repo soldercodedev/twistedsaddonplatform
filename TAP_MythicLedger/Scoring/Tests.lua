@@ -18,8 +18,11 @@ local function member(guid, specID, role, stats, isPlayer)
     return { guid = guid, name = guid, fullName = guid, specId = specID, role = role,
              classFile = SPEC_CLASS[specID], stats = stats or {}, isPlayer = isPlayer and true or false }
 end
+-- Default dungeonName is a real season dungeon (Skyreach) so ScoreRun's interrupt/dispel distribution has
+-- a supply profile to draw from; tests that need other content set run.dungeonName explicitly.
 local function run(duration, level, party)
-    return { duration = duration, level = level, mapId = 1, seasonId = 14, party = party, provider = "BLIZZARD" }
+    return { duration = duration, level = level, mapId = 1, seasonId = 14, party = party,
+             provider = "BLIZZARD", dungeonName = "Skyreach" }
 end
 -- Reasonable DPS/heal defaults so throughput/survival aren't all "no data".
 local function dpsStats(o)
@@ -96,13 +99,14 @@ function Scoring.RunTests(printer)
     check(ppScore.categories.interrupts.score <= 100 + 1e-6, "Prot Pal interrupt category <= 100")
     check(ppScore.overall <= 100 and ppScore.overall >= 0, "Prot Pal overall in [0,100]")
 
-    -- (13) Zero group interrupts -> confidence 0 -> blended to neutral for an eligible interrupter.
+    -- (13/14) A TRACKED eligible interrupter who landed ZERO kicks now scores a real low, NOT neutral:
+    -- the confidence blend that used to lift a weak interrupt score toward neutral has been removed (no
+    -- benefit of the doubt). The category is still APPLICABLE (weight kept, never redistributed to hide it).
     local zeroRun = run(1800, 12, { member("Z", 72, "DAMAGER", dpsStats({ interrupts = 0, avoid = 3e7, deaths = 0 }), true),
         member("H", 257, "HEALER", healStats()) })
     local zScore = Score.ScoreRun(zeroRun).byGuid["Z"]
     check(zScore.categories.interrupts.applicable, "zero-interrupt eligible player still applicable (14)")
-    check(approx(zScore.categories.interrupts.score, Cfg.confidence.interrupt.neutralScore, 0.5),
-        "zero group interrupts -> neutral interrupt score (13)")
+    check(zScore.categories.interrupts.score < 15, "tracked zero-kick interrupter scores a real low, not neutral (13)")
 
     -- (18/19) Death penalties escalate and cap.
     local d1 = Scoring.Categories.Deaths({ deaths = 1 })
@@ -190,8 +194,8 @@ function Scoring.RunTests(printer)
         check(Cap.InterruptProfile(sp) == "NONE", "Healer spec " .. sp .. " has no interrupt (default rule)")
     end
     local rsMem = member("RS", 264, "HEALER", healStats({ interrupts = 3 }), true)
-    local rsScore = Score.ScoreNormalized(Scoring.Normalize.Player(run(1800, 12, { rsMem }), rsMem),
-        Scoring.Composition.Summarize({}), { interrupts = 12, dispels = 0 })
+    -- Via the full run so the interrupt distribution runs (a lone Wind Shear kicker gets the whole supply).
+    local rsScore = Score.ScoreRun(run(1800, 12, { rsMem })).byGuid["RS"]
     check(rsScore.categories.interrupts.applicable == true, "Resto Shaman interrupt is SCORED (the healer kick exception)")
     check((rsScore.categories.interrupts.weight or 0) > 0, "Resto Shaman interrupt carries weight (not redistributed away)")
     check((rsScore.categories.interrupts.expected or 0) > 0, "Resto Shaman has a real Wind Shear kick target")
@@ -202,44 +206,110 @@ function Scoring.RunTests(printer)
         stats = { healing = 5.4e8, hps = 450000, damageTaken = 3e7, interrupts = 2 } }
     local nsNorm = Scoring.Normalize.Player(run(1800, 12, { noSpec }), noSpec)
     check(nsNorm.specID == 264, "Shaman+Healer with no specId resolves to Restoration (264)")
-    local nsScore = Score.ScoreNormalized(nsNorm, Scoring.Composition.Summarize({}), { interrupts = 10 })
+    local nsScore = Score.ScoreRun(run(1800, 12, { noSpec })).byGuid["NS"]
     check(nsScore.categories.interrupts.applicable == true, "recovered Resto Shaman IS scored on interrupts")
     check(Cap.ResolveSpec("HUNTER", "DAMAGER") == nil, "ambiguous class+role (Hunter DPS) is not guessed")
     check(Cap.ResolveSpec("SHAMAN", "HEALER") == 264, "unambiguous class+role (Shaman Healer) resolves")
 
-    -- (29) Dungeon dispel-type gate: a dispel with no valid target type in the dungeon -> N/A, not punished.
-    Cfg.dungeonDispelTypes["gatetestmagiconly"] = { curse = false, poison = false, disease = false, enrage = false }
-    check(Cfg.DungeonDispelEligible("Gate Test Magic Only", { poison = true }) == false, "poison-only tool in magic-only dungeon -> not eligible")
-    check(Cfg.DungeonDispelEligible("Gate Test Magic Only", { magic = true }) == true, "magic tool in magic-only dungeon -> eligible")
-    check(Cfg.DungeonDispelEligible("Some Unlisted Dungeon", { poison = true }) == true, "unlisted dungeon -> never restricts")
-    check(next(Cfg.DispelTypeSet(Cap.Get(259).dispel)) == "enrage", "Rogue Shiv dispel type set = {enrage}")
-    -- Full scoring path: Rogue (enrage-only Shiv) in an enrage-free dungeon -> Dispel N/A.
-    Cfg.dungeonDispelTypes["gatetestnoenrage"] = { enrage = false }
-    local rgMem = member("RG", 259, "DAMAGER", dpsStats({ dispels = 0 }), true)
-    local rgRun = run(1800, 12, { rgMem }); rgRun.dungeonName = "Gate Test No Enrage"
-    local rgScore = Score.ScoreNormalized(Scoring.Normalize.Player(rgRun, rgMem), Scoring.Composition.Summarize({}), { dispels = 8 })
-    check(rgScore.categories.dispels.applicable == false and rgScore.categories.dispels.dungeonGated,
-        "Rogue (enrage-only) in an enrage-free dungeon -> Dispel N/A (dungeon-gated)")
-    Cfg.dungeonDispelTypes["gatetestmagiconly"] = nil
-    Cfg.dungeonDispelTypes["gatetestnoenrage"] = nil
+    -- Season-data harness: ensure a season profile exists (in-game MidnightS1 is loaded; the standalone
+    -- lua5.1 harness may not have it) and give us temp-dungeon helpers on the ACTIVE profile so Distribute
+    -- (which reads Config.SeasonDungeon) sees our test content.
+    Scoring.SeasonData = Scoring.SeasonData or {}
+    if not next(Scoring.SeasonData) then Scoring.SeasonData["__test"] = { dungeons = {} } end
+    local SP = Cfg.SeasonProfile()
+    local function setDungeon(name, data) SP.dungeons[Cfg.NormDungeon(name)] = data end
+    local function clearDungeon(name) SP.dungeons[Cfg.NormDungeon(name)] = nil end
+    local Dist = Scoring.Distribute
 
-    -- (30) Per-type dispel DEMAND: a present type's weight scales expected; the spec uses the MAX weight
-    -- among the types it can address; unlisted/absent -> neutral 1.0.
-    Cfg.dungeonDispelTypes["demandtest"] = { magic = 1.40, curse = 0.90, poison = false }
-    check(Cfg.DungeonDispelDemand("Demand Test", { magic = true }) == 1.40, "magic-heavy demand weight applies (1.40)")
-    check(Cfg.DungeonDispelDemand("Demand Test", { curse = true }) == 0.90, "narrow curse tool gets curse weight (0.90), not magic's")
-    check(Cfg.DungeonDispelDemand("Demand Test", { magic = true, curse = true }) == 1.40, "broad tool uses MAX present-type weight")
-    check(Cfg.DungeonDispelDemand("Demand Test", { poison = true }) == 1.0, "absent type -> neutral 1.0 (gate handles eligibility)")
-    check(Cfg.DungeonDispelDemand("Some Unlisted Dungeon", { magic = true }) == 1.0, "unlisted dungeon -> neutral demand 1.0")
-    -- Expected scales with demand end-to-end: same run, demand 1.40 -> higher expected than neutral 1.0.
-    local dmMem = member("DM", 264, "HEALER", healStats({ dispels = 3 }), true)  -- Resto Shaman: magic dispel
-    local baseExp = Score.ScoreNormalized(Scoring.Normalize.Player(run(1800, 12, { dmMem }), dmMem),
-        Scoring.Composition.Summarize({}), { dispels = 12 }).categories.dispels.expected
-    local dmRun = run(1800, 12, { dmMem }); dmRun.dungeonName = "Demand Test"
-    local hiExp = Score.ScoreNormalized(Scoring.Normalize.Player(dmRun, dmMem),
-        Scoring.Composition.Summarize({}), { dispels = 12 }).categories.dispels.expected
-    check(hiExp and baseExp and math.abs(hiExp - baseExp * 1.40) < 1e-6, "demand 1.40 raises expected dispels 40% vs neutral")
-    Cfg.dungeonDispelTypes["demandtest"] = nil
+    -- (29) Dispel eligibility via the DISTRIBUTION: an enrage/soothe-only Shiv Rogue in a dungeon whose
+    -- season profile has NO enrage/purge supply (only a friendly Magic debuff) draws ~0 -> Cat.Dispel N/A.
+    check(next(Cfg.DispelTypeSet(Cap.Get(259).dispel)) == "enrage", "Rogue Shiv dispel type set = {enrage}")
+    setDungeon("No Enrage Test", { trash = { partyDebuffFrequencies = { magic = 1.0 } } })
+    local rgD = Dist.Dispels({ { playerGUID = "RG", specID = 259, role = "DAMAGER", dispels = 0 } },
+        { duration = 1800, dungeonName = "No Enrage Test" })
+    check((not rgD["RG"]) or rgD["RG"].expected < 0.5,
+        "enrage-only Shiv with no enrage supply -> ~0 expected (Cat.Dispel N/A)")
+    clearDungeon("No Enrage Test")
+    -- Cat-level N/A shapes: no distribution -> noModel; a ~0 share -> coveredByTeam. Neither is a zero.
+    local naNoModel = Scoring.Categories.Dispel({ specID = 257, role = "HEALER", dispels = 2 }, {}, 5, nil)
+    check(naNoModel.applicable == false and naNoModel.noModel, "no distribution -> Dispel N/A (noModel), not a 0")
+    local naCovered = Scoring.Categories.Dispel({ specID = 257, role = "HEALER", dispels = 2 }, {}, 5, { expected = 0.1 })
+    check(naCovered.applicable == false and naCovered.coveredByTeam, "share redistributed to ~0 -> Dispel N/A (coveredByTeam)")
+
+    -- (30) Per-SCHOOL dispel demand scales the supply: magic frequency 1.4 -> 40% more expected than 1.0
+    -- for the same lone Magic dispeller (share is 100% either way; only the pool grows).
+    setDungeon("Magic10", { trash = { partyDebuffFrequencies = { magic = 1.0 } } })
+    setDungeon("Magic14", { trash = { partyDebuffFrequencies = { magic = 1.4 } } })
+    local m10 = Dist.Dispels({ { playerGUID = "P", specID = 264, role = "HEALER", dispels = 0 } },
+        { duration = 1800, dungeonName = "Magic10" })
+    local m14 = Dist.Dispels({ { playerGUID = "P", specID = 264, role = "HEALER", dispels = 0 } },
+        { duration = 1800, dungeonName = "Magic14" })
+    check(m10["P"] and m14["P"] and approx(m14["P"].baseExpected, m10["P"].baseExpected * 1.40, 1e-6),
+        "magic frequency 1.4 raises expected dispels 40% vs 1.0")
+    clearDungeon("Magic10"); clearDungeon("Magic14")
+
+    -- (31) Interrupt SUPPLY = trash + the bosses actually killed (per-source scaled); an unkilled boss is
+    -- excluded (its block never enters the sum), so boss-time is handled implicitly.
+    setDungeon("Kick Supply Test", { trash = { interruptFrequency = 1.0 },
+        bosses = { [111] = { interruptFrequency = 2.0 }, [222] = { interruptFrequency = 5.0 } } })
+    local ksRun = { duration = 1800, dungeonName = "Kick Supply Test", bosses = { { id = 111, totalTime = 60 } } }
+    local ks = Dist.Interrupts({ { playerGUID = "K", specID = 72, role = "DAMAGER", interrupts = 3 } }, ksRun)
+    local sc = Cfg.supplyScale
+    check(ks["K"] and approx(ks["K"].dungeonSupply, 1.0 * sc.trashKick + 2.0 * sc.bossKick, 1e-6),
+        "kick supply = trash + killed-boss frequency x scale (unkilled boss 222 excluded)")
+    clearDungeon("Kick Supply Test")
+
+    -- (31b) A killed boss's dispellable debuffs add to the dispel supply (boss-time implicit): the same
+    -- lone Magic dispeller expects MORE when a magic-debuff boss is killed than on trash alone.
+    setDungeon("Dispel Supply Test", { trash = { partyDebuffFrequencies = { magic = 1.0 } },
+        bosses = { [333] = { partyDebuffFrequencies = { magic = 2.0 } } } })
+    local dsWith = Dist.Dispels({ { playerGUID = "H", specID = 257, role = "HEALER", dispels = 0 } },
+        { duration = 1800, dungeonName = "Dispel Supply Test", bosses = { { id = 333, totalTime = 60 } } })
+    local dsTrash = Dist.Dispels({ { playerGUID = "H", specID = 257, role = "HEALER", dispels = 0 } },
+        { duration = 1800, dungeonName = "Dispel Supply Test", bosses = {} })
+    check(dsWith["H"] and dsTrash["H"] and dsWith["H"].baseExpected > dsTrash["H"].baseExpected + 1e-6,
+        "killed boss's debuffs raise dispel supply above trash-only")
+    clearDungeon("Dispel Supply Test")
+
+    -- (32) A TRACKED player who recorded no interrupt data is scored a real 0 (no benefit of the doubt),
+    -- while a genuinely UNTRACKED player (no combat numbers at all) stays neutral (data outage, not a
+    -- no-show). Fury warrior: same spec, one tracked-with-0-kicks, one fully blind.
+    local trackedZero = Scoring.Normalize.Player(run(1800, 12, { member("TZ", 72, "DAMAGER", dpsStats({ interrupts = nil }), true) }),
+        member("TZ", 72, "DAMAGER", dpsStats({ interrupts = nil }), true))
+    check(trackedZero.interrupts == 0, "tracked run, no interrupt rows -> interrupts normalised to 0 (not nil)")
+    local untracked = Scoring.Normalize.Player(run(1800, 12, { member("UT", 72, "DAMAGER", {}, true) }),
+        member("UT", 72, "DAMAGER", {}, true))
+    check(untracked.interrupts == nil, "untracked run (no combat data) -> interrupts stay nil (neutral fallback)")
+
+    -- (33) Workload distribution - SNIPING: two equal-capacity kickers, one lands everything, the other 0.
+    -- The over-performer keeps their base (curve caps them at 100 - no reward); the sniped one's expected
+    -- is redistributed toward zero (not docked for kicks a teammate stole).
+    setDungeon("Dist Kick Test", { trash = { interruptFrequency = 1.0 } })
+    local drun = { duration = 1800, dungeonName = "Dist Kick Test" }
+    local snipe = Dist.Interrupts({ { playerGUID = "A", specID = 72, role = "DAMAGER", interrupts = 12 },
+                                    { playerGUID = "B", specID = 72, role = "DAMAGER", interrupts = 0 } }, drun)
+    check(snipe["A"] and snipe["B"], "both kickers appear in the interrupt distribution")
+    check(math.abs(snipe["A"].expected - snipe["A"].baseExpected) < 1e-6, "over-performer keeps base expected (capped by curve, not rewarded)")
+    check(snipe["B"].expected < snipe["B"].baseExpected - 0.5, "sniped kicker's expected is redistributed DOWN (not docked)")
+    check(snipe["B"].expected < 0.5, "fully-sniped kicker -> expected ~0 -> Cat.Interrupt will N/A them")
+
+    -- (34) CAPABILITY SHARE: adding a second capable kicker lowers each one's fair share (workload spreads).
+    local solo = Dist.Interrupts({ { playerGUID = "X", specID = 72, role = "DAMAGER", interrupts = 5 } }, drun)
+    local duo = Dist.Interrupts({ { playerGUID = "X", specID = 72, role = "DAMAGER", interrupts = 5 },
+                                 { playerGUID = "Y", specID = 72, role = "DAMAGER", interrupts = 5 } }, drun)
+    check(duo["X"].baseExpected < solo["X"].baseExpected - 1e-6, "a second kicker lowers X's fair share of kicks")
+    clearDungeon("Dist Kick Test")
+
+    -- (35) DISPEL per-SCHOOL split: two Magic dispellers split the Magic supply, so each expects less than
+    -- one alone would (only members who can cleanse a school share that school's workload).
+    setDungeon("Dist D Test", { trash = { partyDebuffFrequencies = { magic = 1.0 } } })
+    local ddrun = { duration = 1800, dungeonName = "Dist D Test" }
+    local d1 = Dist.Dispels({ { playerGUID = "P1", specID = 257, role = "HEALER", dispels = 3 } }, ddrun)     -- Holy Priest (Magic)
+    local d2 = Dist.Dispels({ { playerGUID = "P1", specID = 257, role = "HEALER", dispels = 3 },
+                             { playerGUID = "P2", specID = 264, role = "HEALER", dispels = 3 } }, ddrun)      -- + Resto Shaman (Magic)
+    check(d1["P1"] and d1["P1"].baseExpected > 0, "solo Magic dispeller gets the whole Magic supply")
+    check(d2["P1"].baseExpected < d1["P1"].baseExpected - 1e-6, "a second Magic dispeller lowers P1's Magic share")
+    clearDungeon("Dist D Test")
 
     printer(string.format("|cffa06cf0Scoring tests|r: %d passed, %d failed", passed, failed))
     for _, l in ipairs(lines) do printer("  " .. l) end

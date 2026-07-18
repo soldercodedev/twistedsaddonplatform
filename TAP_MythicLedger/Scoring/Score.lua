@@ -27,15 +27,17 @@ local function pct(v) return round((v or 0) * 100) end
 
 -- Score a single normalized player. `summary` = group capability summary (also carries the throughput
 -- share denominators); `groupTotals` = { interrupts, dispels, dps, hps } summed across the party.
-function Score.ScoreNormalized(norm, summary, groupTotals)
+-- `dist` (optional) = { interrupt = <this player's distributed kick expected or nil>, dispel = <...> }
+-- from Distribute over the whole party; when present it supersedes the standalone interrupt/dispel target.
+function Score.ScoreNormalized(norm, summary, groupTotals, dist)
     groupTotals = groupTotals or {}
     local role = norm.role or "DAMAGER"
     local baseline = Base.Throughput(norm, summary, groupTotals)
 
     local cats = {}
     cats.throughput = Cat.Throughput(norm, baseline)
-    cats.interrupts = Cat.Interrupt(norm, summary, groupTotals.interrupts)
-    cats.dispels    = Cat.Dispel(norm, summary, groupTotals.dispels)
+    cats.interrupts = Cat.Interrupt(norm, summary, groupTotals.interrupts, dist and dist.interrupt)
+    cats.dispels    = Cat.Dispel(norm, summary, groupTotals.dispels, dist and dist.dispel)
     cats.survival   = Cat.Survival(norm)
     cats.deaths     = Cat.Deaths(norm)
     cats.roleContribution = Cat.RoleContribution(norm, cats)
@@ -116,9 +118,9 @@ function Score.Explain(score)
             d[#d + 1] = string.format("Interrupt Contribution: %d  (%s)", round(i.score), i.note or "no data")
         else
             d[#d + 1] = string.format(
-                "Interrupt Contribution: %d  (actual %d vs expected %.1f; profile %s; %.1f min x %.2f/min x comp %.2f; confidence %d%%; weight %d%%)",
-                round(i.score), i.actual, i.expected or 0, i.profile or "?", i.minutes or 0, i.rate or 0,
-                i.compModifier or 1, pct(i.confidence), pct(i.weight))
+                "Interrupt Contribution: %d  (actual %d vs expected %.1f; profile %s; fair share %.0f%% of ~%.0f-kick supply; confidence %d%%; weight %d%%)",
+                round(i.score), i.actual, i.expected or 0, i.profile or "?", (i.share or 0) * 100, i.supply or 0,
+                pct(i.confidence), pct(i.weight))
         end
     end
 
@@ -196,9 +198,14 @@ function Score.ScoreRun(run)
     -- Cap each player's dps/hps contribution to the baseline at their share (over-DPSing your share
     -- shouldn't raise the bar for the team or dilute your own ratio - see Baselines.EffectiveGroupTotals).
     groupTotals = Base.EffectiveGroupTotals(players, summary, groupTotals)
+    -- Distribute the interrupt/dispel workload fairly across the party (supply -> capability share ->
+    -- sniping redistribution), so each player is scored against a fair share, not a flat solo estimate.
+    local kickDist = Scoring.Distribute.Interrupts(players, run)
+    local dispelDist = Scoring.Distribute.Dispels(players, run)
     local out = { list = {}, byGuid = {}, summary = summary, version = Cfg.version }
     for _, p in ipairs(players) do
-        local sc = Score.ScoreNormalized(p, summary, groupTotals)
+        local dist = { interrupt = kickDist[p.playerGUID], dispel = dispelDist[p.playerGUID] }
+        local sc = Score.ScoreNormalized(p, summary, groupTotals, dist)
         out.list[#out.list + 1] = sc
         if sc.playerGUID then out.byGuid[sc.playerGUID] = sc end
     end
@@ -219,7 +226,11 @@ function Score.ScorePlayer(run)
                 if p.hps then totals.hps = totals.hps + p.hps end
             end
             totals = Base.EffectiveGroupTotals(players, summary, totals)
-            return Score.ScoreNormalized(Norm.Player(run, m), summary, totals)
+            local kickDist = Scoring.Distribute.Interrupts(players, run)
+            local dispelDist = Scoring.Distribute.Dispels(players, run)
+            local pn = Norm.Player(run, m)
+            local dist = { interrupt = kickDist[pn.playerGUID], dispel = dispelDist[pn.playerGUID] }
+            return Score.ScoreNormalized(pn, summary, totals, dist)
         end
     end
     return nil
