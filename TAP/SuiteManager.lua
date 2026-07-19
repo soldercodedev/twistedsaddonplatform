@@ -715,9 +715,10 @@ local function pageGetInvolved(b, win)
         .. "expectations are calibrated from real runs, so the more people share, the more accurate "
         .. "and fair everyone's scores become.", ix, y, w - 44 - 32, C.text, 12)
     y = y - (sh + 10)
-    local _, sh2 = b:Wrap("How to share:  it's a one-tap toggle in the beta client - "
-        .. "|cffffffffSettings -> Share run log|r. Not on the beta yet? Join our Discord below to "
-        .. "grab the client and the quick instructions for sharing your runs with Twisted.", ix, y, w - 44 - 32, C.subtext, 11)
+    local _, sh2 = b:Wrap("Two easy ways:  the |cffffffffbeta desktop app|r can send your runs to "
+        .. "Twisted automatically - just flip on |cffffffffShare run log|r. Prefer not to install it? "
+        .. "Simply send the |cffffffffTAP_MythicLedger.lua|r file from your WoW SavedVariables folder "
+        .. "instead. Either way, hop into Discord below to get set up.", ix, y, w - 44 - 32, C.subtext, 11)
     y = y - (sh2 + 10)
     local _, sh3 = b:Wrap("|cffffd200Thank-you:|r anyone who shares their data gets a personal "
         .. "shout-out credited right here in the addon for everyone to see - entirely your call. "
@@ -797,6 +798,19 @@ local function moduleSig()
     return table.concat(ids, ",")
 end
 
+-- The Get Involved nav row pulses until the user actually clicks into it (per campaign), nudging
+-- them toward it without being modal. Engagement + the pulse state persist account-wide.
+local function getInvolvedShouldPulse() return managerDB().giEngaged ~= WELCOME_CAMPAIGN end
+local function markGetInvolvedEngaged(w)
+    managerDB().giEngaged = WELCOME_CAMPAIGN
+    local ww = w or win
+    if ww and ww.navRows then
+        for _, r in ipairs(ww.navRows) do
+            if r._page and r._page.view == "getinvolved" and r.StopPulse then r._page.pulse = false; r:StopPulse(true) end
+        end
+    end
+end
+
 local function buildPages()
     local pages = {
         { header = "Platform" },
@@ -823,7 +837,8 @@ local function buildPages()
         end
     end
     pages[#pages + 1] = { header = "Help" }
-    pages[#pages + 1] = { view = "getinvolved", label = "Get Involved", icon = theme:GetIcon("heart"), render = pageGetInvolved }
+    pages[#pages + 1] = { view = "getinvolved", label = "Get Involved", icon = theme:GetIcon("heart"),
+        render = pageGetInvolved, pulse = getInvolvedShouldPulse(), onSelect = function(w) markGetInvolvedEngaged(w) end }
     pages[#pages + 1] = { view = "commands", label = "Commands", icon = theme:GetIcon("chevron-right"), render = pageCommands }
     pages[#pages + 1] = { view = "about", label = "About", icon = theme:GetIcon("sparkles"), render = pageAbout }
     return pages
@@ -926,8 +941,14 @@ Suite:RegisterCommand({
     desc = "Open Get Involved (add 'reset' to re-show it on next login)",
     handler = function(rest)
         if (rest or ""):lower():gsub("%s+", "") == "reset" then
-            managerDB().welcomeSeen = nil
-            print("|cffa06cf0Twisteds Addon Platform|r: Get Involved spotlight re-armed - it'll pop again on next login/reload.")
+            local m = managerDB(); m.welcomeSeen = nil; m.giEngaged = nil
+            -- Re-arm the nav pulse live if the window already exists.
+            if win and win.navRows then
+                for _, r in ipairs(win.navRows) do
+                    if r._page and r._page.view == "getinvolved" and r.StartPulse then r._page.pulse = true; r:StartPulse() end
+                end
+            end
+            print("|cffa06cf0Twisteds Addon Platform|r: Get Involved spotlight re-armed - the menu item will pulse and it'll auto-open again on next login/reload.")
         else
             Suite:OpenWindow("getinvolved")
         end

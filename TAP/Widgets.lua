@@ -510,6 +510,29 @@ function Mixin:NavRow(parent, width)
     b.tg = theme:Toggle(b); b.tg:SetPoint("RIGHT", -8, 0); b.tg:Hide()
     b.fs = b:CreateFontString(nil, "OVERLAY"); b.fs:SetFont(theme.FONT, 12)
     b.fs:SetPoint("LEFT", b.icon, "RIGHT", 8, 0); b.fs:SetPoint("RIGHT", -8, 0); b.fs:SetJustifyH("LEFT")
+
+    -- Attention pulse: a slow accent wash that fades in and out to draw the eye to an important
+    -- row. Sits just above the row background (below icon/text) so it reads as a glow, not a mask.
+    b.pulse = b:CreateTexture(nil, "BACKGROUND", nil, 1); b.pulse:SetAllPoints()
+    UIF.paint(b.pulse, C.accent); b.pulse:SetAlpha(0); b.pulse:Hide()
+    b._pulseAG = b.pulse:CreateAnimationGroup(); b._pulseAG:SetLooping("REPEAT")
+    local pIn  = b._pulseAG:CreateAnimation("Alpha"); pIn:SetOrder(1);  pIn:SetDuration(0.85)
+    pIn:SetFromAlpha(0);    pIn:SetToAlpha(0.30); pIn:SetSmoothing("IN_OUT")
+    local pOut = b._pulseAG:CreateAnimation("Alpha"); pOut:SetOrder(2); pOut:SetDuration(0.95)
+    pOut:SetFromAlpha(0.30); pOut:SetToAlpha(0);   pOut:SetSmoothing("IN_OUT")
+    function b:StartPulse()
+        self._wantPulse = true
+        if self._sel or self._pulsing then return end   -- selected rows don't pulse
+        self._pulsing = true
+        UIF.paint(self.pulse, theme.C.accent)           -- re-tint if the theme accent changed
+        self.pulse:SetAlpha(0); self.pulse:Show(); self._pulseAG:Play()
+    end
+    function b:StopPulse(permanent)
+        if permanent then self._wantPulse = false end
+        self._pulsing = false
+        self._pulseAG:Stop(); self.pulse:SetAlpha(0); self.pulse:Hide()
+    end
+
     b:SetScript("OnEnter", function(self) if not self._sel then UIF.paint(self.bg, UIF.mix(theme.C.sidebar, theme.C.accent, 0.28)) end end)
     b:SetScript("OnLeave", function(self) if not self._sel then UIF.paint(self.bg, theme.C.sidebar) end end)
     -- Apply/clear the selected look.
@@ -519,6 +542,8 @@ function Mixin:NavRow(parent, width)
         self.sel:SetShown(sel); UIF.paint(self.sel, C.accent)
         UIF.paint(self.bg, sel and UIF.mix(C.sidebar, C.accent, 0.45) or C.sidebar)
         self.fs:SetTextColor(unpack(sel and { 0.98, 0.99, 1 } or C.text))
+        -- Pause the attention pulse while selected; resume on deselect if still wanted.
+        if sel then self:StopPulse() elseif self._wantPulse then self:StartPulse() end
     end
     return b
 end

@@ -182,6 +182,7 @@ local function build(win)
             local r = theme:NavRow(navChild, SIDE_W - 20)
             if page.icon then r.icon:SetTexture(page.icon) end
             r.fs:SetText(page.label); r._page = page
+            if page.pulse and r.StartPulse then r:StartPulse() end   -- attention pulse for flagged pages
             -- Fire the page's onSelect on EVERY nav click (even re-clicking the current view),
             -- so a page can reset its own sub-state (e.g. drop back to its list) when re-entered.
             r:SetScript("OnClick", function()
