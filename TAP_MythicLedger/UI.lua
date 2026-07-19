@@ -708,7 +708,8 @@ local function runTipData(r)
             local pkey = API.IdentityKey(m)
             local prec = pkey and DB.PlayerIndex()[pkey]
             local star = (prec and prec.favorite) and "|cffffd200*|r " or ""
-            lines[#lines + 1] = { left = "  " .. star .. (m.name or "?"), right = specName(m.specId) or "-",
+            lines[#lines + 1] = { left = "  " .. star .. (m.name or "?"),
+                right = (specName(m.specId) or "-") .. (m.itemLevel and ("  ·  " .. tostring(m.itemLevel)) or ""),
                 lcolor = m.classFile and RAID_CLASS_COLORS and RAID_CLASS_COLORS[m.classFile]
                     and { RAID_CLASS_COLORS[m.classFile].r, RAID_CLASS_COLORS[m.classFile].g, RAID_CLASS_COLORS[m.classFile].b } or nil }
             if prec and prec.notes and prec.notes ~= "" then
@@ -1099,8 +1100,10 @@ local function renderRunDetails(b, C, x, y, w, win)
             local gradeStr = sc and ("|cff" .. (gradeColor(sc.grade) or "cccccc") .. (sc.grade or "?") .. "|r") or nil
             local sp = specName(m.specId, m.specIcon)
             local primary = (role == "HEALER") and ("HPS " .. Util.shortNum(s.hps)) or ("DPS " .. Util.shortNum(s.dps))
+            local identity = sp and (sp .. "  ·  " .. roleLbl) or roleLbl
+            if m.itemLevel then identity = identity .. "  ·  |cffc9a76a" .. tostring(m.itemLevel) .. " ilvl|r" end
             local lines = {
-                sp and (sp .. "  ·  " .. roleLbl) or roleLbl,
+                identity,
                 primary .. "     DTkn " .. Util.shortNum(s.damageTaken),
                 "Deaths " .. Util.numOr(s.deaths, "%d") .. "    Int " .. Util.numOr(s.interrupts, "%d")
                     .. "    Dsp " .. Util.numOr(s.dispels, "%d"),
@@ -1109,6 +1112,8 @@ local function renderRunDetails(b, C, x, y, w, win)
             local tlines = {
                 { left = "Spec", right = specClassLabel(m.classFile, m.specId) },
                 { left = "Role", right = roleLbl },
+                { left = "Item level", right = m.itemLevel and tostring(m.itemLevel) or "-" },
+                { left = "Hero tree", right = (m.heroTree and m.heroTree.name) or "-" },
                 { sep = true },
                 { left = "Damage / DPS", right = Util.shortNum(s.damage) .. " / " .. Util.shortNum(s.dps) },
                 { left = "Healing / HPS", right = Util.shortNum(s.healing) .. " / " .. Util.shortNum(s.hps) },
@@ -1556,6 +1561,7 @@ local function renderPlayerDetails(b, C, x, y, w, win)
     end
     b:Heading(classColorText(p.classFile, p.fullName or p.name or "Player"), x + 80, y, "h1")
     local sub = specClassLabel(p.classFile, p.lastKnownSpecId)
+    if p.lastKnownItemLevel then sub = sub .. "   |cffc9a76a" .. tostring(p.lastKnownItemLevel) .. " ilvl|r" end
     if p.guildName then sub = sub .. "   <" .. p.guildName .. ">" end
     b:Label(sub, x + 82, y - 26, C.subtext, 12)
     -- Favorite toggle: right-aligned under the Back button so it can't collide with the name/crest.
@@ -2010,7 +2016,7 @@ local function buildSampleRun()
         party[i] = {
             guid = p.guid, name = p.name, realm = p.realm, fullName = p.name .. "-" .. p.realm,
             classFile = p.classFile, specId = p.specId, role = p.role, guildName = p.guild,
-            mplusScore = 2600 + i * 90, isPlayer = p.isPlayer and true or false, stats = stt,
+            mplusScore = 2600 + i * 90, itemLevel = 636 + i, isPlayer = p.isPlayer and true or false, stats = stt,
         }
     end
     local topM, healM, lowM
@@ -2986,7 +2992,7 @@ function scoreTipLines(sc)   -- forward-declared above
     local t = cats.throughput
     if t then
         local det = t.detail
-        local function cmp(c) return string.format("%s vs %s expected (%.2fx)", Util.shortNum(c.value), Util.shortNum(c.expected), c.ratio or 0) end
+        local function cmp(c) return string.format("%s vs %s %s (%.2fx)", Util.shortNum(c.value), Util.shortNum(c.expected), c.requirementModel and "required" or "expected", c.ratio or 0) end
         if det and det.dps and det.hps then
             block("Throughput", t.score, false, "blended DPS + HPS" .. wt(t.weight))
             block("    Damage", det.dps.score, false, cmp(det.dps))
@@ -3206,7 +3212,8 @@ function renderPlayerReview(b, C, x, y, w, win)
                 b:Label(name, LX + 20, yy, C.subtext, 11)
                 bar(LX + 120, yy - 3, 190, c.score)
                 b:Label(tostring(rnd(c.score)), LX + 322, yy, theme:Color(catScoreHex(c.score)), 12)
-                b:Label(hlNums(string.format("%s vs %s expected (%.2fx)", Util.shortNum(c.value), Util.shortNum(c.expected), c.ratio or 0)),
+                local vs = c.requirementModel and "required" or "expected"
+                b:Label(hlNums(string.format("%s vs %s %s (%.2fx)", Util.shortNum(c.value), Util.shortNum(c.expected), vs, c.ratio or 0)),
                     LX + 372, yy, C.subtext, 10)
             end
             subBar("Damage", det.dps, y - 52)
@@ -3215,8 +3222,9 @@ function renderPlayerReview(b, C, x, y, w, win)
             y = y - H - 8
         else
             local c = det.dps or det.hps
-            local d = c and string.format("%s vs %s expected (%.2fx) · weight %d%%",
-                    Util.shortNum(c.value), Util.shortNum(c.expected), c.ratio or 0, pctOf(t.weight))
+            local vs = (c and c.requirementModel) and "required" or "expected"
+            local d = c and string.format("%s vs %s %s (%.2fx) · weight %d%%",
+                    Util.shortNum(c.value), Util.shortNum(c.expected), vs, c.ratio or 0, pctOf(t.weight))
                 or ((t.note or "estimate") .. " · weight " .. pctOf(t.weight) .. "%")
             card("Throughput", t.score, d)
         end
@@ -3316,9 +3324,19 @@ function renderPlayerReview(b, C, x, y, w, win)
             Poss .. " modeled share of the group's total damage this run - group-relative, so it scales with the party instead of a fixed number. Meeting the share is full marks; beating it never hurts.")
     end
     if t and t.detail and t.detail.hps then
-        expl(string.format("Healing — %s HPS target  (%s %s, %.2fx)",
-                Util.shortNum(t.detail.hps.expected), didV, Util.shortNum(t.detail.hps.value), t.detail.hps.ratio or 0),
-            Poss .. " modeled share of the group's total healing. Tanks are expected to self-sustain a portion by spec.")
+        local h = t.detail.hps
+        if h.requirementModel then
+            local rd = h.reqDetail or {}
+            local why = (sc.role == "TANK")
+                and string.format("Target = %d%% of your unavoidable damage taken (self-coverage by spec); the healer covers the rest. Output counts healing + absorbs.", math.floor((rd.selfCoverage or 0) * 100 + 0.5))
+                or "Target = the damage the group took that it couldn't self-cover (tank remainder + 90% of group unavoidable + a slice of avoidable). Standing in bad hits the stander's Survival, not your target. Output counts healing + absorbs."
+            expl(string.format("Healing — %s required  (%s %s, %.2fx)",
+                    Util.shortNum(h.expected), didV, Util.shortNum(h.value), h.ratio or 0), why)
+        else
+            expl(string.format("Healing — %s HPS target  (%s %s, %.2fx)",
+                    Util.shortNum(h.expected), didV, Util.shortNum(h.value), h.ratio or 0),
+                Poss .. " modeled share of the group's total healing. Tanks are expected to self-sustain a portion by spec.")
+        end
     end
     local iC = cats.interrupts
     if iC and iC.applicable and iC.expected then
@@ -3677,6 +3695,7 @@ function UI.ShowScoreboard(run, opts)
                 local lines = {
                     { left = "Spec", right = specClassLabel(m.classFile, m.specId) },
                     { left = "Role", right = ML.ROLE_LABEL[m.role] or "-" },
+                    { left = "Item level", right = m.itemLevel and tostring(m.itemLevel) or "-" },
                     { sep = true },
                     { left = "Damage / DPS", right = Util.shortNum(s.damage) .. " / " .. Util.shortNum(s.dps) },
                     { left = "Healing / HPS", right = Util.shortNum(s.healing) .. " / " .. Util.shortNum(s.hps) },
@@ -3702,6 +3721,8 @@ function UI.ShowScoreboard(run, opts)
                 roleIcon(b, x + 34, y - 11, 18, m.role)
                 local nm = (m.isPlayer and "|cffffd200> |r" or "") .. classColorText(m.classFile, m.name or "?")
                 b:Label(nm, x + COL.name, y - 16, C.text, 13)
+                -- Equipped item level, small, under the name (captured live for you, via inspect for teammates).
+                if m.itemLevel then b:Label("|cff8b8b8bilvl|r " .. tostring(m.itemLevel), x + COL.name, y - 33, C.subtext, 10) end
                 -- Gold crown next to the MVP (the highest-graded player), matching the MVP hero card.
                 local isMVP = mvp and sc and ((sc.playerGUID and sc.playerGUID == mvp.playerGUID)
                     or (sc.name and sc.name == mvp.name))

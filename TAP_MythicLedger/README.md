@@ -24,8 +24,11 @@ them the next time you group up — all stored locally, all private to you.
   reminder prints **to your own chat only**. It is never sent to party/raid/instance/guild chat, is
   shown once per person per group, respects a minimum-shared-runs threshold, and only shows metrics
   that are actually available.
-- **Pages** — Overview, Runs (filter/sort), Run Details, Dungeons, Characters, Players, Personal
-  Bests, Settings, and Debug — plus an optional post-run summary.
+- **Dungeon Guide** — a read-only journal of the current season's **interrupt & dispel priorities**
+  per dungeon (which casts to kick, which auras to dispel, by tier and dispel type), with the caster
+  shown as a live 3D model. Reference only; it doesn't drive scoring.
+- **Pages** — Overview, Runs (filter/sort), Run Details, Dungeons, Dungeon Guide, Characters, Players,
+  Personal Bests, Settings, and Debug — plus an optional post-run summary.
 - **Boss splits**, **reload/disconnect recovery**, **versioned export/import**, and a **schema
   migration framework**.
 

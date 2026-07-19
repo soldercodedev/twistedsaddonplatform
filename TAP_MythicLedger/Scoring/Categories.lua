@@ -205,7 +205,7 @@ local function componentScore(value, expected, role, isHeal)
     return s, ratio
 end
 
-function Cat.Throughput(norm, baseline)
+function Cat.Throughput(norm, baseline, healReq)
     baseline = baseline or Base.Throughput(norm)
     local role = norm.role or "DAMAGER"
     local mix = baseline.mix or Cfg.ThroughputMix(role, norm.specID)
@@ -221,10 +221,19 @@ function Cat.Throughput(norm, baseline)
         end
     end
     if (mix.hps or 0) > 0 then
-        local s, r = componentScore(norm.hps, baseline.hps, role, true)
+        -- Tanks & healers: judge HPS against the damage-taken REQUIREMENT (healing what the encounter
+        -- dealt), not a group-relative HPS share. Output includes absorbs so shield specs aren't docked.
+        -- Falls back to the group-relative baseline when the model isn't applicable (missing data).
+        local value, expected, model = norm.hps, baseline.hps, false
+        if healReq and (healReq.requirement or 0) > 0 and healReq.output ~= nil then
+            value, expected, model = healReq.output, healReq.requirement, true
+        end
+        local s, r = componentScore(value, expected, role, true)
         if s then
             parts = parts + s * mix.hps; wsum = wsum + mix.hps
-            detail.hps = { value = norm.hps, expected = baseline.hps, ratio = r, score = s, weight = mix.hps }
+            detail.hps = { value = value, expected = expected, ratio = r, score = s, weight = mix.hps,
+                           requirementModel = model, hpsRaw = norm.hps,
+                           reqDetail = model and healReq.detail or nil }
         end
     end
 

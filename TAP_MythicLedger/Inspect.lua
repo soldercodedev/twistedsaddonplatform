@@ -21,31 +21,50 @@ local C_Traits = _G.C_Traits
 local C_ClassTalents = _G.C_ClassTalents
 
 ----------------------------------------------------------------------
--- Talent-tree reading. Enumerate the SPELL IDs granted by PURCHASED nodes of a trait config. Baseline
--- abilities aren't in the tree, so absence here only matters for talent-gated spells. (set, count, err?)
+-- Talent-tree reading. In ONE pass over the purchased nodes of a trait config, collect:
+--   * the SPELL IDs granted by purchased nodes (baseline abilities aren't in the tree, so absence here
+--     only matters for talent-gated spells) - used for the dispel gate + stored as metadata;
+--   * the active HERO TREE (subtree). Hero talents can only be purchased from the chosen subtree, so the
+--     first purchased node carrying a subTreeID identifies it (War Within C_Traits).
+-- Returns (spellSet, count, hero{id,name} | nil, err | nil). Heavily pcall-guarded - degrades to nil.
 ----------------------------------------------------------------------
-local function grantedSpellIDs(configID)
-    local out, n = {}, 0
-    if not (configID and C_Traits and C_Traits.GetConfigInfo) then return out, n, "no C_Traits API" end
+local function readTalents(configID)
+    local out, n, hero = {}, 0, nil
+    if not (configID and C_Traits and C_Traits.GetConfigInfo) then return out, n, nil, "no C_Traits API" end
     local ok, cfg = pcall(C_Traits.GetConfigInfo, configID)
-    if not (ok and type(cfg) == "table" and cfg.treeIDs) then return out, n, "no config (inspect not ready?)" end
+    if not (ok and type(cfg) == "table" and cfg.treeIDs) then return out, n, nil, "no config (inspect not ready?)" end
     for _, treeID in ipairs(cfg.treeIDs) do
         local okn, nodes = pcall(C_Traits.GetTreeNodes, treeID)
         if okn and type(nodes) == "table" then
             for _, nodeID in ipairs(nodes) do
                 local node = select(2, pcall(C_Traits.GetNodeInfo, configID, nodeID))
-                if type(node) == "table" and (node.ranksPurchased or 0) > 0 and node.activeEntry then
-                    local ent = select(2, pcall(C_Traits.GetEntryInfo, configID, node.activeEntry.entryID))
-                    if type(ent) == "table" and ent.definitionID then
-                        local def = select(2, pcall(C_Traits.GetDefinitionInfo, ent.definitionID))
-                        local sid = type(def) == "table" and def.spellID
-                        if sid and not out[sid] then out[sid] = true; n = n + 1 end
+                if type(node) == "table" and (node.ranksPurchased or 0) > 0 then
+                    -- hero subtree: the first purchased hero node reveals the active tree
+                    if not hero and node.subTreeID and C_Traits.GetSubTreeInfo then
+                        local oks, st = pcall(C_Traits.GetSubTreeInfo, configID, node.subTreeID)
+                        hero = { id = node.subTreeID, name = (oks and type(st) == "table" and st.name) or nil }
+                    end
+                    if node.activeEntry then
+                        local ent = select(2, pcall(C_Traits.GetEntryInfo, configID, node.activeEntry.entryID))
+                        if type(ent) == "table" and ent.definitionID then
+                            local def = select(2, pcall(C_Traits.GetDefinitionInfo, ent.definitionID))
+                            local sid = type(def) == "table" and def.spellID
+                            if sid and not out[sid] then out[sid] = true; n = n + 1 end
+                        end
                     end
                 end
             end
         end
     end
-    return out, n
+    return out, n, hero
+end
+
+-- Set -> sorted array of ids (compact for saved metadata).
+local function idList(set)
+    local t = {}
+    for sid in pairs(set or {}) do t[#t + 1] = sid end
+    table.sort(t)
+    return t
 end
 
 -- The trait config id to read for a unit: your own active config for "player"; the shared inspect
@@ -76,11 +95,22 @@ end
 local function evalUnit(unit)
     local Cap = ML.Scoring and ML.Scoring.Capability
     local rec = { unit = unit, guid = UnitGUID(unit), name = UnitName(unit) or unit }
+    -- Grab equipped item level while this unit is inspected (self reads live) - the run tracker's only
+    -- reliable window for a teammate's ilvl, so we piggyback it on the dispel inspect.
+    rec.itemLevel = ML.API and ML.API.ItemLevel and ML.API.ItemLevel(unit) or nil
     local _, classFile = UnitClass(unit); rec.classFile = classFile
     rec.role = (UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)) or "NONE"
     rec.specID = specOf(unit)
     if not rec.specID or rec.specID == 0 then rec.specUnknown = true; return rec end
     rec.specName = select(2, GetSpecializationInfoByID(rec.specID)) or ("spec" .. rec.specID)
+
+    -- Metadata capture for ALL specs (not just gated dispellers): hero tree + full talent set + ilvl,
+    -- so we can build class+spec+ilvl+hero-tree expectations later. Read once, reuse for the dispel gate.
+    local granted, gcount, hero, gerr = readTalents(configForUnit(unit))
+    rec.talentCount = gcount
+    rec.heroTree = hero
+    rec.talents = idList(granted)   -- compact sorted id list for saving
+    if gerr then rec.readErr = gerr end
 
     local prof = Cap and Cap.Get and Cap.Get(rec.specID, ROLE_MAP[rec.role], classFile)
     local d = prof and prof.dispel
@@ -89,9 +119,8 @@ local function evalUnit(unit)
     rec.talentGated = d.talentDependent and true or false
     if not rec.talentGated then rec.hasTool = true; return rec end      -- baseline: always present
 
-    local granted, gcount, gerr = grantedSpellIDs(configForUnit(unit))
     rec.talentRead = gcount
-    if gerr then rec.readErr = gerr; return rec end                    -- hasTool stays nil (unknown)
+    if gerr then return rec end                                        -- hasTool stays nil (unknown)
     rec.hasTool = granted[rec.dispelSpellID] and true or false
     return rec
 end
@@ -194,12 +223,18 @@ function Inspect.Run(opts)
     })
 end
 
--- Data capture for the scorer: onDone(map) where map[guid] = { hasTool = bool/nil, specID = n }.
+-- Data capture for the scorer + future calibration: onDone(map) where
+--   map[guid] = { hasTool, specID, itemLevel, heroTree = {id,name}, talents = {ids...}, talentCount }.
+-- heroTree/talents are metadata (not read by scoring yet) - they let us bucket expectations by
+-- class+spec+ilvl+hero-tree once we have enough samples.
 function Inspect.CaptureGroup(onDone)
     return Inspect.Eval({ onDone = function(recs)
         local map = {}
         for _, r in ipairs(recs) do
-            if r.guid then map[r.guid] = { hasTool = r.hasTool, specID = r.specID } end
+            if r.guid then
+                map[r.guid] = { hasTool = r.hasTool, specID = r.specID, itemLevel = r.itemLevel,
+                                heroTree = r.heroTree, talents = r.talents, talentCount = r.talentCount }
+            end
         end
         if onDone then pcall(onDone, map) end
     end })

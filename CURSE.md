@@ -56,8 +56,10 @@ enemy buffs purged, and debuffs cleansed down as landed vs expected.
 
 Each player also gets a deterministic **performance grade** - a transparent, group-relative rating
 across **Throughput, Interrupts, Dispels, Survival, and Death Impact** (talent-aware, so a spec is
-never docked for a tool it doesn't have). Every grade shows exactly *how* it was built and what to
-work on next - no black box, no uploads.
+never docked for a tool it doesn't have). Healers and tanks are graded on the **damage the group
+actually took**, not a raw HPS number, and a new **Dungeon Guide** lists every dungeon's interrupt and
+dispel priorities - which casts to kick, which auras to remove - with the caster shown as a live 3D
+model. Every grade shows exactly *how* it was built and what to work on next - no black box, no uploads.
 
 ![Per-player grade breakdown - see exactly how the score was built](https://raw.githubusercontent.com/soldercodedev/twistedsaddonplatform/beta/media/19-mythic-ledger-player-grade.png)
 

@@ -70,6 +70,27 @@ function API.MythicRating(unit)
     return nil
 end
 
+-- Equipped item level (rounded). For "player" GetAverageItemLevel is always live; for any OTHER unit it
+-- needs an active/completed inspect (C_PaperDollInfo.GetInspectItemLevel) -> nil until that unit has been
+-- inspected (the run tracker inspects the group at run start, so teammate ilvl fills in then).
+function API.ItemLevel(unit)
+    unit = unit or "player"
+    if unit == "player" then
+        if type(GetAverageItemLevel) == "function" then
+            local _, equipped = safe("GetAverageItemLevel", GetAverageItemLevel)
+            local n = ML.ReadNum(equipped)
+            if n and n > 0 then return math.floor(n + 0.5) end
+        end
+        return nil
+    end
+    local C_PD = _G.C_PaperDollInfo
+    if C_PD and type(C_PD.GetInspectItemLevel) == "function" then
+        local n = ML.ReadNum(safe("GetInspectItemLevel", C_PD.GetInspectItemLevel, unit))
+        if n and n > 0 then return math.floor(n + 0.5) end
+    end
+    return nil
+end
+
 -- Boss portrait icons from the Encounter Journal. Built lazily once - iterating the whole Journal is
 -- a bit heavy, so we cache it. EJ_* are base-API functions (no UI addon needed).
 --
@@ -395,6 +416,7 @@ function API.MemberFor(unit)
         guildName = ML.ReadStr(guild),
         specId    = API.UnitSpec(unit),   -- reliable for self; usually nil for others
         mplusScore = API.MythicRating(unit),
+        itemLevel = API.ItemLevel(unit),  -- live for self; nil for others until inspected (filled at run start)
         isPlayer  = UnitIsUnit(unit, "player") and true or false,
     }
     return m
@@ -464,6 +486,7 @@ function API.PlayerContext()
         classId   = ML.ReadNum(classId),
         specId    = specId,
         specName  = specName,
+        itemLevel = API.ItemLevel("player"),
         role      = ML.CanRead(role) and role or nil,
     }
 end

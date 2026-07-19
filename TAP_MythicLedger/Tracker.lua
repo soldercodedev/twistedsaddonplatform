@@ -102,9 +102,17 @@ local function mergePartyStats(roster, stats, capture)
             specIcon = src and src.specIcon,
             guildName = m.guildName, isPlayer = m.isPlayer and true or false,
             mplusScore = m.mplusScore,
+            -- Equipped item level: live-captured for self; for teammates it comes from the run-start group
+            -- inspect (capture map), so it fills in for pugs who don't broadcast it.
+            itemLevel = m.itemLevel or (capture and m.guid and capture[m.guid] and capture[m.guid].itemLevel),
             -- Live talent-inspection verdict for this member's dispel: true = has it, false = confirmed
             -- NOT talented, nil = unknown. Gates the dispel scorer (see Scoring/Categories.Dispel).
             dispelTalent = capture and m.guid and capture[m.guid] and capture[m.guid].hasTool,
+            -- Talent METADATA (not read by scoring yet) - captured for future class+spec+ilvl+hero-tree
+            -- expectation modelling. heroTree = {id,name}; talents = purchased spell ids; talentCount.
+            heroTree = m.heroTree or (capture and m.guid and capture[m.guid] and capture[m.guid].heroTree),
+            talents = m.talents or (capture and m.guid and capture[m.guid] and capture[m.guid].talents),
+            talentCount = m.talentCount or (capture and m.guid and capture[m.guid] and capture[m.guid].talentCount),
             stats = statBlock(src),
         }
     end
@@ -235,8 +243,19 @@ local function captureDispels()
     ML.Inspect.CaptureGroup(function(map)
         if not (current and type(map) == "table") then return end
         local cur = current.dispelCapture or {}
+        -- carry a good previous value forward when the new capture is missing it (a later inspect can
+        -- read the dispel verdict but momentarily miss ilvl/hero/talents, or vice-versa).
+        local CARRY = { "itemLevel", "heroTree", "talents", "talentCount" }
         for guid, v in pairs(map) do
-            if v.hasTool ~= nil or cur[guid] == nil then cur[guid] = v end
+            local prev = cur[guid]
+            if v.hasTool ~= nil or prev == nil then
+                if prev then
+                    for _, f in ipairs(CARRY) do if prev[f] and not v[f] then v[f] = prev[f] end end
+                end
+                cur[guid] = v
+            elseif prev then
+                for _, f in ipairs(CARRY) do if v[f] and not prev[f] then prev[f] = v[f] end end
+            end
         end
         current.dispelCapture = cur
     end)

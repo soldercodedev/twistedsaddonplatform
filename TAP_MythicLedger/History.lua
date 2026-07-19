@@ -117,7 +117,8 @@ local function playerSummaryFor(identityKey, member)
             identityKey = identityKey,
             guid = member.guid, name = member.name, realm = member.realm, fullName = member.fullName,
             classId = member.classId, classFile = member.classFile,
-            lastKnownSpecId = member.specId, lastKnownRole = member.role, guildName = member.guildName,
+            lastKnownSpecId = member.specId, lastKnownRole = member.role, lastKnownItemLevel = member.itemLevel,
+            guildName = member.guildName,
             firstSeenAt = nil, lastSeenAt = nil,
             totals = emptyTotals(),
             byRole = {}, bySpec = {}, byDungeon = {}, bySeason = {},
@@ -147,6 +148,7 @@ local function ingestPlayers(run)
                 if m.specId then rec.lastKnownSpecId = m.specId end
                 if m.specIcon then rec.lastKnownSpecIcon = m.specIcon end
                 if m.role then rec.lastKnownRole = m.role end
+                if m.itemLevel then rec.lastKnownItemLevel = m.itemLevel end
 
                 bumpTotals(rec.totals, run.status)
                 accStats(rec.stats, m.stats)
@@ -761,7 +763,7 @@ function History.RecapStats(identityKey, seasonId)
     local runs = History.FilterRuns({ playerKey = identityKey, seasonId = seasonId })
     if #runs == 0 then return nil end
     local s = { runs = 0, timed = 0, highestTimed = nil, lastRole = nil, lastSpecId = nil,
-                lastClassFile = nil, lastRun = nil, roleBucket = {}, minLevel = nil, maxLevel = nil }
+                lastClassFile = nil, lastItemLevel = nil, lastRun = nil, roleBucket = {}, minLevel = nil, maxLevel = nil }
     -- runs are newest-first; the first is the "last seen".
     for i, r in ipairs(runs) do
         local m
@@ -784,6 +786,8 @@ function History.RecapStats(identityKey, seasonId)
                 s.lastClassFile = m.classFile
                 s.lastRun = { status = r.status, level = r.level, dungeon = r.dungeonName, at = r.completedAt or r.startedAt }
             end
+            -- Most-recent KNOWN item level (runs are newest-first; inspect can miss on any single run).
+            if not s.lastItemLevel and m.itemLevel then s.lastItemLevel = m.itemLevel end
             -- Accumulate stats bucketed by the role played in THAT run.
             local role = m.role or "UNKNOWN"
             s.roleBucket[role] = s.roleBucket[role] or {}

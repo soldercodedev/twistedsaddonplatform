@@ -20,9 +20,14 @@ local ICON_DIR = "Interface\\AddOns\\TAP\\assets\\icons\\"
 
 -- Default suite look, out of the box (overridden by any saved appearance). The look is split
 -- into two independent axes: SHAPE (square vs rounded) and a COLOR scheme (palette + accent).
-local DEFAULT_SKIN         = "dragonflight"   -- seeds NewTheme's palette/accent at creation
+local DEFAULT_SKIN         = "obsidian"       -- seeds NewTheme's palette/accent at creation
 local DEFAULT_SHAPE        = "rounded"        -- soft corners out of the box
-local DEFAULT_PALETTE_NAME = "dragonflight"   -- dragon-fire colors out of the box
+local DEFAULT_PALETTE_NAME = "obsidian"       -- near-black, cool neutral (steel-blue accent) out of the box
+
+-- "Get Involved" highlight: the page auto-opens ONCE per account, keyed by this campaign string.
+-- Bump it in a future update to re-highlight the page for everyone; `/tap getinvolved reset`
+-- re-arms it locally for testing.
+local WELCOME_CAMPAIGN = "2026-07-runshare"
 
 local theme = UIF:NewTheme({
     name    = "TAPManager",
@@ -685,6 +690,55 @@ local function pageAbout(b, win)
 end
 
 ----------------------------------------------------------------------
+-- Page: Get Involved. A community call-to-action - Discord, bug reports, ideas, and (the emphasis)
+-- sharing your recorded Mythic+ runs so the scoring model's expectations get more accurate. Auto-
+-- opens once per account (WELCOME_CAMPAIGN); resettable via /tap getinvolved reset.
+----------------------------------------------------------------------
+local function pageGetInvolved(b, win)
+    local C = theme.C
+    local w = b.contentWidth
+    local x, y = 24, -18
+
+    b:Heading("Get Involved", x, y, "h1"); y = y - 34
+    local _, hh = b:Wrap("Twisted's Addon Platform is built by one person - and it gets better every "
+        .. "time |cffffffffyou|r pitch in. Bug reports, ideas, and (most of all) your real Mythic+ "
+        .. "runs make it sharper for everyone.", x, y, w - 44, C.subtext, 12)
+    y = y - (hh + 18)
+
+    -- Hero callout: share your runs (drawn on an accent-tinted card).
+    local yTop = y
+    local ix = x + 16
+    b:Glyph(ix, y - 4, { icon = "share", size = 20, color = C.accent })
+    b:Heading("Share your Mythic+ runs", ix + 30, y - 2, "h3"); y = y - 32
+    local _, sh = b:Wrap("The Mythic Ledger grades every player against what their spec is "
+        .. "|cffffffffexpected|r to contribute - damage, interrupts, dispels, survival. Those "
+        .. "expectations are calibrated from real runs, so the more people share, the more accurate "
+        .. "and fair everyone's scores become.", ix, y, w - 44 - 32, C.text, 12)
+    y = y - (sh + 10)
+    local _, sh2 = b:Wrap("How to share:  it's a one-tap toggle in the beta client - "
+        .. "|cffffffffSettings -> Share run log|r. Not on the beta yet? Join our Discord below to "
+        .. "grab the client and the quick instructions for sharing your runs with Twisted.", ix, y, w - 44 - 32, C.subtext, 11)
+    y = y - (sh2 + 10)
+    local _, sh3 = b:Wrap("|cffffd200Thank-you:|r anyone who shares their data gets a personal "
+        .. "shout-out credited right here in the addon for everyone to see - entirely your call. "
+        .. "Prefer to stay anonymous? That's totally fine too; your runs help either way.", ix, y, w - 44 - 32, C.subtext, 11)
+    y = y - (sh3 + 12)
+    b:Box(x, yTop + 8, w - 44, (yTop + 8) - (y - 6), 0.06, 0, C.accent)
+    y = y - 16
+
+    -- Community / Discord.
+    y = b:Section("IDEAS, BUGS & HANGOUTS", x, y); y = y - 30
+    local _, ch = b:Wrap("Got a suggestion or hit a bug? The fastest way to reach me is Discord - "
+        .. "come say hi, grab the beta client, or tell me what's broken.", x, y, w - 44, C.subtext, 11)
+    y = y - (ch + 10)
+    b:Button(x, y, 190, "Join our Discord", "default", function()
+        theme:ShowLinkDialog("Discord - copy this link (Ctrl+C)", "https://discord.gg/pN5vYDrQ5j")
+    end, { color = "5865F2", textColor = "FFFFFF", icon = theme:GetIcon("discord", "social"), iconSize = 15 })
+    y = y - 40
+    return y - 16
+end
+
+----------------------------------------------------------------------
 -- Page: Commands (every slash command across the platform + its modules, grouped by owner).
 -- Modules contribute via Suite:RegisterCommand{ cmd, desc, owner, subcommands }.
 ----------------------------------------------------------------------
@@ -769,6 +823,7 @@ local function buildPages()
         end
     end
     pages[#pages + 1] = { header = "Help" }
+    pages[#pages + 1] = { view = "getinvolved", label = "Get Involved", icon = theme:GetIcon("heart"), render = pageGetInvolved }
     pages[#pages + 1] = { view = "commands", label = "Commands", icon = theme:GetIcon("chevron-right"), render = pageCommands }
     pages[#pages + 1] = { view = "about", label = "About", icon = theme:GetIcon("sparkles"), render = pageAbout }
     return pages
@@ -860,6 +915,41 @@ function Suite:OpenWindow(view)
 end
 function Suite:CloseWindow() if win and win.frame then win.frame:Hide() end end
 function Suite:IsWindowOpen() return win and win:IsShown() and true or false end
+
+----------------------------------------------------------------------
+-- "Get Involved" spotlight: open it (and let the dev re-arm the first-run auto-open).
+--   /tap getinvolved        - open the page
+--   /tap getinvolved reset  - re-arm the once-per-account auto-open (pops again next login/reload)
+----------------------------------------------------------------------
+Suite:RegisterCommand({
+    cmd = "/tap getinvolved", sub = "getinvolved", owner = "Platform",
+    desc = "Open Get Involved (add 'reset' to re-show it on next login)",
+    handler = function(rest)
+        if (rest or ""):lower():gsub("%s+", "") == "reset" then
+            managerDB().welcomeSeen = nil
+            print("|cffa06cf0Twisteds Addon Platform|r: Get Involved spotlight re-armed - it'll pop again on next login/reload.")
+        else
+            Suite:OpenWindow("getinvolved")
+        end
+    end,
+})
+
+-- Auto-open the Get Involved page once per account per campaign, shortly after entering the world.
+do
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    f:SetScript("OnEvent", function(self)
+        self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        if managerDB().welcomeSeen == WELCOME_CAMPAIGN then return end
+        if not (C_Timer and C_Timer.After) then return end
+        C_Timer.After(2.5, function()
+            local m = managerDB()
+            if m.welcomeSeen == WELCOME_CAMPAIGN then return end   -- opened/reset in the meantime
+            m.welcomeSeen = WELCOME_CAMPAIGN
+            Suite:OpenWindow("getinvolved")
+        end)
+    end)
+end
 
 ----------------------------------------------------------------------
 -- Minimap buttons - one for the PLATFORM (shown by default) plus an optional one per MODULE (each

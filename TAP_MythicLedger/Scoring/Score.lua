@@ -29,13 +29,14 @@ local function pct(v) return round((v or 0) * 100) end
 -- share denominators); `groupTotals` = { interrupts, dispels, dps, hps } summed across the party.
 -- `dist` (optional) = { interrupt = <this player's distributed kick expected or nil>, dispel = <...> }
 -- from Distribute over the whole party; when present it supersedes the standalone interrupt/dispel target.
-function Score.ScoreNormalized(norm, summary, groupTotals, dist)
+function Score.ScoreNormalized(norm, summary, groupTotals, dist, healModel)
     groupTotals = groupTotals or {}
     local role = norm.role or "DAMAGER"
     local baseline = Base.Throughput(norm, summary, groupTotals)
+    local healReq = healModel and healModel.byGuid and healModel.byGuid[norm.playerGUID]
 
     local cats = {}
-    cats.throughput = Cat.Throughput(norm, baseline)
+    cats.throughput = Cat.Throughput(norm, baseline, healReq)
     cats.interrupts = Cat.Interrupt(norm, summary, groupTotals.interrupts, dist and dist.interrupt)
     cats.dispels    = Cat.Dispel(norm, summary, groupTotals.dispels, dist and dist.dispel)
     cats.survival   = Cat.Survival(norm)
@@ -97,8 +98,13 @@ function Score.Explain(score)
                 Scoring._short(det.dps.value), Scoring._short(det.dps.expected), det.dps.ratio or 0)
         end
         if det and det.hps then
-            segs[#segs + 1] = string.format("HPS %s vs %s expected (%.2fx)",
-                Scoring._short(det.hps.value), Scoring._short(det.hps.expected), det.hps.ratio or 0)
+            if det.hps.requirementModel then
+                segs[#segs + 1] = string.format("Healing %s vs %s required (%.2fx)",
+                    Scoring._short(det.hps.value), Scoring._short(det.hps.expected), det.hps.ratio or 0)
+            else
+                segs[#segs + 1] = string.format("HPS %s vs %s expected (%.2fx)",
+                    Scoring._short(det.hps.value), Scoring._short(det.hps.expected), det.hps.ratio or 0)
+            end
         end
         if #segs > 0 then
             d[#d + 1] = string.format("Throughput: %d  (%s; group-relative; weight %d%%)",
@@ -202,10 +208,11 @@ function Score.ScoreRun(run)
     -- sniping redistribution), so each player is scored against a fair share, not a flat solo estimate.
     local kickDist = Scoring.Distribute.Interrupts(players, run)
     local dispelDist = Scoring.Distribute.Dispels(players, run)
+    local healModel = Scoring.Healing and Scoring.Healing.Compute(players)
     local out = { list = {}, byGuid = {}, summary = summary, version = Cfg.version }
     for _, p in ipairs(players) do
         local dist = { interrupt = kickDist[p.playerGUID], dispel = dispelDist[p.playerGUID] }
-        local sc = Score.ScoreNormalized(p, summary, groupTotals, dist)
+        local sc = Score.ScoreNormalized(p, summary, groupTotals, dist, healModel)
         out.list[#out.list + 1] = sc
         if sc.playerGUID then out.byGuid[sc.playerGUID] = sc end
     end
@@ -228,9 +235,10 @@ function Score.ScorePlayer(run)
             totals = Base.EffectiveGroupTotals(players, summary, totals)
             local kickDist = Scoring.Distribute.Interrupts(players, run)
             local dispelDist = Scoring.Distribute.Dispels(players, run)
+            local healModel = Scoring.Healing and Scoring.Healing.Compute(players)
             local pn = Norm.Player(run, m)
             local dist = { interrupt = kickDist[pn.playerGUID], dispel = dispelDist[pn.playerGUID] }
-            return Score.ScoreNormalized(pn, summary, totals, dist)
+            return Score.ScoreNormalized(pn, summary, totals, dist, healModel)
         end
     end
     return nil

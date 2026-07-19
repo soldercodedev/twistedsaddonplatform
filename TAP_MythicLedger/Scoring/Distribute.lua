@@ -193,14 +193,19 @@ function Distribute.Dispels(players, run)
     end
     if not next(pool) then return out end
 
-    -- Per (axis, school) supply from the season profile (trash + killed bosses).
+    -- Per (axis, school) supply from the season profile (trash + killed bosses). The dispel demand is
+    -- then scaled by the dungeon's PRIORITY fraction (sd.dispelDemandScale) - only high/must-priority
+    -- dispels are expected, so a broad dispeller isn't docked for skipping low-value cleanses (the
+    -- fraction is the observed share of dispels that were curated High/Must, floored so an under-curated
+    -- dungeon doesn't collapse to zero). Default 1.0 = count everything (older profiles).
     local defSupply, offSupply = {}, {}
     local tD, bD = scale.trashDispel or 4, scale.bossDispel or 1
+    local dScale = tonumber(sd.dispelDemandScale) or 1.0
     for _, t in ipairs(DEF_TYPES) do
-        defSupply[t] = accumulate(sd, run, "partyDebuffFrequencies", t, tD, bD)
+        defSupply[t] = accumulate(sd, run, "partyDebuffFrequencies", t, tD, bD) * dScale
     end
-    offSupply["magic"]  = accumulate(sd, run, "targetBuffFrequencies", "purge",  tD, bD)  -- purge = enemy magic buff
-    offSupply["enrage"] = accumulate(sd, run, "targetBuffFrequencies", "enrage", tD, bD)  -- enrage = soothe
+    offSupply["magic"]  = accumulate(sd, run, "targetBuffFrequencies", "purge",  tD, bD) * dScale  -- purge = enemy magic buff
+    offSupply["enrage"] = accumulate(sd, run, "targetBuffFrequencies", "enrage", tD, bD) * dScale  -- enrage = soothe
 
     -- base = summed expected across schools; defBase/offBase = the split by axis (for the group summary
     -- and for splitting a dual-axis dispeller's aggregate count).

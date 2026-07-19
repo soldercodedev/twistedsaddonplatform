@@ -109,7 +109,33 @@ Scoring.Config = Config
 -- v33: Nexus-Point Xenas interrupt supply corrected from placeholder to observed data. trash.interruptFrequency
 --      0.385 -> 1.40 (obs ~1.44 boss-subtracted trash kicks/min, n=2 real +10). The last "no data yet" guess;
 --      old value was ~3.7x too low, so interrupt scores there were badly inflated. Retroactive rescore.
-Config.version = 33
+-- v34: HEALING REQUIREMENT model (Scoring/Healing.lua). Tank & healer throughput HPS component now scores
+--      against a damage-taken requirement instead of a group-relative HPS share: tank = self-cover
+--      TankSelfCoverage(spec) of its unavoidable damage; healer = the tank's remainder + 90% of the group's
+--      unavoidable damage + avoidableCredit (0.25) of the group's avoidable. Output = healing + absorbs
+--      (shield specs not penalised). A group standing in bad now hits its own Survival, not the healer's
+--      target. Falls back to the group-relative baseline when < 60% of the party reported damage taken.
+--      Config.healing + Config.TankSelfCoverage (derived from tankHealiness). Retroactive rescore.
+-- v35: Healing rebalance from 32 observed runs - tanks over-covered (output/req 1.25-1.54), healers
+--      under (0.84). tankSelfCoverageBase 0.55->0.70, groupSelfHealFactor 0.90->0.80, Brewmaster
+--      healiness 0.95->0.70. Dispel supply now priority-filtered (only High/Must-priority auras count
+--      toward the season demand) so broad dispellers aren't punished for skipping low-value dispels.
+-- v36: dispel curation pass. Per-dungeon dispelDemandScale recomputed from corrected priorities:
+--      (1) added the observed dungeon dispels the guides never named (Transference, Permeating Cold,
+--      Energy Bomb, Ethereal Shackles, Poison Spray, ...); (2) buff removal-rate GATE - an auto-classified
+--      enemy buff only counts High-remove if the group actually removes it >=25% of the time, so trash
+--      enrages nobody soothes (Raging Screech 7%, Battle Rage 8%, Grim Ward 24%) no longer inflate the
+--      dispel share; (3) At-Stack DoTs (Rotting Strikes, Vilebranch Sting) weighted 0.5 in the demand -
+--      removed once per stack-threshold, not per application. Scales: Pit 0.40->0.66, Algeth'ar 0.34->0.59,
+--      Seat 0.65->0.46, Windrunner 0.72->0.83. Dispel <60 (good runs) 36%->24%, now accurately targeted.
+--      Retroactive rescore.
+-- v37: tank/interrupt calibration from the same 32 runs. Tank self-coverage per spec: Guardian healiness
+--      0.95->1.15, Prot Paladin 0.85->1.00 (both over-covered 1.16-1.25 -> ~1.0-1.14); Brewmaster
+--      0.70->0.58 (meter records NO absorbs for Stagger, so Brew is structurally healer-reliant; centers
+--      0.75->0.90, can't fully fix without a Stagger signal). groupSelfHealFactor 0.80->0.85 to re-center
+--      the healer (1.16->1.13) after the tank raise shrank its remainder. LONG_CD interrupt rate
+--      0.1125->0.09 (round down - long-CD kicks are banked when the group covers). Retroactive rescore.
+Config.version = 37
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -171,7 +197,7 @@ Config.redistribution = {
 -- tier nudge that once read it was retired in v22 - so re-tiering a spec changes its label, not its score.
 Config.interruptProfiles = {
     NONE         = { ratePerMinute = 0.00,   scoreEligible = false },  -- no interrupt
-    LONG_CD      = { ratePerMinute = 0.1125, scoreEligible = true },   -- CD > 30s (Quell 40s, Shadow Silence 45s, Solar Beam 60s)
+    LONG_CD      = { ratePerMinute = 0.09,   scoreEligible = true },   -- CD > 30s (Quell 40s, Shadow Silence 45s, Solar Beam 60s). v37: 0.1125->0.09 rounded DOWN - long-CD classes reasonably bank a 45-60s kick when the group already covers kicks (obs a/e 1.5x); lower expected drops the reluctant ones to N/A rather than docking them.
     STANDARD     = { ratePerMinute = 0.225,  scoreEligible = true },   -- CD 15-30s (Counterspell / Counter Shot / Spell Lock 24s; Resto Shaman 30s Wind Shear)
     SHORT_CD     = { ratePerMinute = 0.45,   scoreEligible = true },   -- CD 12-15s (Kick / Pummel / Rebuke / Mind Freeze / Muzzle / Spear Hand; Ele/Enh Wind Shear 12s)
     HIGH_CONTROL = { ratePerMinute = 0.60,   scoreEligible = true },   -- 15s interrupt + strong rotational extra stop/silence (Prot Pal, DH Vengeance)
@@ -489,9 +515,13 @@ Config.throughput = {
     tankHealiness = {
         [250] = 1.35,   -- Blood DK       (Death Strike) - very healy
         [581] = 1.20,   -- Vengeance DH   (Soul Cleave / Fel Devastation)
-        [104] = 0.95,   -- Guardian Druid (Frenzied Regen / passive)
-        [268] = 0.95,   -- Brewmaster Monk(Expel Harm / Vivify; stagger is absorbs, not healing)
-        [66]  = 0.85,   -- Prot Paladin   (Word of Glory)
+        [104] = 1.15,   -- Guardian Druid (v37: 0.95->1.15; observed self-cover 1.20, Frenzied Regen out-heals the old target)
+        [268] = 0.58,   -- Brewmaster Monk(v37: 0.70->0.58 -> coverage floors at 0.45. Investigation: the meter
+                        --                 records NO absorbs for Brew (Stagger self-mitigation is invisible) while
+                        --                 damageTaken stays ~100M+, so Brew is structurally healer-reliant and
+                        --                 under-counted. Lower expectation centers it; it can't be fully fixed
+                        --                 without a Stagger signal the meter doesn't expose.)
+        [66]  = 1.00,   -- Prot Paladin   (v37: 0.85->1.00; observed self-cover 1.16, Word of Glory covers more than modeled)
         [73]  = 0.60,   -- Prot Warrior   (Victory Rush / Ignore Pain absorbs) - least self-healing
     },
     -- How a role's throughput blends DPS vs HPS. Tanks are overridden per-spec by healiness below.
@@ -561,6 +591,47 @@ function Config.ThroughputMix(role, specID)
         return { dps = 1 - hpsW, hps = hpsW }
     end
     return { dps = m.dps, hps = m.hps }
+end
+
+----------------------------------------------------------------------
+-- Healing REQUIREMENT model (Scoring/Healing.lua). Replaces the group-relative HPS baseline for
+-- tanks & healers with a target derived from the damage the group actually took:
+--   required(p)   = damageTaken(p) - avoidableDamageTaken(p)        (unavoidable HP lost)
+--   tank target   = tankSelfCoverage(spec) x required(tank)         (tank self-covers this much)
+--   healer target = (1 - coverage) x required(tank)                 (the tank's remainder)
+--                 + groupSelfHealFactor x (required(nonTank) + avoidableCredit x avoidable(nonTank))
+-- A group standing in bad inflates their OWN Survival penalty, not the healer's target (avoidableCredit
+-- keeps the healer only lightly on the hook for others' mistakes). Output = healing + absorbs (shields
+-- count; absorb healers aren't penalised). All knobs here.
+----------------------------------------------------------------------
+Config.healing = {
+    enabled = true,
+    -- Fraction of the tank's UNAVOIDABLE damage the tank is expected to self-cover (rest -> healer).
+    -- Derived from tankHealiness so there's ONE source of truth: a healy tank self-covers more.
+    -- v35: raised 0.55 -> 0.78 - observed tank output/requirement ran 1.25-1.54 across 32 runs (tanks
+    -- vastly over-covered), while healers ran 0.84 (target too high). Raising this both lifts the tank
+    -- target AND shrinks the healer's tank-remainder term: healer median 0.84 -> 1.08, tanks toward 1.0.
+    tankSelfCoverageBase = 0.78,   -- a "standard" tank (healiness 1.0) self-covers 78%
+    tankSelfCoverageMin  = 0.45,
+    tankSelfCoverageMax  = 0.90,
+    -- How much of the GROUP's avoidable damage still counts toward the healer's target (light triage);
+    -- 0 = healer not responsible for standers at all, 1 = fully on the hook. 0.25 = cover ~a quarter.
+    avoidableCredit = 0.25,
+    -- Non-tank players self-heal / defensive more of their own damage than first modeled; the healer
+    -- covers the rest. v35: 0.90 -> 0.80 (healer median 0.84). v37: 0.80 -> 0.85 to re-center - raising
+    -- Guardian/ProtPal self-coverage shrank the healer's tank-remainder and pushed the healer median to
+    -- 1.16 (past the soft-cap); this brings it back into the 1.05-1.10 band.
+    groupSelfHealFactor = 0.85,
+    -- If < this fraction of the party reported damageTaken we can't trust the model -> fall back to the
+    -- group-relative HPS baseline for that run.
+    minPartyCoverage = 0.60,
+}
+
+-- Tank self-coverage fraction for a spec, derived from throughput healiness (single source of truth).
+function Config.TankSelfCoverage(specID)
+    local h = Config.healing
+    local heal = Config.throughput.tankHealiness[specID] or 1.0
+    return Config.clamp(h.tankSelfCoverageBase * heal, h.tankSelfCoverageMin, h.tankSelfCoverageMax)
 end
 
 ----------------------------------------------------------------------

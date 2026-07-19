@@ -129,10 +129,33 @@ judgement.
 ## 13. Throughput scoring by role
 
 Scored as `value / baseline` through a gentle curve (`1.00× ≈ 86`, strong overshoot capped at 100 so
-DPS can't dominate). **DPS/Tank** use `dps`, **Healers** use `hps` with a **soft cap** above 1.10×
-baseline (excess healing usually means the group ate avoidable damage — penalized under survival, not
-rewarded here). Baselines blend **static role references → learned same-spec historical medians** as
-data accumulates — now **wired** to your own run history (`Scoring/Learned.lua`, §18).
+DPS can't dominate). **DPS** use `dps`; **Tanks** blend `dps` + `hps` by spec healiness; **Healers** use
+`hps`, all soft-capped above baseline (excess healing usually means the group ate avoidable damage —
+penalized under survival, not rewarded here). The DPS component stays group-relative; the **HPS
+component for tanks & healers** uses the requirement model in §13a.
+
+### 13a. Healing requirement model (`Scoring/Healing.lua`, v34)
+
+Tank & healer HPS is judged against **the damage the group actually took**, not a share of group HPS:
+
+```
+required(p)   = max(0, damageTaken(p) − avoidableDamageTaken(p))     -- unavoidable HP lost
+tank target   = TankSelfCoverage(spec) × required(tank)              -- tank self-covers this much
+healer target = Σ (1 − coverage_t) × required(tank_t)                -- the tanks' remainder
+              + 0.90 × ( required(nonTank) + 0.25 × avoidable(nonTank) )
+output(p)     = healing(p) + absorbs(p)                              -- shields count; absorb specs fair
+score         = curve( output / target )                            -- soft-capped
+```
+
+`TankSelfCoverage(spec)` is derived from `tankHealiness` (one source of truth): a healy tank (Blood DK
+≈ 0.74) self-covers more than a Prot Warrior (≈ 0.45). **Avoidable damage is excluded from the healer's
+target** — a group standing in bad tanks its own Survival score, not the healer's; `avoidableCredit`
+(0.25) adds back a light-triage slice so the healer isn't fully off the hook, but isn't blamed for
+chronic standers. When **< 60%** of the party reported `damageTaken` the model can't be trusted, so that
+run **falls back** to the group-relative HPS baseline below. All knobs live in `Config.healing`.
+
+Baselines (fallback path) blend **static role references → learned same-spec historical medians** as
+data accumulates (`Scoring/Learned.lua`, §18).
 
 ## 14. Survival and avoidable damage
 
