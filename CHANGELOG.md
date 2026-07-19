@@ -3,7 +3,7 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
-## 1.1.0
+## 1.1.1
 
 A platform release rolling up the latest from every module. **Mythic Ledger** lands a major scoring accuracy pass plus two new features, and the other modules graduate to a stable **1.0**. Each module's full notes also live in its in-game **What's New** (`/tap` > module > *What's New*).
 
