@@ -112,6 +112,13 @@ local function evalUnit(unit)
     rec.talents = idList(granted)   -- compact sorted id list for saving
     if gerr then rec.readErr = gerr end
 
+    if ML.Log then
+        ML.Log("Inspect %s (%s/%d): ilvl=%s hero=%s talents=%s%s",
+            tostring(rec.name), tostring(classFile), rec.specID,
+            tostring(rec.itemLevel), (hero and hero.name) or "nil",
+            tostring(gcount), gerr and (" err=" .. tostring(gerr)) or "")
+    end
+
     local prof = Cap and Cap.Get and Cap.Get(rec.specID, ROLE_MAP[rec.role], classFile)
     local d = prof and prof.dispel
     if not d or d.profile == "NONE" or not d.spellID then rec.noTool = true; return rec end
@@ -125,18 +132,25 @@ local function evalUnit(unit)
     return rec
 end
 
+-- Metadata suffix (ilvl / hero tree / talent count) - the class+spec+ilvl+hero-tree data we save.
+local function metaSuffix(rec)
+    return string.format(" {ilvl=%s hero=%s talents=%s}",
+        tostring(rec.itemLevel), (rec.heroTree and rec.heroTree.name) or "nil", tostring(rec.talentCount))
+end
+
 -- A single crisp, plain-text (copy-friendly) line for a record.
 local function formatLine(rec)
     local tag = "[" .. rec.unit .. "] " .. rec.name
     if rec.specUnknown then return tag .. ": spec=UNKNOWN (inspect failed / out of range)" end
     local who = string.format("%s (%s/%s %d, %s)", tag, rec.classFile or "?", rec.specName, rec.specID, rec.role)
-    if rec.noTool then return who .. ": dispel=none -> N/A (no tool)" end
+    local meta = metaSuffix(rec)
+    if rec.noTool then return who .. ": dispel=none -> N/A (no tool)" .. meta end
     local base = string.format("%s: %s (%d) [%s]", who, rec.dispelName or "?", rec.dispelSpellID, rec.profile)
-    if not rec.talentGated then return base .. " baseline -> expect dispels" end
-    if rec.readErr then return base .. " talent-gated inspect=FAIL(" .. rec.readErr .. ") -> UNKNOWN (score neutral)" end
-    return string.format("%s talent-gated inspect=OK read=%d hasTalent=%s -> %s",
+    if not rec.talentGated then return base .. " baseline -> expect dispels" .. meta end
+    if rec.readErr then return base .. " talent-gated inspect=FAIL(" .. rec.readErr .. ") -> UNKNOWN (score neutral)" .. meta end
+    return string.format("%s talent-gated inspect=OK read=%d hasTalent=%s -> %s%s",
         base, rec.talentRead or 0, rec.hasTool and "YES" or "NO",
-        rec.hasTool and "expect dispels" or "N/A (not talented)")
+        rec.hasTool and "expect dispels" or "N/A (not talented)", meta)
 end
 
 ----------------------------------------------------------------------

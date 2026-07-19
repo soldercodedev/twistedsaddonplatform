@@ -45,6 +45,7 @@ end
 -- Text/accent colors for cards with a forced-dark background (the dungeon-art hero cards). The theme's
 -- own text goes DARK on light mode and vanishes over the art, so these stay light on BOTH themes.
 local ON_ART, ON_ART_SUB = { 0.97, 0.98, 1.0 }, { 0.80, 0.84, 0.92 }
+local ILVL_GOLD = { 0.788, 0.655, 0.416 }   -- item-level badge tint (matches the old inline "ilvl" gold)
 -- A lightened accent (blended halfway to white) that reads over the dark art regardless of theme.
 local function artAccent(C) return { (C.accent[1] + 1) / 2, (C.accent[2] + 1) / 2, (C.accent[3] + 1) / 2 } end
 local function artAccentHex(C)
@@ -537,6 +538,13 @@ local function heroCard(b, C, cx, cy, cw, ch, opts)
     b:Label(opts.title or "", tx, cy - 13, ON_ART, opts.titleSize or 16)
     if opts.titleRight then
         b:Label(opts.titleRight, cx + cw - (opts.titleRightW or 56), cy - 14, opts.art and artAccent(C) or acc, opts.titleSize or 17)
+    end
+    -- Item level: a compact gold badge, right-aligned on the hero-tree line and measured after layout
+    -- so a long hero name can never push it off the card edge (the old inline "213 ilvl" overflowed).
+    if opts.ilvl then
+        local fs = b:Label(opts.ilvl, cx + cw - 12, cy - (opts.ilvlY or 53), ILVL_GOLD, 11)
+        local wdt = (fs.GetStringWidth and fs:GetStringWidth()) or 26
+        b:put(fs, cx + cw - 12 - wdt, cy - (opts.ilvlY or 53))
     end
     local ly = cy - 37
     for _, ln in ipairs(opts.lines or {}) do
@@ -1084,7 +1092,7 @@ local function renderRunDetails(b, C, x, y, w, win)
     if #party == 0 then
         b:Label("No party stats were captured for this run.", x, y - 2, C.subtext, 11); y = y - 24
     else
-        local minTile, gap, ch = 224, 10, 84
+        local minTile, gap, ch = 224, 10, 100
         local cols = math.max(1, math.min(3, math.floor((w + gap) / (minTile + gap))))
         cols = math.min(cols, #party)
         local tileW = math.floor((w - gap * (cols - 1)) / cols)
@@ -1100,10 +1108,14 @@ local function renderRunDetails(b, C, x, y, w, win)
             local gradeStr = sc and ("|cff" .. (gradeColor(sc.grade) or "cccccc") .. (sc.grade or "?") .. "|r") or nil
             local sp = specName(m.specId, m.specIcon)
             local primary = (role == "HEALER") and ("HPS " .. Util.shortNum(s.hps)) or ("DPS " .. Util.shortNum(s.dps))
+            -- Identity holds spec · role only; ilvl moved to a right-aligned gold badge (was overflowing
+            -- the card), and the hero tree gets its own accent-tinted line.
             local identity = sp and (sp .. "  ·  " .. roleLbl) or roleLbl
-            if m.itemLevel then identity = identity .. "  ·  |cffc9a76a" .. tostring(m.itemLevel) .. " ilvl|r" end
+            local heroName = m.heroTree and m.heroTree.name
+            local heroLine = heroName and ("|cffb89ee6" .. heroName .. "|r") or "|cff6f6f6fNo hero tree|r"
             local lines = {
                 identity,
+                heroLine,
                 primary .. "     DTkn " .. Util.shortNum(s.damageTaken),
                 "Deaths " .. Util.numOr(s.deaths, "%d") .. "    Int " .. Util.numOr(s.interrupts, "%d")
                     .. "    Dsp " .. Util.numOr(s.dispels, "%d"),
@@ -1128,6 +1140,7 @@ local function renderRunDetails(b, C, x, y, w, win)
             tlines[#tlines + 1] = { blank = true }; tlines[#tlines + 1] = { text = "Click for their run review.", color = "subtext" }
             heroCard(b, C, cx, cy, tileW, ch, {
                 accent = classRGB(m.classFile) or C.accent,
+                ilvl = m.itemLevel and tostring(m.itemLevel) or nil,
                 iconSize = 44,
                 drawIcon = function(bb, ix, iy, isz)
                     if specIconID(m.specId) or m.specIcon then specGlyph(bb, ix, iy, isz, m.specId, m.specIcon)
