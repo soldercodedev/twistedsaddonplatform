@@ -3,6 +3,15 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
+## 1.4.0-beta.2
+
+Adds Mythic Ledger's **on-screen death report** - a customizable, post-pull overlay of who died and why, with a party-chat repost. Each module's full notes also live in its in-game **What's New** (`/tap` > module > *What's New*).
+
+### Mythic Ledger (1.0.0-beta.9)
+
+- **[NEW]** **On-screen death report.** After a pull (or at the run's end), a customizable overlay flashes who died since the last report and why - time in the key, the killing blow, and the cause (avoidable / missed kick + which cast / threat / unavoidable). Fully styleable (font, size, colors, optional background panel, drag-to-move position), **auto- or click-dismiss**, and per-pull or once at the finish. **/ledger deathreport** reposts the last one to party chat.
+- **[CHANGE]** **Missed Kick applies to existing runs.** The death-cause breakdown is now recomputed from each run's stored death recaps, so already-saved runs pick up the Missed Kick cause without a replay. No grades change.
+
 ## 1.4.0-beta.1
 
 Headlined by **Mythic Ledger beta.8** - death **attribution** (every death sorted into *why* it happened, now including a **Missed Kick** cause when an un-interrupted cast lands the blow) and per-spell **interrupt & dispel breakdowns** that show exactly what you kicked and cleared versus what the dungeon demanded. The platform window also links straight to the **website** now. Each module's full notes also live in its in-game **What's New** (`/tap` > module > *What's New*).

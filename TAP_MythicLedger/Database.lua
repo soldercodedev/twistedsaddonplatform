@@ -57,6 +57,23 @@ local DEFAULTS = {
             soundKey          = "Applause", -- which sound (see UIF.SOUNDS)
             soundChannel      = "Master",   -- sound channel for the recap sound
         },
+        -- On-screen post-pull DEATH REPORT: after combat drops (or at run end), flash who died since the
+        -- last report and why (time in the key, killing blow, cause - including a missed kick's spell).
+        deathReport = {
+            enabled    = false,             -- off until opted in
+            trigger    = "COMBAT",          -- COMBAT (each time combat drops) / RUN_END (once, at the finish)
+            dismiss    = "AUTO",            -- AUTO (fade after `duration`) / CLICK (stays until clicked)
+            duration   = 6,                 -- seconds on screen before it fades (AUTO dismissal only)
+            maxLines   = 8,                 -- most deaths to list at once
+            onlyMe     = false,             -- true = only report YOUR deaths
+            font       = "",                -- font key ("" = the UI font)
+            fontSize   = 15,
+            titleColor = { 1.00, 0.82, 0.20 },     -- the header line
+            textColor  = { 0.94, 0.95, 0.98 },     -- the per-death lines
+            background = true,              -- draw a backing panel behind the text
+            bgColor    = { 0.03, 0.04, 0.06, 0.82 },
+            posPoint   = "CENTER", posX = 0, posY = 220,   -- screen anchor (drag-to-move in Settings)
+        },
     },
     runs          = {},   -- array of finalized run records (raw-ish, but no combat events)
     activeRun     = nil,  -- reload/disconnect recovery record for an in-progress run
@@ -148,6 +165,7 @@ end
 function DB.Ready() return ML._initialized and DB.root ~= nil end
 function DB.Settings() return DB.root and DB.root.settings or DEFAULTS.settings end
 function DB.Recap() return DB.Settings().recap end
+function DB.DeathReport() return DB.Settings().deathReport end
 function DB.Runs() return DB.root and DB.root.runs or {} end
 function DB.CountRuns() return DB.root and #DB.root.runs or 0 end
 function DB.Characters() return DB.root and DB.root.characters or {} end

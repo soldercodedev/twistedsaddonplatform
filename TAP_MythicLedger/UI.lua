@@ -2217,6 +2217,87 @@ local function renderSettings(b, C, x, y, w, win)
         "Open the end-of-run scoreboard with a sample run so you can preview your scale, font, tile style and sound.")
     y = y - 40
 
+    -- DEATH REPORT: on-screen post-pull recap of who died and why.
+    do
+        local dr = s.deathReport
+        if type(dr) ~= "table" then dr = {}; s.deathReport = dr end
+        b:Sub("DEATH REPORT", x, y); y = y - 30
+        toggle("On-screen death report after each pull", function() return dr.enabled end,
+            function(v) dr.enabled = v end,
+            "After combat drops (or at the run's end), flash a short overlay listing who died since the last "
+            .. "report and why - time in the key, the killing blow, and the cause (including a missed kick's "
+            .. "cast). Repost the last one to party chat with /ledger deathreport.")
+        if dr.enabled then
+            b:Label("When", x, y - 2, C.subtext)
+            T(b, b:Dropdown(x + 90, y), "When to show the report",
+                "As soon as combat drops = a report after every pull (that pull's new deaths only). At the end "
+                .. "of the run = one report of every death, when the key finishes."):SetChoices(240, {
+                { "COMBAT", "As soon as combat drops" }, { "RUN_END", "At the end of the run" },
+            }, function() return dr.trigger or "COMBAT" end, function(v) dr.trigger = v end)
+            y = y - 40
+            b:Label("Dismiss", x, y - 2, C.subtext)
+            T(b, b:Dropdown(x + 90, y), "How the report goes away",
+                "Auto = it fades on its own after the time below. Click to dismiss = it stays on screen until "
+                .. "you click it (it captures the mouse while shown)."):SetChoices(240, {
+                { "AUTO", "Auto (fade after time)" }, { "CLICK", "Click to dismiss" },
+            }, function() return dr.dismiss or "AUTO" end, function(v) dr.dismiss = v; win:Refresh() end)
+            y = y - 40
+            toggle("Only report my own deaths", function() return dr.onlyMe end, function(v) dr.onlyMe = v end,
+                "Show only your deaths, not the whole party's.")
+            if (dr.dismiss or "AUTO") == "AUTO" then
+                slider("On screen for", 130, 190, 2, 20, 1, "%.0fs",
+                    function() return dr.duration or 6 end, function(v) dr.duration = v end,
+                    "How long the overlay stays before it fades out.")
+            end
+            slider("Max deaths shown", 130, 190, 3, 20, 1, "%.0f",
+                function() return dr.maxLines or 8 end, function(v) dr.maxLines = v end,
+                "Cap how many deaths are listed at once.")
+
+            local function refreshPrev() if ML.DeathReport and ML.DeathReport.RefreshPreview then ML.DeathReport.RefreshPreview() end end
+            b:Label("Font", x, y - 2, C.subtext)
+            b:FontSelect(x + 90, y, { width = 200, value = (dr.font ~= "" and dr.font) or "UBUNTU",
+                onChange = function(key) dr.font = key; win:Refresh() end })
+            T(b, b:Button(x + 300, y, 120, "Use UI font", "default", function() dr.font = ""; win:Refresh() end),
+                "Use UI font", "Use the same font as the rest of the UI.")
+            y = y - 40
+            slider("Text size", 130, 190, 10, 30, 1, "%.0f",
+                function() return dr.fontSize or 15 end, function(v) dr.fontSize = v; win:Refresh() end, "Overlay text size.")
+
+            b:Label("Header color", x, y - 2, C.subtext)
+            b:Swatch(x + 100, y - 2, dr.titleColor or { 1, 0.82, 0.2 }, refreshPrev, "Header color", "The report's header line.")
+            b:Label("Line color", x + 150, y - 2, C.subtext)
+            b:Swatch(x + 230, y - 2, dr.textColor or { 0.94, 0.95, 0.98 }, refreshPrev, "Line color", "The per-death lines.")
+            y = y - 34
+
+            toggle("Draw a background panel", function() return dr.background end, function(v) dr.background = v end,
+                "Draw a translucent panel behind the report text.")
+            if dr.background then
+                b:Label("Panel color", x + 20, y - 2, C.subtext)
+                b:Swatch(x + 110, y - 2, dr.bgColor or { 0.03, 0.04, 0.06, 0.82 }, refreshPrev,
+                    "Panel color", "The backing panel color (opacity is the slider below).")
+                y = y - 30
+                slider("Panel opacity", 130, 190, 0, 1, 0.05, "%.2f",
+                    function() return (dr.bgColor and dr.bgColor[4]) or 0.82 end,
+                    function(v) dr.bgColor = dr.bgColor or { 0.03, 0.04, 0.06, 0.82 }; dr.bgColor[4] = v; refreshPrev() end,
+                    "How opaque the background panel is (0 = invisible).")
+            end
+
+            -- Live preview - all four causes, styled with the settings above; updates as you tweak them.
+            b:Label("Preview", x, y - 2, C.subtext); y = y - 24
+            local ph = (ML.DeathReport and ML.DeathReport.RenderPreview and ML.DeathReport.RenderPreview(b, x, y)) or 40
+            y = y - ph - 14
+
+            T(b, b:Button(x, y, 90, "Test", "default", function() if ML.DeathReport then ML.DeathReport.Test() end end,
+                { icon = "eye", iconSize = 13 }), "Test", "Flash a sample death report (one of every cause) with your settings.")
+            T(b, b:Button(x + 100, y, 140, "Move on screen", "default", function()
+                if _G.TAP and _G.TAP.CloseWindow then _G.TAP:CloseWindow() end
+                if ML.DeathReport then ML.DeathReport.StartMove() end
+            end, { icon = "arrows-sort", iconSize = 13 }), "Move on screen",
+                "Drag a sample where you want it, then click Save (or Cancel) on the bar that appears.")
+            y = y - 40
+        end
+    end
+
     b:Sub("TRACKING", x, y); y = y - 30
     toggle("Track abandoned runs", function() return s.trackAbandoned end, function(v) s.trackAbandoned = v end,
         "Save keys you leave or reset before completion (kept apart from your timed %).")
@@ -3438,7 +3519,9 @@ function renderPlayerReview(b, C, x, y, w, win)
     -- in the run's avoidable list), Missed Kick (a cast that should have been interrupted), Threat
     -- (unmitigated melee while not tanking - pulled aggro), or Other (unavoidable / unpinnable). Buckets
     -- sum to the death total and feed the cause-weighted Death Impact penalty (Missed Kick == Other).
-    local dcz = m.deathCauses
+    -- Recompute from the stored raw recaps so classifier changes (e.g. Missed Kick) show on already-saved
+    -- runs; falls back to the frozen capture-time value when no recaps are stored.
+    local dcz = (ML.Providers and ML.Providers.ClassifyMemberDeaths and ML.Providers.ClassifyMemberDeaths(r, m)) or m.deathCauses
     local dczTotal = dcz and ((dcz.avoidable or 0) + (dcz.kickable or 0) + (dcz.threat or 0) + (dcz.other or 0)) or 0
     if dcz and dczTotal > 0 then
         local total = dczTotal

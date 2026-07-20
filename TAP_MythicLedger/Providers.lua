@@ -634,6 +634,29 @@ function Providers.ClassifyDeaths(attribution, recaps, role, deathCount, kickSet
     return nil
 end
 
+-- Classify one SAVED member's deaths, preferring a FRESH classification from the stored raw death
+-- recaps. We persist the raw recaps precisely so classifier improvements (e.g. the Missed Kick cause)
+-- apply retroactively to already-saved runs without re-playing them. Builds the dungeon kick set from
+-- the run. Falls back to whatever deathCauses was frozen at capture when no recaps are stored (very old
+-- runs). Both the scoring layer and the run-review card go through this, so they always agree.
+function Providers.ClassifyMemberDeaths(run, member)
+    if not member then return nil end
+    local n = member.stats and member.stats.deaths
+    if type(n) ~= "number" or n <= 0 then return nil end
+    if type(member.deathRecaps) == "table" and #member.deathRecaps > 0 then
+        local kickSet
+        local Cfg = ML.Scoring and ML.Scoring.Config
+        local cat = run and Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(run.dungeonName)
+        if cat and type(cat.kicks) == "table" then
+            kickSet = {}
+            for _, e in ipairs(cat.kicks) do if e.id then kickSet[e.id] = true end end
+        end
+        local dc = Providers.ClassifyDeaths(member.attribution, member.deathRecaps, member.role, n, kickSet)
+        if dc then return dc end
+    end
+    return member.deathCauses
+end
+
 function Blizz:GetRunStats(ctx)
     return readMeterStats(ctx, ML.SOURCE.BLIZZARD)
 end

@@ -5,6 +5,13 @@ local ADDON, ML = ...
 ML.CHANGELOG = [==[
 # Mythic Ledger - What's New
 
+## 1.0.0-beta.9
+
+An on-screen death report - and the Missed Kick cause now shows on runs you already have.
+
+- **[NEW]** **On-screen death report.** After a pull (or at the run's end), a customizable overlay flashes **who died since the last report and why** - the time in the key, the killing blow, and the cause (avoidable / **missed kick + which cast** / threat / unavoidable). Turn it on in **Settings > Death Report**, where you can style the font, size, colors, an optional background panel, and position (drag-to-move with Save/Cancel), pick how it dismisses (fade after a few seconds, or **click to dismiss**), and choose whether it fires each pull or once at the finish. **/ledger deathreport** reposts the last one to party chat.
+- **[CHANGE]** **Missed Kick now shows on your older runs.** Because each run stores its raw death recaps, the death-cause breakdown is recomputed from them - so already-saved runs pick up the **Missed Kick** cause (and any future classifier tweaks) without re-playing anything. No grades change.
+
 ## 1.0.0-beta.8
 
 A new death cause and an interrupt-label fix. No grades change.

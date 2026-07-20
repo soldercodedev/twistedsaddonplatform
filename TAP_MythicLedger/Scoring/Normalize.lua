@@ -58,9 +58,11 @@ function Norm.Player(run, member)
         interrupts   = num(s.interrupts),
         dispels      = num(s.dispels),
         deaths       = num(s.deaths),
-        -- Cause breakdown { avoidable, threat, other } from the death-recap classifier, present only on
-        -- runs that captured it. Cat.Deaths uses it for cause-weighted penalties; nil => flat fallback.
-        deathCauses  = (type(member.deathCauses) == "table") and member.deathCauses or nil,
+        -- Cause breakdown { avoidable, threat, kickable, other } for the cause-weighted death penalty.
+        -- Recomputed from the stored raw death recaps (so classifier changes apply retroactively), with a
+        -- fallback to the frozen capture-time value. nil on runs with no death data => flat fallback.
+        deathCauses  = (ML.Providers and ML.Providers.ClassifyMemberDeaths and ML.Providers.ClassifyMemberDeaths(run, member))
+                       or ((type(member.deathCauses) == "table") and member.deathCauses or nil),
 
         -- Context used by baselines/composition.
         level = num(run.level), mapId = run.mapId, seasonId = run.seasonId,

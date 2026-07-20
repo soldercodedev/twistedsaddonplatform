@@ -22,6 +22,7 @@ local function OnEnable(m)
     ML.Tracker.Start()
     ML.Recap.Start()
     if ML.Tooltip and ML.Tooltip.Start then ML.Tooltip.Start() end
+    if ML.DeathReport and ML.DeathReport.Start then ML.DeathReport.Start() end
     ML.Log("Module enabled")
 end
 
@@ -29,6 +30,7 @@ local function OnDisable(m)
     ML.Tracker.Stop()
     ML.Recap.Stop()
     if ML.Tooltip and ML.Tooltip.Stop then ML.Tooltip.Stop() end
+    if ML.DeathReport and ML.DeathReport.Stop then ML.DeathReport.Stop() end
     ML.Log("Module disabled")
 end
 
@@ -103,6 +105,14 @@ local function handleSlash(rest)
         end
     elseif cmd == "attr" then
         ML.Diag.ProbeAttribution(function(s) print(s) end)
+    elseif cmd == "deathreport" or cmd == "dr" then
+        local sub = rest:match("^%S+%s+(%S+)") or "post"
+        if ML.DeathReport then
+            if sub == "test" then ML.DeathReport.Test()
+            elseif sub == "move" then ML.DeathReport.StartMove()
+            elseif sub == "stop" then ML.DeathReport.StopMove()
+            else ML.DeathReport.PostToParty() end
+        end
     elseif cmd == "deaths" then
         local theme = Suite.uiTheme
         if theme and theme.ShowCopyDialog then
@@ -156,6 +166,7 @@ if Suite.RegisterCommand then
             { "source",   "Probe the C_DamageMeter Source accessors for the per-spell breakdown" },
             { "attr",     "Readable attribution: avoidable hits, kicks, dispels, damage taken (named)" },
             { "deaths",   "Probe the death-recap timeline (deathRecapID) for fatal-blow classification" },
+            { "deathreport", "Post the last on-screen death report to party chat ( / test / move )" },
             { "export",   "Copy the whole ledger as a share string" },
             { "scoreboard", "Open the scoreboard for your most recent run" },
             { "scale",    "Set the scoreboard scale, e.g. /ledger scale 1.2" },
