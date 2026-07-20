@@ -5,30 +5,18 @@ local ADDON, ML = ...
 ML.CHANGELOG = [==[
 # Mythic Ledger - What's New
 
-## 1.0.0-beta.9
-
-An on-screen death report - and the Missed Kick cause now shows on runs you already have.
-
-- **[NEW]** **On-screen death report.** After a pull (or at the run's end), a customizable overlay flashes **who died since the last report and why** - the time in the key, the killing blow, and the cause (avoidable / **missed kick + which cast** / threat / unavoidable). Turn it on in **Settings > Death Report**, where you can style the font, size, colors, an optional background panel, and position (drag-to-move with Save/Cancel), pick how it dismisses (fade after a few seconds, or **click to dismiss**), and choose whether it fires each pull or once at the finish. **/ledger deathreport** reposts the last one to party chat.
-- **[CHANGE]** **Missed Kick now shows on your older runs.** Because each run stores its raw death recaps, the death-cause breakdown is recomputed from them - so already-saved runs pick up the **Missed Kick** cause (and any future classifier tweaks) without re-playing anything. No grades change.
-
-## 1.0.0-beta.8
-
-A new death cause and an interrupt-label fix. No grades change.
-
-- **[NEW]** **"Missed Kick" death cause.** Deaths now split out a fourth cause - **Missed Kick** - when the fatal damage came from a cast in this dungeon's kick list that landed instead of being interrupted. It's carved out of "Other" (your Avoidable / Threat deaths are untouched) and weighted the same, so **no grade moves** - it just names *why* you died more precisely, right on the Death Causes card.
-- **[BUG FIX]** **Interrupt cooldown classes corrected.** Several kicks were labelled in the wrong CD band: 15-second melee kicks (Kick, Pummel, Mind Freeze, Disrupt, Skull Bash, Spear Hand Strike, Rebuke) now read **Short-CD**, and 24-second ranged kicks (Counter Shot, Counterspell, Spell Lock) read **Standard**. This is the label shown on the interrupt breakdown - expected kick rates and grades are unchanged.
-
 ## 1.0.0-beta.7
 
-Death **attribution** arrives - every death is sorted into **why** it happened, and that drives a smarter death penalty - plus the run review now shows **exactly what you kicked and dispelled** versus what the dungeon demanded. The scoring change below **re-scores your existing runs automatically** on login.
+Death **attribution**, per-spell **interrupt & dispel breakdowns**, and a new on-screen **death report**. Every death is now sorted into **why** it happened, which drives a smarter death penalty, and the run review shows **exactly what you kicked and dispelled** versus what the dungeon demanded. The scoring change below **re-scores your existing runs automatically** on login.
 
-- **[NEW]** **Death Causes.** Every death is now classified as **Avoidable** (you stood in something), **Threat** (unmitigated melee while you weren't tanking - you pulled aggro, or the tank never picked it up), or **Other** (unavoidable). It reads the game's **death recap** and weighs the *whole* sequence, not just the final hit - so a mechanic that dropped you to 10% gets the blame even when a normal hit lands the killing blow. Shown as a breakdown card on the player review.
-- **[CHANGE]** **Deaths are scored by cause.** The Death penalty is no longer flat: an **avoidable** death costs the most, an **unavoidable** one less, and a **threat/aggro** death the least (it's largely not on you). The death count and its weight are unchanged - only how much each death costs. Runs recorded before this update keep the old flat penalty.
+- **[NEW]** **Death Causes.** Every death is classified as **Avoidable** (you stood in something), **Missed Kick** (a cast that should have been interrupted landed instead - it names which one), **Threat** (unmitigated melee while you weren't tanking - you pulled aggro, or the tank never picked it up), or **Other** (unavoidable). It reads the game's **death recap** and weighs the *whole* sequence, not just the final hit - so a mechanic that dropped you to 10% gets the blame even when a normal hit lands the killing blow. Shown as a breakdown card on the player review, and recomputed from each run's stored recaps so it stays current on runs you already have.
+- **[CHANGE]** **Deaths are scored by cause.** The Death penalty is no longer flat: an **avoidable** death costs the most; a **missed kick** or **other** death less; a **threat/aggro** death the least (it's largely not on you). The death count and its weight are unchanged - only how much each death costs. Runs recorded before this update keep the old flat penalty.
+- **[NEW]** **On-screen death report.** After a pull (or at the run's end), a customizable overlay flashes **who died since the last report and why** - the time in the key, the killing blow, and the cause (including a missed kick's cast). Turn it on in **Settings > Death Report**, where you can style the font, size, colors, an optional background panel, and position (drag-to-move with Save/Cancel), pick how it dismisses (auto-fade or **click to dismiss**), and choose whether it fires each pull or once at the finish. **/ledger deathreport** reposts the last one to party chat.
 - **[NEW]** **Interrupt breakdown - did you kick the right casts?** The player review now shows **what you actually interrupted**, grouped by the dungeon's priority tiers (Critical / Must / Should kick), plus the priority casts you didn't personally cover. **Click any spell to jump straight to it in the Dungeon Guide.**
-- **[NEW]** **Dispel breakdown, with your tool shown.** The same for dispels - your clearing ability on the left, what you cleared by priority on the right, and the casts your kit could have handled but didn't, **filtered to what your spec can actually dispel**. (Folds in the old dispel coaching into one clearer block.)
+- **[NEW]** **Dispel breakdown, with your tool shown.** The same for dispels - your clearing ability on the left, what you cleared by priority on the right, and the casts your kit could have handled but didn't, **filtered to what your spec can actually dispel**. (Folds the old dispel coaching into one clearer block.)
 - **[NEW]** **Item level & hero talent on the details page.** Each player's **item level** now has its own tile, and their chosen **hero talent** shows as an icon in the header.
 - **[NOTE]** **Full per-spell run log.** Every run now records the complete per-spell breakdown for the whole party - damage and healing done, damage taken, avoidable, interrupts, dispels, and the death recaps - so future scoring and analysis have the raw detail to build on. *(Captured now; most of it isn't shown yet.)*
+- **[BUG FIX]** **Interrupt cooldown-class labels corrected.** Several kicks were labelled in the wrong CD band: 15-second melee kicks (Kick, Pummel, Mind Freeze, Disrupt, Skull Bash, Spear Hand Strike, Rebuke) now read **Short-CD**, and 24-second ranged kicks (Counter Shot, Counterspell, Spell Lock) read **Standard**. Labels only - expected kick rates and grades are unchanged.
 
 ## 1.0.0-beta.6
 
