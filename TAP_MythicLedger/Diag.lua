@@ -476,17 +476,31 @@ function Diag.ProbeDeathRecap(emit)
         end
     end
 
-    -- Classification preview for the local player, exactly as finalize would compute it.
+    -- Classification preview for the local player, exactly as finalize would compute it. Build the kick
+    -- set from the current dungeon (nil outside a key -> no missed-kick classification, e.g. at a dummy).
     if myGUID and recaps[myGUID] then
         local attrib = ML.Providers.ReadAttribution and ML.Providers.ReadAttribution(ctx)
+        local kickSet
+        local Cfg = ML.Scoring and ML.Scoring.Config
+        local dName
+        if _G.C_ChallengeMode and _G.C_ChallengeMode.GetActiveChallengeMapID then
+            local id = _G.C_ChallengeMode.GetActiveChallengeMapID()
+            local mi = id and API.GetMapInfo and API.GetMapInfo(id)
+            dName = mi and mi.name
+        end
+        local cat = Cfg and Cfg.SeasonDungeon and dName and Cfg.SeasonDungeon(dName)
+        if cat and type(cat.kicks) == "table" then
+            kickSet = {}
+            for _, e in ipairs(cat.kicks) do if e.id then kickSet[e.id] = true end end
+        end
         local dc = ML.Providers.ClassifyDeaths(attrib and attrib[myGUID], recaps[myGUID],
-            ctx.player.role, #recaps[myGUID])
+            ctx.player.role, #recaps[myGUID], kickSet)
         if dc then
-            line(string.format("== classification (you): avoidable=%d  threat=%d  other=%d ==",
-                dc.avoidable, dc.threat, dc.other))
+            line(string.format("== classification (you): avoidable=%d  kickable=%d  threat=%d  other=%d ==",
+                dc.avoidable, dc.kickable or 0, dc.threat, dc.other))
             for _, f in ipairs(dc.fatal or {}) do
-                line(string.format("   death -> %-9s  (avoidable %d%%, melee %d%%; finished by %s)",
-                    f.cause, f.avoidPct or 0, f.meleePct or 0,
+                line(string.format("   death -> %-9s  (avoid %d%%, kick %d%%, melee %d%%; finished by %s)",
+                    f.cause, f.avoidPct or 0, f.kickPct or 0, f.meleePct or 0,
                     (f.killer and f.killer ~= "" and f.killer) or spellName(f.killerId)))
             end
         end

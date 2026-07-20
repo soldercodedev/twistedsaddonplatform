@@ -122,6 +122,8 @@ function Scoring.RunTests(printer)
     check(dca.penalty == Cfg.deaths.maxPenalty and dca.score == 0, "cause-weighted: 4 avoidable -> capped")
     local dct = Scoring.Categories.Deaths({ deaths = 2, deathCauses = { avoidable = 0, threat = 2, other = 0 } })
     check(dct.penalty == 10 and dct.score == 90, "cause-weighted: 2 threat deaths -> only -10")
+    local dck = Scoring.Categories.Deaths({ deaths = 2, deathCauses = { avoidable = 0, threat = 0, kickable = 1, other = 1 } })
+    check(dck.penalty == 20 and dck.score == 80, "cause-weighted: 1 missed-kick + 1 other -> -20 (kickable == other)")
 
     -- (20) High avoidable damage tanks the survival score for a DPS.
     local clean = Scoring.Categories.Survival({ role = "DAMAGER", durationSeconds = 1800, avoidableDamageTaken = 5e5, damageTaken = 3e7 })

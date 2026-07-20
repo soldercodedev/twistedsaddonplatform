@@ -678,7 +678,8 @@ Config.deaths = {
     -- Cause-weighted per-death penalty (v38) when the run captured the death-recap breakdown. Points off
     -- the 0-100 Death category (so x0.20 weight => -6 / -2 / -1 on the final grade per death). Avoidable
     -- deaths (stood in it) hurt most; threat deaths (melee while not tanking - lost aggro) hurt least.
-    causePenalties = { avoidable = 30, other = 10, threat = 5 },
+    -- `kickable` = death to a cast that should have been interrupted; weighted the same as `other` for now.
+    causePenalties = { avoidable = 30, other = 10, kickable = 10, threat = 5 },
 }
 
 ----------------------------------------------------------------------

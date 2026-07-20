@@ -291,12 +291,13 @@ function Cat.Deaths(norm)
     -- saves) fall through to the flat per-death calc below - deliberately unchanged.
     local dc, cp = norm.deathCauses, Cfg.deaths.causePenalties
     if type(dc) == "table" and type(cp) == "table"
-        and (type(dc.avoidable) == "number" or type(dc.threat) == "number" or type(dc.other) == "number") then
-        local av, th, ot = dc.avoidable or 0, dc.threat or 0, dc.other or 0
-        local pen = av * (cp.avoidable or 0) + th * (cp.threat or 0) + ot * (cp.other or 0)
+        and (type(dc.avoidable) == "number" or type(dc.threat) == "number"
+             or type(dc.kickable) == "number" or type(dc.other) == "number") then
+        local av, th, kk, ot = dc.avoidable or 0, dc.threat or 0, dc.kickable or 0, dc.other or 0
+        local pen = av * (cp.avoidable or 0) + th * (cp.threat or 0) + kk * (cp.kickable or 0) + ot * (cp.other or 0)
         if pen > Cfg.deaths.maxPenalty then pen = Cfg.deaths.maxPenalty end
         return { applicable = true, score = Cfg.deaths.baseScore - pen, deaths = d, penalty = pen,
-                 confidence = 1, causes = { avoidable = av, threat = th, other = ot } }
+                 confidence = 1, causes = { avoidable = av, threat = th, kickable = kk, other = ot } }
     end
     local pen, steps = 0, Cfg.deaths.penalties
     for i = 1, d do

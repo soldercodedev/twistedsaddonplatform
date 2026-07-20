@@ -5,6 +5,13 @@ local ADDON, ML = ...
 ML.CHANGELOG = [==[
 # Mythic Ledger - What's New
 
+## 1.0.0-beta.8
+
+A new death cause and an interrupt-label fix. No grades change.
+
+- **[NEW]** **"Missed Kick" death cause.** Deaths now split out a fourth cause - **Missed Kick** - when the fatal damage came from a cast in this dungeon's kick list that landed instead of being interrupted. It's carved out of "Other" (your Avoidable / Threat deaths are untouched) and weighted the same, so **no grade moves** - it just names *why* you died more precisely, right on the Death Causes card.
+- **[BUG FIX]** **Interrupt cooldown classes corrected.** Several kicks were labelled in the wrong CD band: 15-second melee kicks (Kick, Pummel, Mind Freeze, Disrupt, Skull Bash, Spear Hand Strike, Rebuke) now read **Short-CD**, and 24-second ranged kicks (Counter Shot, Counterspell, Spell Lock) read **Standard**. This is the label shown on the interrupt breakdown - expected kick rates and grades are unchanged.
+
 ## 1.0.0-beta.7
 
 Death **attribution** arrives - every death is sorted into **why** it happened, and that drives a smarter death penalty - plus the run review now shows **exactly what you kicked and dispelled** versus what the dungeon demanded. The scoring change below **re-scores your existing runs automatically** on login.

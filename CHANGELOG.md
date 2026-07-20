@@ -3,23 +3,24 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
-## 1.3.0
+## 1.4.0-beta.1
 
-Headlined by **Mythic Ledger beta.7** - death **attribution** (every death sorted into *why* it happened, driving a smarter death penalty) and per-spell **interrupt & dispel breakdowns** that show exactly what you kicked and cleared versus what the dungeon demanded. The platform window also links straight to the **website** now. Each module's full notes also live in its in-game **What's New** (`/tap` > module > *What's New*).
+Headlined by **Mythic Ledger beta.8** - death **attribution** (every death sorted into *why* it happened, now including a **Missed Kick** cause when an un-interrupted cast lands the blow) and per-spell **interrupt & dispel breakdowns** that show exactly what you kicked and cleared versus what the dungeon demanded. The platform window also links straight to the **website** now. Each module's full notes also live in its in-game **What's New** (`/tap` > module > *What's New*).
 
 **Platform**
 
 - **[NEW]** **Website link in the footer.** The `/tap` window footer now has a **Website** button next to Discord - it copies **https://tap.soldercode.dev/** (WoW can't open a browser directly).
 
-### Mythic Ledger (1.0.0-beta.7)
+### Mythic Ledger (1.0.0-beta.8)
 
-Death **attribution** and per-spell **utility breakdowns**. The scoring change below **re-scores your existing runs automatically** on login.
+Death **attribution** and per-spell **utility breakdowns**. The cause-weighted death scoring below **re-scores your existing runs automatically** on login.
 
-- **[NEW]** **Death Causes.** Every death is now classified as **Avoidable** (you stood in something), **Threat** (unmitigated melee while you weren't tanking - pulled aggro, or the tank never picked it up), or **Other** (unavoidable). It reads the game's **death recap** and weighs the *whole* sequence, not just the killing blow - so a mechanic that dropped you to 10% is blamed even when a normal hit finishes you. Shown as a breakdown card on the player review.
+- **[NEW]** **Death Causes.** Every death is now classified as **Avoidable** (you stood in something), **Missed Kick** (a cast that should have been interrupted landed instead), **Threat** (unmitigated melee while you weren't tanking - pulled aggro, or the tank never picked it up), or **Other** (unavoidable). It reads the game's **death recap** and weighs the *whole* sequence, not just the killing blow - so a mechanic that dropped you to 10% is blamed even when a normal hit finishes you. Shown as a breakdown card on the player review.
 - **[CHANGE]** **Deaths are scored by cause.** The Death penalty is no longer flat - an **avoidable** death costs the most, an **unavoidable** one less, and a **threat/aggro** death the least. The death count and its weight are unchanged; only how much each death costs. Runs recorded before this update keep the old flat penalty.
 - **[NEW]** **Interrupt & dispel breakdowns.** The player review now shows **what you actually kicked and dispelled** grouped by the dungeon's priority tiers, plus the priority casts you didn't personally cover - dispels filtered to what your spec can really clear, with your clearing tool shown. **Click any spell to jump to it in the Dungeon Guide.**
 - **[NEW]** **Item level & hero talent on the details page.** Each player's item level gets its own tile and their hero talent shows as an icon in the header.
 - **[NOTE]** **Full per-spell run log.** Every run now records the complete per-spell breakdown for the whole party (damage/healing done, damage taken, avoidable, interrupts, dispels) plus death recaps - raw detail for future scoring and analysis. *(Captured now; most of it isn't shown yet.)*
+- **[BUG FIX]** **Interrupt cooldown-class labels corrected.** Several kicks sat in the wrong CD band - 15-second melee kicks (Kick, Pummel, Mind Freeze, Disrupt, Skull Bash, Spear Hand Strike, Rebuke) now read **Short-CD**, and 24-second ranged kicks (Counter Shot, Counterspell, Spell Lock) read **Standard**. This is the label shown on the interrupt breakdown; expected kick rates and grades are unchanged.
 
 ## 1.2.0
 

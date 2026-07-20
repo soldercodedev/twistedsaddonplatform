@@ -554,14 +554,19 @@ end
 -- unmitigated melee from losing aggro (non-tank). So we sum each death's recap damage by category and
 -- name the cause by DOMINANT contribution: if avoidable or melee(non-tank) makes up >= DEATH_CAUSE_SHARE
 -- of the death's total damage, the larger of the two wins; otherwise the death was genuinely unavoidable
--- => other. Avoidable is judged by cross-referencing a hit's spellId against the run's avoidable-damage
--- bucket; melee is the SWING_DAMAGE event. Reconciles to `deathCount`. Display-only; never feeds scoring.
-function Providers.ClassifyDeaths(attribution, recaps, role, deathCount)
+-- => other. Categories, judged per hit against the whole recap: AVOIDABLE (spellId in the run's
+-- avoidable-damage bucket), THREAT (melee / SWING_DAMAGE on a non-tank), MISSED KICK (spellId in the
+-- dungeon's kick catalog `kickSet` - an interruptible cast that landed instead of being kicked), else
+-- OTHER. Per-hit precedence is avoidable -> threat -> kickable, so "missed kick" is carved out of what
+-- used to be "other" (avoidable/threat classification is unchanged). Reconciles to `deathCount`. The
+-- buckets drive the cause-weighted Death penalty in Cat.Deaths (kickable weighted the same as other).
+function Providers.ClassifyDeaths(attribution, recaps, role, deathCount, kickSet)
     local DEATH_CAUSE_SHARE = 0.20   -- a category must be >=20% of a death's damage to be named its cause
     local avoidSet = {}
     if type(attribution) == "table" then
         for _, e in ipairs(attribution.avoidable or {}) do if e.id then avoidSet[e.id] = true end end
     end
+    kickSet = type(kickSet) == "table" and kickSet or {}
     local nonTank = role ~= "TANK"
     local function isHeal(e)  return e.ev == "SPELL_HEAL" or e.ev == "SPELL_PERIODIC_HEAL" end
     local function isMelee(e)
@@ -569,8 +574,9 @@ function Providers.ClassifyDeaths(attribution, recaps, role, deathCount)
         return (e.id and MELEE_SPELLS[e.id]) and true or false
     end
     local function isAvoid(e) return (e.id and avoidSet[e.id]) and true or false end
+    local function isKick(e)  return (e.id and kickSet[e.id]) and true or false end
 
-    local b = { avoidable = 0, threat = 0, other = 0, fatal = {} }
+    local b = { avoidable = 0, threat = 0, kickable = 0, other = 0, fatal = {} }
     if type(recaps) == "table" and #recaps > 0 then
         for _, death in ipairs(recaps) do
             local evs = death.events or {}
@@ -578,44 +584,53 @@ function Providers.ClassifyDeaths(attribution, recaps, role, deathCount)
             local killer
             for i = #evs, 1, -1 do local e = evs[i]; if e.over and e.over > 0 then killer = e; break end end
             if not killer then for i = #evs, 1, -1 do if not isHeal(evs[i]) then killer = evs[i]; break end end end
-            -- Sum the death's damage by category over the WHOLE recap (heals excluded).
-            local dTot, dAvoid, dMelee = 0, 0, 0
+            -- Sum the death's damage by category over the WHOLE recap (heals excluded). Precedence per hit:
+            -- avoidable, then threat (melee), then a missed kick - so kickable carves out of "other" only.
+            local dTot, dAvoid, dMelee, dKick = 0, 0, 0, 0
             for _, e in ipairs(evs) do
                 if not isHeal(e) then
                     local amt = e.amt or 0; if amt < 0 then amt = 0 end
                     dTot = dTot + amt
                     if isAvoid(e) then dAvoid = dAvoid + amt
-                    elseif isMelee(e) and nonTank then dMelee = dMelee + amt end
+                    elseif isMelee(e) and nonTank then dMelee = dMelee + amt
+                    elseif isKick(e) then dKick = dKick + amt end
                 end
             end
             local avShare = dTot > 0 and (dAvoid / dTot) or 0
             local meShare = dTot > 0 and (dMelee / dTot) or 0
+            local kkShare = dTot > 0 and (dKick / dTot) or 0
+            -- Keep the EXACT avoidable/threat decision; a missed kick only claims deaths that would
+            -- otherwise be "other". So it's a pure carve-out of "other" - no existing classification (or
+            -- score) moves, which matches "missed-kick weighted the same as other".
             local cause = "other"
             if avShare >= DEATH_CAUSE_SHARE or meShare >= DEATH_CAUSE_SHARE then
                 cause = (avShare >= meShare) and "avoidable" or "threat"
+            elseif kkShare >= DEATH_CAUSE_SHARE then
+                cause = "kickable"
             end
             b[cause] = b[cause] + 1
             b.fatal[#b.fatal + 1] = {
                 cause = cause,
                 killer = killer and killer.name, killerId = killer and killer.id, killerEvent = killer and killer.ev,
                 avoidPct = math.floor(avShare * 100 + 0.5), meleePct = math.floor(meShare * 100 + 0.5),
+                kickPct = math.floor(kkShare * 100 + 0.5),
             }
         end
     end
 
     if type(deathCount) == "number" then
-        local found = b.avoidable + b.threat + b.other
+        local found = b.avoidable + b.threat + b.kickable + b.other
         if found < deathCount then
             b.other = b.other + (deathCount - found)
         elseif found > deathCount then
             local over = found - deathCount
-            for _, k in ipairs({ "other", "threat", "avoidable" }) do
+            for _, k in ipairs({ "other", "kickable", "threat", "avoidable" }) do
                 local take = math.min(over, b[k]); b[k] = b[k] - take; over = over - take
                 if over <= 0 then break end
             end
         end
     end
-    if (b.avoidable + b.threat + b.other) > 0 then return b end
+    if (b.avoidable + b.threat + b.kickable + b.other) > 0 then return b end
     return nil
 end
 

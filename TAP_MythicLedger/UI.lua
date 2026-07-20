@@ -3434,18 +3434,19 @@ function renderPlayerReview(b, C, x, y, w, win)
         card("Death Impact", de.score, d)
     end
 
-    -- Death-cause breakdown (DISPLAY-ONLY, best-effort - does NOT affect the score). From C_DamageMeter's
-    -- per-spell death attribution: each death is bucketed as Avoidable (fatal hit was in the run's
-    -- avoidable-damage list), Threat (unmitigated melee while not tanking - pulled aggro / lost pickup),
-    -- or Other (unavoidable, or a death we couldn't pin to a hit). Buckets sum to the death total.
+    -- Death-cause breakdown. From the death recap, each death is bucketed as Avoidable (fatal damage was
+    -- in the run's avoidable list), Missed Kick (a cast that should have been interrupted), Threat
+    -- (unmitigated melee while not tanking - pulled aggro), or Other (unavoidable / unpinnable). Buckets
+    -- sum to the death total and feed the cause-weighted Death Impact penalty (Missed Kick == Other).
     local dcz = m.deathCauses
-    if dcz and (dcz.avoidable + dcz.threat + dcz.other) > 0 then
-        local total = dcz.avoidable + dcz.threat + dcz.other
-        local H = 102
+    local dczTotal = dcz and ((dcz.avoidable or 0) + (dcz.kickable or 0) + (dcz.threat or 0) + (dcz.other or 0)) or 0
+    if dcz and dczTotal > 0 then
+        local total = dczTotal
+        local H = 120
         b:Box(LX, y, CW, H, 0.45, 0, C.card)
         b:Box(LX, y, 3, H, 0.95, 2, theme:Color("e0655a"))
         b:Label("Death Causes", LX + 16, y - 16, C.text, 13)
-        b:Label(hlNums(string.format("%d death%s classified  ·  best-effort, does not affect score",
+        b:Label(hlNums(string.format("%d death%s classified  ·  best-effort  ·  drives the Death Impact score",
             total, total == 1 and "" or "s")), LX + 16, y - 34, C.subtext, 10)
         local function causeBar(name, count, hex, yy, tipBody)
             b:Label(name, LX + 20, yy, C.subtext, 11)
@@ -3458,12 +3459,14 @@ function renderPlayerReview(b, C, x, y, w, win)
                     { title = name, lines = { { text = tipBody, color = "subtext" } } })
             end
         end
-        causeBar("Avoidable", dcz.avoidable, "e0655a", y - 54,
-            "Died to a mechanic you could have sidestepped - the fatal hit was in this run's avoidable-damage list.")
-        causeBar("Threat", dcz.threat, "e0a030", y - 72,
+        causeBar("Avoidable", dcz.avoidable or 0, "e0655a", y - 54,
+            "Died to a mechanic you could have sidestepped - the fatal damage was in this run's avoidable-damage list.")
+        causeBar("Missed Kick", dcz.kickable or 0, "5f8dff", y - 72,
+            "Died to a cast that should have been interrupted - the fatal damage came from a spell in this dungeon's kick list that wasn't kicked.")
+        causeBar("Threat", dcz.threat or 0, "e0a030", y - 90,
             "Died to unmitigated melee while not tanking - usually a threat/pickup issue (pulled aggro, or the tank never grabbed it). Note: fixate / soak / cleave mechanics can also read as melee.")
-        causeBar("Other", dcz.other, "8b91a0", y - 90,
-            "Unavoidable mechanics, or a death we couldn't pin to a specific hit.")
+        causeBar("Other", dcz.other or 0, "8b91a0", y - 108,
+            "Unavoidable mechanics, or a death we couldn't pin to a specific cause.")
         y = y - H - 8
     end
 

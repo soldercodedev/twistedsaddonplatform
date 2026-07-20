@@ -53,14 +53,14 @@ end
 ----------------------------------------------------------------------
 -- Death Knight - Mind Freeze (all). No dispel.
 ----------------------------------------------------------------------
-spec(250, "DEATHKNIGHT", "Blood",  "TANK",    { interrupt = ir(47528, "Mind Freeze", 15, "RANGED", "STANDARD"), dispel = DP_NONE, highControl = false })
-spec(251, "DEATHKNIGHT", "Frost",  "DAMAGER", { interrupt = ir(47528, "Mind Freeze", 15, "RANGED", "STANDARD"), dispel = DP_NONE })
-spec(252, "DEATHKNIGHT", "Unholy", "DAMAGER", { interrupt = ir(47528, "Mind Freeze", 15, "RANGED", "STANDARD"), dispel = DP_NONE })
+spec(250, "DEATHKNIGHT", "Blood",  "TANK",    { interrupt = ir(47528, "Mind Freeze", 15, "RANGED", "SHORT_CD"), dispel = DP_NONE, highControl = false })
+spec(251, "DEATHKNIGHT", "Frost",  "DAMAGER", { interrupt = ir(47528, "Mind Freeze", 15, "RANGED", "SHORT_CD"), dispel = DP_NONE })
+spec(252, "DEATHKNIGHT", "Unholy", "DAMAGER", { interrupt = ir(47528, "Mind Freeze", 15, "RANGED", "SHORT_CD"), dispel = DP_NONE })
 
 ----------------------------------------------------------------------
 -- Demon Hunter - Disrupt (all) + Consume Magic (offensive purge). Vengeance = high control (Sigil of Silence).
 ----------------------------------------------------------------------
-spec(577, "DEMONHUNTER", "Havoc",     "DAMAGER", { interrupt = ir(183752, "Disrupt", 15, "MELEE", "STANDARD"),
+spec(577, "DEMONHUNTER", "Havoc",     "DAMAGER", { interrupt = ir(183752, "Disrupt", 15, "MELEE", "SHORT_CD"),
     dispel = dp("LIMITED", 278326, "Consume Magic", nil, { magic = true }, { talentDependent = true }) })
 spec(581, "DEMONHUNTER", "Vengeance", "TANK",    { interrupt = ir(183752, "Disrupt", 15, "MELEE", "HIGH_CONTROL",
     { additionalStops = { { spellID = 202137, spellName = "Sigil of Silence", stopType = "SILENCE", cooldownSeconds = 90, rotationalLikelihood = "MEDIUM" } } }),
@@ -71,9 +71,9 @@ spec(581, "DEMONHUNTER", "Vengeance", "TANK",    { interrupt = ir(183752, "Disru
 ----------------------------------------------------------------------
 spec(102, "DRUID", "Balance",      "DAMAGER", { interrupt = ir(78675, "Solar Beam", 60, "RANGED", "LONG_CD", { silence = true }),
     dispel = dp("LIMITED", 2782, "Remove Corruption", { curse = true, poison = true }, { enrage = true }, { talentDependent = true }) })   -- + Soothe (2908) enrage
-spec(103, "DRUID", "Feral",        "DAMAGER", { interrupt = ir(106839, "Skull Bash", 15, "MELEE", "STANDARD"),
+spec(103, "DRUID", "Feral",        "DAMAGER", { interrupt = ir(106839, "Skull Bash", 15, "MELEE", "SHORT_CD"),
     dispel = dp("LIMITED", 2782, "Remove Corruption", { curse = true, poison = true }, { enrage = true }, { talentDependent = true }) })   -- + Soothe (2908) enrage
-spec(104, "DRUID", "Guardian",     "TANK",    { interrupt = ir(106839, "Skull Bash", 15, "MELEE", "STANDARD"),
+spec(104, "DRUID", "Guardian",     "TANK",    { interrupt = ir(106839, "Skull Bash", 15, "MELEE", "SHORT_CD"),
     dispel = dp("LIMITED", 2782, "Remove Corruption", { curse = true, poison = true }, { enrage = true }, { talentDependent = true }) })   -- + Soothe (2908) enrage
 spec(105, "DRUID", "Restoration",  "HEALER",  { interrupt = IR_NONE,
     dispel = dp("STANDARD", 88423, "Nature's Cure", { magic = true, curse = true, poison = true }, {}) })
@@ -93,9 +93,9 @@ spec(1473, "EVOKER", "Augmentation", "DAMAGER", { interrupt = ir(351338, "Quell"
 -- Hunter - BM/MM: Counter Shot (24s). Survival: Muzzle (15s). Tranq Shot (offensive) is TALENTED in
 --   Midnight (not baseline) - so its dispel is talentDependent; a hunter without it is N/A, not docked.
 ----------------------------------------------------------------------
-spec(253, "HUNTER", "BeastMastery", "DAMAGER", { interrupt = ir(147362, "Counter Shot", 24, "RANGED", "LONG_CD"),
+spec(253, "HUNTER", "BeastMastery", "DAMAGER", { interrupt = ir(147362, "Counter Shot", 24, "RANGED", "STANDARD"),
     dispel = dp("LIMITED", 19801, "Tranquilizing Shot", nil, { magic = true, enrage = true }, { talentDependent = true }) })
-spec(254, "HUNTER", "Marksmanship", "DAMAGER", { interrupt = ir(147362, "Counter Shot", 24, "RANGED", "LONG_CD"),
+spec(254, "HUNTER", "Marksmanship", "DAMAGER", { interrupt = ir(147362, "Counter Shot", 24, "RANGED", "STANDARD"),
     dispel = dp("LIMITED", 19801, "Tranquilizing Shot", nil, { magic = true, enrage = true }, { talentDependent = true }) })
 spec(255, "HUNTER", "Survival",     "DAMAGER", { interrupt = ir(187707, "Muzzle", 15, "MELEE", "STANDARD"),
     dispel = dp("LIMITED", 19801, "Tranquilizing Shot", nil, { magic = true, enrage = true }, { talentDependent = true }) })
@@ -104,7 +104,7 @@ spec(255, "HUNTER", "Survival",     "DAMAGER", { interrupt = ir(187707, "Muzzle"
 -- Mage - Counterspell (all, 24s ranged, also silences). Remove Curse + Spellsteal.
 ----------------------------------------------------------------------
 for _, s in ipairs({ { 62, "Arcane" }, { 63, "Fire" }, { 64, "Frost" } }) do
-    spec(s[1], "MAGE", s[2], "DAMAGER", { interrupt = ir(2139, "Counterspell", 24, "RANGED", "LONG_CD", { silence = true }),
+    spec(s[1], "MAGE", s[2], "DAMAGER", { interrupt = ir(2139, "Counterspell", 24, "RANGED", "STANDARD", { silence = true }),
         dispel = dp("LIMITED", 475, "Remove Curse", { curse = true }, { magic = true }, { talentDependent = true }) })
 end
 
@@ -112,9 +112,9 @@ end
 -- Monk - Spear Hand Strike (15s) for Brewmaster/Windwalker. Mistweaver LOST it in Midnight (healer
 -- interrupt removal) -> NONE, but keeps full dispel (Detox + Magic).
 ----------------------------------------------------------------------
-spec(268, "MONK", "Brewmaster", "TANK",    { interrupt = ir(116705, "Spear Hand Strike", 15, "MELEE", "STANDARD"),
+spec(268, "MONK", "Brewmaster", "TANK",    { interrupt = ir(116705, "Spear Hand Strike", 15, "MELEE", "SHORT_CD"),
     dispel = dp("LIMITED", 218164, "Detox", { disease = true, poison = true }, {}, { talentDependent = true }), incidentalControlRisk = 0.25 })
-spec(269, "MONK", "Windwalker", "DAMAGER", { interrupt = ir(116705, "Spear Hand Strike", 15, "MELEE", "STANDARD"),
+spec(269, "MONK", "Windwalker", "DAMAGER", { interrupt = ir(116705, "Spear Hand Strike", 15, "MELEE", "SHORT_CD"),
     dispel = dp("LIMITED", 218164, "Detox", { disease = true, poison = true }, {}, { talentDependent = true }) })
 spec(270, "MONK", "Mistweaver", "HEALER",  { interrupt = IR_NONE,
     dispel = dp("STANDARD", 218164, "Detox", { disease = true, magic = true, poison = true }, {}) })
@@ -130,7 +130,7 @@ spec(65, "PALADIN", "Holy",        "HEALER",  { interrupt = IR_NONE,
 spec(66, "PALADIN", "Protection",  "TANK",    { interrupt = ir(96231, "Rebuke", 15, "MELEE", "HIGH_CONTROL",
     { additionalStops = { { spellID = 31935, spellName = "Avenger's Shield", stopType = "SILENCE", cooldownSeconds = 15, rotationalLikelihood = "HIGH" } } }),
     dispel = dp("LIMITED", 213644, "Cleanse Toxins", { disease = true, poison = true }, {}, { talentDependent = true }), highControl = true, incidentalControlRisk = 0.5 })
-spec(70, "PALADIN", "Retribution", "DAMAGER", { interrupt = ir(96231, "Rebuke", 15, "MELEE", "STANDARD"),
+spec(70, "PALADIN", "Retribution", "DAMAGER", { interrupt = ir(96231, "Rebuke", 15, "MELEE", "SHORT_CD"),
     dispel = dp("LIMITED", 213644, "Cleanse Toxins", { disease = true, poison = true }, {}, { talentDependent = true }) })
 
 ----------------------------------------------------------------------
@@ -150,11 +150,11 @@ spec(258, "PRIEST", "Shadow",     "DAMAGER", { interrupt = ir(15487, "Silence", 
 -- Rogue - Kick (all, 15s). Shiv (5938) removes an Enrage from an enemy = a real (if situational)
 --   offensive dispel, so LIMITED rather than NONE.
 ----------------------------------------------------------------------
-spec(259, "ROGUE", "Assassination", "DAMAGER", { interrupt = ir(1766, "Kick", 15, "MELEE", "STANDARD"),
+spec(259, "ROGUE", "Assassination", "DAMAGER", { interrupt = ir(1766, "Kick", 15, "MELEE", "SHORT_CD"),
     dispel = dp("LIMITED", 5938, "Shiv", nil, { enrage = true }) })
-spec(260, "ROGUE", "Outlaw",        "DAMAGER", { interrupt = ir(1766, "Kick", 15, "MELEE", "STANDARD"),
+spec(260, "ROGUE", "Outlaw",        "DAMAGER", { interrupt = ir(1766, "Kick", 15, "MELEE", "SHORT_CD"),
     dispel = dp("LIMITED", 5938, "Shiv", nil, { enrage = true }) })
-spec(261, "ROGUE", "Subtlety",      "DAMAGER", { interrupt = ir(1766, "Kick", 15, "MELEE", "STANDARD"),
+spec(261, "ROGUE", "Subtlety",      "DAMAGER", { interrupt = ir(1766, "Kick", 15, "MELEE", "SHORT_CD"),
     dispel = dp("LIMITED", 5938, "Shiv", nil, { enrage = true }) })
 
 ----------------------------------------------------------------------
@@ -173,7 +173,7 @@ spec(264, "SHAMAN", "Restoration", "HEALER",  { interrupt = ir(57994, "Wind Shea
 -- Warlock - Spell Lock via Felhunter (24s, pet/talent dependent). Singe/Devour Magic dispel.
 ----------------------------------------------------------------------
 for _, s in ipairs({ { 265, "Affliction" }, { 266, "Demonology" }, { 267, "Destruction" } }) do
-    spec(s[1], "WARLOCK", s[2], "DAMAGER", { interrupt = ir(19647, "Spell Lock", 24, "RANGED", "LONG_CD", { talentDependent = true }),
+    spec(s[1], "WARLOCK", s[2], "DAMAGER", { interrupt = ir(19647, "Spell Lock", 24, "RANGED", "STANDARD", { talentDependent = true }),
         dispel = dp("LIMITED", 89808, "Singe Magic", { magic = true }, { magic = true }, { talentDependent = true }) })
 end
 
@@ -183,9 +183,9 @@ end
 --   Protection also has Disrupting Shout (386071) = a real 90s AoE INTERRUPT, plus Shockwave (a
 --   40s AoE STUN, NOT an interrupt).
 ----------------------------------------------------------------------
-spec(71, "WARRIOR", "Arms",       "DAMAGER", { interrupt = ir(6552, "Pummel", 14, "MELEE", "STANDARD"), dispel = DP_NONE })
-spec(72, "WARRIOR", "Fury",       "DAMAGER", { interrupt = ir(6552, "Pummel", 14, "MELEE", "STANDARD"), dispel = DP_NONE })
-spec(73, "WARRIOR", "Protection", "TANK",    { interrupt = ir(6552, "Pummel", 14, "MELEE", "STANDARD",
+spec(71, "WARRIOR", "Arms",       "DAMAGER", { interrupt = ir(6552, "Pummel", 14, "MELEE", "SHORT_CD"), dispel = DP_NONE })
+spec(72, "WARRIOR", "Fury",       "DAMAGER", { interrupt = ir(6552, "Pummel", 14, "MELEE", "SHORT_CD"), dispel = DP_NONE })
+spec(73, "WARRIOR", "Protection", "TANK",    { interrupt = ir(6552, "Pummel", 14, "MELEE", "SHORT_CD",
     { additionalStops = {
         { spellID = 386071, spellName = "Disrupting Shout", stopType = "INTERRUPT", aoe = true, cooldownSeconds = 90, rotationalLikelihood = "LOW" },
         { spellID = 46968,  spellName = "Shockwave",        stopType = "STUN",      aoe = true, cooldownSeconds = 40, rotationalLikelihood = "MEDIUM" },

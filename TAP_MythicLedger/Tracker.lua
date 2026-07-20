@@ -565,13 +565,21 @@ local function finalizeRun(stats)
             s.deaths = 0
         end
     end
-    -- Classify each member's deaths (avoidable / threat / other) from their captured attribution now that
-    -- the death counts are normalised. Display-only, never feeds scoring; nil for a clean (0-death) run.
+    -- Classify each member's deaths (avoidable / threat / missed-kick / other) from their captured
+    -- attribution + death recaps now that the death counts are normalised. `kickSet` = this dungeon's
+    -- interruptible casts (season catalog), so a death to a cast that should have been kicked is named.
     if Providers.ClassifyDeaths then
+        local kickSet
+        local Cfg = ML.Scoring and ML.Scoring.Config
+        local cat = Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(run.dungeonName)
+        if cat and type(cat.kicks) == "table" then
+            kickSet = {}
+            for _, e in ipairs(cat.kicks) do if e.id then kickSet[e.id] = true end end
+        end
         for _, m in ipairs(run.party or {}) do
             local n = m.stats and m.stats.deaths
             if type(n) == "number" and n > 0 then
-                m.deathCauses = Providers.ClassifyDeaths(m.attribution, m.deathRecaps, m.role, n)
+                m.deathCauses = Providers.ClassifyDeaths(m.attribution, m.deathRecaps, m.role, n, kickSet)
             end
         end
     end
