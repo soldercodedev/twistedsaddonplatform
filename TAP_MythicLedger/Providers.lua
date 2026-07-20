@@ -390,6 +390,235 @@ local function readPartyDamageMap(ctx, forceSession)
 end
 Providers.ReadPartyDamageMap = readPartyDamageMap
 
+----------------------------------------------------------------------
+-- Per-spell ATTRIBUTION (Midnight). C_DamageMeter hands addons the full per-spell breakdown per source
+-- via GetCombatSessionSourceFromType(sessionType, meterType, sourceGUID): each combatSpells[] entry
+-- carries spellID, totalAmount (damage - or a COUNT for interrupts/dispels), amountPerSecond,
+-- overkillAmount, isDeadly, and combatSpellDetails.unitName (who dealt it). This turns the aggregate
+-- stat block into named detail - what each player dealt / healed / took / avoided / kicked / dispelled,
+-- and (via overkillAmount / isDeadly) what actually killed them. Read at finalize, out of combat, where
+-- source GUIDs come back as plain strings. Nothing here feeds scoring; it's captured for the run log.
+----------------------------------------------------------------------
+local ATTR_CAP = nil                       -- FULLY UNCAPPED (user: log ALL raw spell rows for rescoring /
+                                           -- tuning). topByAmt still sorts biggest-first; nil = never trim.
+local MELEE_SPELLS = { [6603] = true }     -- 6603 = Auto Attack; a non-tank death to melee => threat/aggro
+Providers.ATTR_CAP = ATTR_CAP
+Providers.MELEE_SPELLS = MELEE_SPELLS
+
+-- One GetCombatSessionSourceFromType(sessionType, meterType, guid) record -> normalized spell list.
+-- `keepSrc` also records the dealing unit's name (useful for damage-taken / avoidable). `.ok` is only
+-- present when overkillAmount>0 (the killing blow) and `.deadly` only when isDeadly - the two fatal-blow
+-- signals used by death classification. Returns {} on no data (never nil, so callers can ipairs freely).
+local function normSpells(getter, sessionType, meterType, guid, keepSrc)
+    local out = {}
+    if type(getter) ~= "function" or meterType == nil or not guid then return out end
+    local ok, src = pcall(getter, sessionType, meterType, guid)
+    if not ok or type(src) ~= "table" or type(src.combatSpells) ~= "table" then return out end
+    for _, s in ipairs(src.combatSpells) do
+        local id = ML.ReadNum(s.spellID)
+        if id then
+            local e = { id = id, amt = ML.ReadNum(s.totalAmount) or 0 }
+            local over = ML.ReadNum(s.overkillAmount)
+            if over and over > 0 then e.ok = over end
+            if s.isDeadly then e.deadly = true end
+            if keepSrc then
+                local d = type(s.combatSpellDetails) == "table" and s.combatSpellDetails
+                local nm = d and ML.ReadStr(d.unitName)
+                if nm and nm ~= "" then e.src = nm end
+            end
+            out[#out + 1] = e
+        end
+    end
+    return out
+end
+
+local function topByAmt(list, cap)
+    table.sort(list, function(x, y) return (x.amt or 0) > (y.amt or 0) end)
+    if cap and #list > cap then for i = #list, cap + 1, -1 do list[i] = nil end end
+    return list
+end
+
+-- Per-GUID per-spell breakdown for the whole run. Returns { [guid] = { damageDone, healingDone,
+-- damageTaken, avoidable, interrupts, dispels } } (each a capped, amount-sorted spell list) or nil if
+-- the meter/source API is unavailable. Pet kicks/dispels fold into the owner (mirrors readMeterStats).
+function Providers.ReadAttribution(ctx)
+    local dm = C_DM()
+    if type(dm) ~= "table" or type(dm.GetCombatSessionSourceFromType) ~= "function" then return nil end
+    local ST = _G.Enum and _G.Enum.DamageMeterSessionType
+    local MT = _G.Enum and _G.Enum.DamageMeterType
+    if type(ST) ~= "table" or type(MT) ~= "table" then return nil end
+    local sess = ST.Overall or 0
+    local getT = dm.GetCombatSessionSourceFromType
+
+    local guids, order = {}, {}
+    local function add(g) if g and not guids[g] then guids[g] = true; order[#order + 1] = g end end
+    if ctx and ctx.player then add(ctx.player.guid) end
+    for _, m in ipairs((ctx and ctx.party) or {}) do add(m.guid) end
+    if #order == 0 then return nil end
+
+    local out = {}
+    for _, g in ipairs(order) do
+        out[g] = {
+            damageDone  = topByAmt(normSpells(getT, sess, MT.DamageDone, g, false), ATTR_CAP),
+            healingDone = topByAmt(normSpells(getT, sess, MT.HealingDone, g, false), ATTR_CAP),
+            damageTaken = topByAmt(normSpells(getT, sess, MT.DamageTaken, g, true), ATTR_CAP),
+            avoidable   = topByAmt(normSpells(getT, sess, MT.AvoidableDamageTaken, g, true), ATTR_CAP),
+            interrupts  = normSpells(getT, sess, MT.Interrupts, g, false),
+            dispels     = normSpells(getT, sess, MT.Dispels, g, false),
+        }
+    end
+
+    -- Fold pet kicks/dispels (Warlock Spell Lock / Devour Magic, Hunter pets, ...) into the OWNER's
+    -- lists - pets are separate source GUIDs, so their per-spell rows would otherwise be lost even though
+    -- readMeterStats already counts them in the aggregate. Append then re-cap.
+    local petOwners = ctx and ctx.petOwners
+    if petOwners then
+        for petGuid, owner in pairs(petOwners) do
+            local dst = out[owner]
+            if dst then
+                for _, e in ipairs(normSpells(getT, sess, MT.Interrupts, petGuid, false)) do dst.interrupts[#dst.interrupts + 1] = e end
+                for _, e in ipairs(normSpells(getT, sess, MT.Dispels, petGuid, false)) do dst.dispels[#dst.dispels + 1] = e end
+            end
+        end
+    end
+    for _, a in pairs(out) do topByAmt(a.interrupts, ATTR_CAP); topByAmt(a.dispels, ATTR_CAP) end
+    return out
+end
+
+-- Normalize one C_DeathRecap.GetRecapEvents() entry. `ev` (event string) is the classifier's key signal:
+-- "SWING_DAMAGE" = a melee auto, "SPELL_HEAL"/"SPELL_PERIODIC_HEAL" = a heal (skipped when finding the
+-- fatal blow). spellId/spellName/amount/overkill/currentHP/timestamp complete the raw record.
+local function normRecapEvent(ev)
+    local evt = ML.ReadStr(ev.event)
+    local nm  = ML.ReadStr(ev.spellName)
+    if not nm or nm == "" then   -- melee / heal events carry no spellName - label them like the game does
+        if evt == "SWING_DAMAGE" then nm = "Melee"
+        elseif evt == "SPELL_HEAL" or evt == "SPELL_PERIODIC_HEAL" then nm = "Heal" end
+    end
+    return {
+        id   = ML.ReadNum(ev.spellId),
+        name = nm,
+        amt  = ML.ReadNum(ev.amount),
+        over = ML.ReadNum(ev.overkill),   -- >0 only on the killing blow; the API uses -1 as "no overkill"
+        hp   = ML.ReadNum(ev.currentHP),
+        ts   = ML.ReadNum(ev.timestamp),
+        ev   = evt,
+    }
+end
+
+-- Pull each death's RECAP via C_DeathRecap.GetRecapEvents(recapID) - the authoritative per-death hit
+-- timeline (the same source the built-in meter's death view uses; confirmed against EllesmereUI). The
+-- deathRecapID lives on each Overall Deaths row. C_DamageMeter's own accessors do NOT expose this - the
+-- recap is a separate namespace. Events are stored RAW (chronological oldest-first, all of them) in the
+-- run log for rescoring/inspection. Returns { [guid] = { { recapID, maxHP, events = { {id,name,amt,over,
+-- hp,ts,ev} } } } } or nil. Note: the client typically only holds recaps for the LOCAL player's deaths,
+-- so a teammate's recapID may return no events (their death then falls to reconciliation -> other).
+function Providers.ReadDeathRecaps(ctx)
+    local dm = C_DM()
+    local DR = _G.C_DeathRecap
+    if type(dm) ~= "table" or type(DR) ~= "table" or type(DR.GetRecapEvents) ~= "function" then return nil end
+    local ST = _G.Enum and _G.Enum.DamageMeterSessionType
+    local MT = _G.Enum and _G.Enum.DamageMeterType
+    if type(ST) ~= "table" or type(MT) ~= "table" then return nil end
+    local okD, deaths = pcall(dm.GetCombatSessionFromType, ST.Overall or 0, MT.Deaths)
+    if not (okD and type(deaths) == "table" and type(deaths.combatSources) == "table") then return nil end
+
+    local out, any = {}, false
+    for _, row in ipairs(deaths.combatSources) do
+        local guid = ML.ReadStr(row.sourceGUID)
+        local rid  = ML.ReadNum(row.deathRecapID)
+        if guid and rid and rid > 0 then
+            local events = {}
+            local ok, raw = pcall(DR.GetRecapEvents, rid)
+            if ok and type(raw) == "table" then
+                -- GetRecapEvents returns newest-first; store chronological (oldest-first) so the fatal
+                -- blow is the LAST non-heal event - matches how the built-in recap orders its display.
+                for i = #raw, 1, -1 do
+                    if type(raw[i]) == "table" then events[#events + 1] = normRecapEvent(raw[i]) end
+                end
+            end
+            local maxHP
+            if type(DR.GetRecapMaxHealth) == "function" then
+                local ok2, hp = pcall(DR.GetRecapMaxHealth, rid); if ok2 then maxHP = ML.ReadNum(hp) end
+            end
+            out[guid] = out[guid] or {}
+            out[guid][#out[guid] + 1] = { recapID = rid, maxHP = maxHP, events = events }
+            any = true
+        end
+    end
+    return any and out or nil
+end
+
+-- Classify deaths from the WHOLE recap, not just the killing blow. The final hit is often only "the
+-- straw" - what actually killed you is whatever got you low: avoidable damage you stood in, or
+-- unmitigated melee from losing aggro (non-tank). So we sum each death's recap damage by category and
+-- name the cause by DOMINANT contribution: if avoidable or melee(non-tank) makes up >= DEATH_CAUSE_SHARE
+-- of the death's total damage, the larger of the two wins; otherwise the death was genuinely unavoidable
+-- => other. Avoidable is judged by cross-referencing a hit's spellId against the run's avoidable-damage
+-- bucket; melee is the SWING_DAMAGE event. Reconciles to `deathCount`. Display-only; never feeds scoring.
+function Providers.ClassifyDeaths(attribution, recaps, role, deathCount)
+    local DEATH_CAUSE_SHARE = 0.20   -- a category must be >=20% of a death's damage to be named its cause
+    local avoidSet = {}
+    if type(attribution) == "table" then
+        for _, e in ipairs(attribution.avoidable or {}) do if e.id then avoidSet[e.id] = true end end
+    end
+    local nonTank = role ~= "TANK"
+    local function isHeal(e)  return e.ev == "SPELL_HEAL" or e.ev == "SPELL_PERIODIC_HEAL" end
+    local function isMelee(e)
+        if e.ev == "SWING_DAMAGE" then return true end
+        return (e.id and MELEE_SPELLS[e.id]) and true or false
+    end
+    local function isAvoid(e) return (e.id and avoidSet[e.id]) and true or false end
+
+    local b = { avoidable = 0, threat = 0, other = 0, fatal = {} }
+    if type(recaps) == "table" and #recaps > 0 then
+        for _, death in ipairs(recaps) do
+            local evs = death.events or {}
+            -- Killing blow (overkill>0, else most recent non-heal) - kept purely for display.
+            local killer
+            for i = #evs, 1, -1 do local e = evs[i]; if e.over and e.over > 0 then killer = e; break end end
+            if not killer then for i = #evs, 1, -1 do if not isHeal(evs[i]) then killer = evs[i]; break end end end
+            -- Sum the death's damage by category over the WHOLE recap (heals excluded).
+            local dTot, dAvoid, dMelee = 0, 0, 0
+            for _, e in ipairs(evs) do
+                if not isHeal(e) then
+                    local amt = e.amt or 0; if amt < 0 then amt = 0 end
+                    dTot = dTot + amt
+                    if isAvoid(e) then dAvoid = dAvoid + amt
+                    elseif isMelee(e) and nonTank then dMelee = dMelee + amt end
+                end
+            end
+            local avShare = dTot > 0 and (dAvoid / dTot) or 0
+            local meShare = dTot > 0 and (dMelee / dTot) or 0
+            local cause = "other"
+            if avShare >= DEATH_CAUSE_SHARE or meShare >= DEATH_CAUSE_SHARE then
+                cause = (avShare >= meShare) and "avoidable" or "threat"
+            end
+            b[cause] = b[cause] + 1
+            b.fatal[#b.fatal + 1] = {
+                cause = cause,
+                killer = killer and killer.name, killerId = killer and killer.id, killerEvent = killer and killer.ev,
+                avoidPct = math.floor(avShare * 100 + 0.5), meleePct = math.floor(meShare * 100 + 0.5),
+            }
+        end
+    end
+
+    if type(deathCount) == "number" then
+        local found = b.avoidable + b.threat + b.other
+        if found < deathCount then
+            b.other = b.other + (deathCount - found)
+        elseif found > deathCount then
+            local over = found - deathCount
+            for _, k in ipairs({ "other", "threat", "avoidable" }) do
+                local take = math.min(over, b[k]); b[k] = b[k] - take; over = over - take
+                if over <= 0 then break end
+            end
+        end
+    end
+    if (b.avoidable + b.threat + b.other) > 0 then return b end
+    return nil
+end
+
 function Blizz:GetRunStats(ctx)
     return readMeterStats(ctx, ML.SOURCE.BLIZZARD)
 end

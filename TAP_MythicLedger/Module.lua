@@ -83,6 +83,34 @@ local function handleSlash(rest)
         ML.Diag.Run(function(s) print(s) end)
     elseif cmd == "probe" then
         ML.Diag.ProbeCapture()
+    elseif cmd == "detail" then
+        local theme = Suite.uiTheme
+        if theme and theme.ShowCopyDialog then
+            -- Silent emit: collect into the copy dialog only (the dump is long - paste it back rather
+            -- than scrolling chat). Falls through to plain print when the themed dialog isn't available.
+            local txt = ML.Diag.ProbeMeterDetail(function() end)
+            theme:ShowCopyDialog("C_DamageMeter row detail", txt or "")
+        else
+            ML.Diag.ProbeMeterDetail()
+        end
+    elseif cmd == "source" then
+        local theme = Suite.uiTheme
+        if theme and theme.ShowCopyDialog then
+            local txt = ML.Diag.ProbeMeterSource(function() end)
+            theme:ShowCopyDialog("C_DamageMeter source detail", txt or "")
+        else
+            ML.Diag.ProbeMeterSource()
+        end
+    elseif cmd == "attr" then
+        ML.Diag.ProbeAttribution(function(s) print(s) end)
+    elseif cmd == "deaths" then
+        local theme = Suite.uiTheme
+        if theme and theme.ShowCopyDialog then
+            local txt = ML.Diag.ProbeDeathRecap(function() end)
+            theme:ShowCopyDialog("C_DamageMeter death recap", txt or "")
+        else
+            ML.Diag.ProbeDeathRecap()
+        end
     elseif cmd == "current" then
         local cur = ML.Tracker.Current()
         if cur then
@@ -124,6 +152,10 @@ if Suite.RegisterCommand then
             { "debug",    "Open the diagnostics page" },
             { "apicheck", "Probe the live API surface (safe on a target dummy)" },
             { "probe",    "Print provider stats for the current fight" },
+            { "detail",   "Dump C_DamageMeter row structure (out of combat) to find per-spell detail" },
+            { "source",   "Probe the C_DamageMeter Source accessors for the per-spell breakdown" },
+            { "attr",     "Readable attribution: avoidable hits, kicks, dispels, damage taken (named)" },
+            { "deaths",   "Probe the death-recap timeline (deathRecapID) for fatal-blow classification" },
             { "export",   "Copy the whole ledger as a share string" },
             { "scoreboard", "Open the scoreboard for your most recent run" },
             { "scale",    "Set the scoreboard scale, e.g. /ledger scale 1.2" },

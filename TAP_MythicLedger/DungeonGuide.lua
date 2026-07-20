@@ -130,6 +130,18 @@ function Guide.Hide()
     for _, btn in ipairs(iconPool) do btn:Hide() end
 end
 
+-- Programmatic navigation from elsewhere (e.g. the run review's interrupt/dispel breakdown): select this
+-- dungeon + spell in the guide and open the manager to the guide page. `entry` is a catalog row
+-- ({ id, name, tier, npc, npcId }). Safe to call with a spell from any dungeon in the season profile.
+function Guide.SelectAndOpen(dungeonName, entry)
+    if not (entry and entry.id) then return end
+    local Cfg = ML.Scoring and ML.Scoring.Config
+    local key = Cfg and Cfg.NormDungeon and Cfg.NormDungeon(dungeonName)
+    if key then state.dungeon = key; state.selDungeon = key end   -- keep our sel (render won't reset it)
+    state.sel = { id = entry.id, npcId = entry.npcId, name = entry.name, npc = entry.npc, tier = normTier(entry.tier) }
+    if _G.TAP and _G.TAP.OpenWindow then _G.TAP:OpenWindow("mod:dungeonGuide") end
+end
+
 ----------------------------------------------------------------------
 -- Rendering.
 ----------------------------------------------------------------------

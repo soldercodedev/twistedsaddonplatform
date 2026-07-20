@@ -42,7 +42,10 @@ local function readTalents(configID)
                     -- hero subtree: the first purchased hero node reveals the active tree
                     if not hero and node.subTreeID and C_Traits.GetSubTreeInfo then
                         local oks, st = pcall(C_Traits.GetSubTreeInfo, configID, node.subTreeID)
-                        hero = { id = node.subTreeID, name = (oks and type(st) == "table" and st.name) or nil }
+                        st = (oks and type(st) == "table") and st or nil
+                        -- iconElementID is the hero-spec's icon (atlas/texture) - captured so the UI can
+                        -- show the actual hero-talent glyph, not just the name. nil-safe if absent.
+                        hero = { id = node.subTreeID, name = st and st.name or nil, icon = st and st.iconElementID or nil }
                     end
                     if node.activeEntry then
                         local ent = select(2, pcall(C_Traits.GetEntryInfo, configID, node.activeEntry.entryID))

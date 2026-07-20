@@ -69,8 +69,10 @@ local function statBlock(src)
     return s
 end
 
--- Merge captured roster identity with provider stat blocks into the saved party array.
-local function mergePartyStats(roster, stats, capture)
+-- Merge captured roster identity with provider stat blocks into the saved party array. `attrib` is the
+-- optional per-GUID attribution map (Providers.ReadAttribution) - per-spell breakdowns for the run log;
+-- `recaps` is the optional per-GUID death-recap map (Providers.ReadDeathRecaps) - raw fatal-hit timelines.
+local function mergePartyStats(roster, stats, capture, attrib, recaps)
     local byGuid, byName = {}, {}
     if stats then
         for _, e in ipairs(stats.party or {}) do
@@ -114,6 +116,12 @@ local function mergePartyStats(roster, stats, capture)
             talents = m.talents or (capture and m.guid and capture[m.guid] and capture[m.guid].talents),
             talentCount = m.talentCount or (capture and m.guid and capture[m.guid] and capture[m.guid].talentCount),
             stats = statBlock(src),
+            -- Per-spell breakdown for the run log (what they dealt/healed/took/avoided/kicked/dispelled).
+            -- nil when the meter source API isn't available (e.g. the abandoned/metadata path).
+            attribution = attrib and m.guid and attrib[m.guid] or nil,
+            -- Raw death-recap timelines (fatal-hit lists) for this member, for death classification and
+            -- later inspection. nil for a clean run / when the recap wasn't captured.
+            deathRecaps = recaps and m.guid and recaps[m.guid] or nil,
         }
     end
     return out
@@ -539,7 +547,13 @@ local function finalizeRun(stats)
         run.status = STATUS.DEPLETED
     end
 
-    run.party           = mergePartyStats(run.party, stats, run.dispelCapture)
+    -- Capture ALL per-spell meter detail (per party GUID) from C_DamageMeter's source accessors before we
+    -- build the records - out of combat here, so source GUIDs read as plain strings. `attrib` = per-metric
+    -- breakdowns; `recaps` = raw death-recap fatal-hit timelines. Both stored raw in the run log so no run
+    -- ever has to be re-played for a missing piece; both nil-safe (nil on the abandoned/metadata path).
+    local attrib = Providers.ReadAttribution and Providers.ReadAttribution(runCtx())
+    local recaps = Providers.ReadDeathRecaps and Providers.ReadDeathRecaps(runCtx())
+    run.party           = mergePartyStats(run.party, stats, run.dispelCapture, attrib, recaps)
     -- Clean-run deaths: the meter records no death rows for someone who didn't die, so their count comes
     -- back nil. For a player the meter actually TRACKED (real combat numbers), that means ZERO deaths,
     -- not "no data" - store 0 so scoring reads "no deaths" (a confident zero) everywhere instead of "no
@@ -550,6 +564,22 @@ local function finalizeRun(stats)
             or type(s.hps) == "number" or type(s.healing) == "number") then
             s.deaths = 0
         end
+    end
+    -- Classify each member's deaths (avoidable / threat / other) from their captured attribution now that
+    -- the death counts are normalised. Display-only, never feeds scoring; nil for a clean (0-death) run.
+    if Providers.ClassifyDeaths then
+        for _, m in ipairs(run.party or {}) do
+            local n = m.stats and m.stats.deaths
+            if type(n) == "number" and n > 0 then
+                m.deathCauses = Providers.ClassifyDeaths(m.attribution, m.deathRecaps, m.role, n)
+            end
+        end
+    end
+    if attrib then
+        local nAttr, nRec = 0, 0
+        for _ in pairs(attrib) do nAttr = nAttr + 1 end
+        if recaps then for _, list in pairs(recaps) do nRec = nRec + #list end end
+        ML.Log("attribution: per-spell detail for %d player(s); death recaps captured: %d", nAttr, nRec)
     end
     run.provider        = (stats and stats.source) or run.provider
     run.providerVersion = (stats and stats.sourceVersion) or run.providerVersion

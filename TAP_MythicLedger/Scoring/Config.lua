@@ -135,7 +135,11 @@ Scoring.Config = Config
 --      0.75->0.90, can't fully fix without a Stagger signal). groupSelfHealFactor 0.80->0.85 to re-center
 --      the healer (1.16->1.13) after the tank raise shrank its remainder. LONG_CD interrupt rate
 --      0.1125->0.09 (round down - long-CD kicks are banked when the group covers). Retroactive rescore.
-Config.version = 37
+-- v38: Death Impact is now CAUSE-WEIGHTED when the run captured the death-recap breakdown - per death,
+--      -30 (avoidable), -10 (other), -5 (threat: melee while not tanking) off the 0-100 Death category
+--      (Config.deaths.causePenalties), capped at maxPenalty. Runs WITHOUT the breakdown (pre-v38 saves)
+--      keep the flat -25/death calc. Deaths category weight (0.20) unchanged. Retroactive rescore.
+Config.version = 38
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -667,10 +671,14 @@ Config.survival = {
 -- Flat, heavy death penalty: -25 for EVERY death -> category 1=75, 2=50, 3=25, 4+=0. Combined with
 -- the heavy 0.20 weight, dying is the single most costly thing you can do.
 Config.deaths = {
-    penalties = { 25 },   -- flat -25 for the first death...
+    penalties = { 25 },   -- flat -25 for the first death...  (fallback: runs with no cause breakdown)
     perExtra = 25,        -- ...and -25 for every death after (2nd, 3rd, ...)
-    maxPenalty = 100,     -- 4 deaths fully zeroes the Death Impact category
+    maxPenalty = 100,     -- caps the total penalty; the Death category floors at 0
     baseScore = 100,
+    -- Cause-weighted per-death penalty (v38) when the run captured the death-recap breakdown. Points off
+    -- the 0-100 Death category (so x0.20 weight => -6 / -2 / -1 on the final grade per death). Avoidable
+    -- deaths (stood in it) hurt most; threat deaths (melee while not tanking - lost aggro) hurt least.
+    causePenalties = { avoidable = 30, other = 10, threat = 5 },
 }
 
 ----------------------------------------------------------------------

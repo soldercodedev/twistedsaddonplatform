@@ -252,11 +252,19 @@ local function whatsNewLink(b, spec, x, y)
     return y - 28
 end
 
--- The module (and its changelog) that a given plug-in addon folder provides, if any.
+-- The module (and its changelog) that a given plug-in addon folder provides, if any. One addon can
+-- register MORE THAN ONE module (e.g. TAP_MythicLedger registers both Mythic Ledger and the Dungeon
+-- Guide) - prefer whichever carries release notes, so the Installed page's "What's New" resolves to the
+-- addon's changelog instead of a companion module that has none. Falls back to the first match.
 local function moduleForAddon(name)
+    local fallback
     for _, mod in ipairs(Suite.modules) do
-        if mod.spec.addon == name then return mod end
+        if mod.spec.addon == name then
+            if mod.spec.changelog then return mod end
+            fallback = fallback or mod
+        end
     end
+    return fallback
 end
 
 ----------------------------------------------------------------------
@@ -865,7 +873,14 @@ local function createWindow()
             left     = "Twisteds Addon Platform",
             subtitle = "/tap",
             right    = "v" .. suiteVersion(),
-            socials  = { { brand = "discord", url = "https://discord.gg/pN5vYDrQ5j" } },
+            socials  = {
+                { brand = "discord", url = "https://discord.gg/pN5vYDrQ5j" },
+                -- Website (globe). No brand slug, so pass the resolved outline "world" icon path directly;
+                -- WoW can't launch a browser, so clicking copies the URL (same as the Discord button).
+                { icon = theme:GetIcon("world"), color = "2f8f6f", iconColor = "FFFFFF", tip = "Website",
+                  url = "https://tap.soldercode.dev/",
+                  onClick = function() theme:ShowLinkDialog("Website - copy this link (Ctrl+C)", "https://tap.soldercode.dev/") end },
+            },
         },
         defaultView = "overview",
     })

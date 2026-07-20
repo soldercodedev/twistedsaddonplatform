@@ -58,6 +58,9 @@ function Norm.Player(run, member)
         interrupts   = num(s.interrupts),
         dispels      = num(s.dispels),
         deaths       = num(s.deaths),
+        -- Cause breakdown { avoidable, threat, other } from the death-recap classifier, present only on
+        -- runs that captured it. Cat.Deaths uses it for cause-weighted penalties; nil => flat fallback.
+        deathCauses  = (type(member.deathCauses) == "table") and member.deathCauses or nil,
 
         -- Context used by baselines/composition.
         level = num(run.level), mapId = run.mapId, seasonId = run.seasonId,

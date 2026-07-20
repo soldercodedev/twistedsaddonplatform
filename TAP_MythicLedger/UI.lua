@@ -20,23 +20,31 @@ local view = { tab = "overview", season = "current", character = "all", detailRu
 -- Per-run player-review target (object refs, so it works for both saved and unsaved/preview runs).
 local reviewRunRef, reviewMemberRef = nil, nil
 
--- Pooled game-spell icons (Blizzard icon + real spell tooltip) for the dispel coaching block, so
--- re-rendering the review reuses Buttons instead of leaking a new one per effect each render.
-local coachIconPool = {}
-local function coachIcon(theme, parent, i, size)
-    local gi = coachIconPool[i]
-    if not gi then gi = theme:GameIcon(parent, { size = size }); coachIconPool[i] = gi end
+-- Pooled hoverable spell/aura icons for the GROUP UTILITY tiles (real Blizzard tooltip on hover). Its own
+-- pool so indices never collide with the breakdown icons.
+local guIconPool = {}
+local function guIcon(theme, parent, i, size)
+    local gi = guIconPool[i]
+    if not gi then gi = theme:GameIcon(parent, { size = size }); guIconPool[i] = gi end
     if gi:GetParent() ~= parent then gi:SetParent(parent) end
     gi:SetSize(size, size)
     return gi
 end
 
--- Pooled hoverable spell/aura icons for the GROUP UTILITY tiles (real Blizzard tooltip on hover). Its own
--- pool so indices never collide with the dispel-coaching icons above.
-local guIconPool = {}
-local function guIcon(theme, parent, i, size)
-    local gi = guIconPool[i]
-    if not gi then gi = theme:GameIcon(parent, { size = size }); guIconPool[i] = gi end
+-- Pooled icons for the INTERRUPT and DISPEL breakdowns (actual-vs-priority). Separate pools so they never
+-- collide with each other, the dispel-coaching, or the group-utility icons in the same render.
+local kickIconPool = {}
+local function kickIcon(theme, parent, i, size)
+    local gi = kickIconPool[i]
+    if not gi then gi = theme:GameIcon(parent, { size = size }); kickIconPool[i] = gi end
+    if gi:GetParent() ~= parent then gi:SetParent(parent) end
+    gi:SetSize(size, size)
+    return gi
+end
+local dispIconPool = {}
+local function dispIcon(theme, parent, i, size)
+    local gi = dispIconPool[i]
+    if not gi then gi = theme:GameIcon(parent, { size = size }); dispIconPool[i] = gi end
     if gi:GetParent() ~= parent then gi:SetParent(parent) end
     gi:SetSize(size, size)
     return gi
@@ -3122,10 +3130,23 @@ function renderPlayerReview(b, C, x, y, w, win)
     end
     classGlyph(b, LX, y - 2, 26, m.classFile)
     specGlyph(b, LX + 32, y - 2, 26, m.specId, m.specIcon)
-    b:Heading(classColorText(m.classFile, m.name or "?") .. (m.isPlayer and "  (you)" or ""), LX + 68, y, "h2")
-    b:Label(specClassLabel(m.classFile, m.specId) .. "   ·   " .. (ML.ROLE_LABEL[m.role] or "-"), LX + 68, y - 32, C.subtext, 11)
+    -- Hero-talent glyph (the chosen sub-tree, e.g. Pack Leader) as a third icon when we captured it.
+    -- iconElementID may be a texture fileID (SetTexture, via b:Tex) or an atlas name (SetAtlas override);
+    -- handle both and degrade to no-icon. The hero NAME is always shown on the spec line as a fallback.
+    local heroTree = m.heroTree
+    local textX = LX + 68
+    if heroTree and heroTree.icon then
+        local ic = heroTree.icon
+        local t = b:Tex(LX + 64, y - 2, 26, 26, type(ic) == "number" and ic or "")
+        if type(ic) == "string" and t and t.SetAtlas then pcall(t.SetAtlas, t, ic) end
+        textX = LX + 100
+    end
+    b:Heading(classColorText(m.classFile, m.name or "?") .. (m.isPlayer and "  (you)" or ""), textX, y, "h2")
+    local specRole = specClassLabel(m.classFile, m.specId) .. "   ·   " .. (ML.ROLE_LABEL[m.role] or "-")
+    if heroTree and heroTree.name then specRole = specRole .. "   ·   " .. heroTree.name end
+    b:Label(specRole, textX, y - 32, C.subtext, 11)
     b:Label((r.dungeonName or "Run") .. "  " .. Util.keyLabel(r.level) .. "   ·   " .. Util.dateTime(r.completedAt),
-        LX + 68, y - 52, C.subtext, 11)
+        textX, y - 52, C.subtext, 11)
     if review and review.headline then
         b:Wrap(review.headline, LX, y - 78, w - gradeW - 28, theme:Color(BAND_HEX[review.band] or "cdd2db", C.text), 13)
     end
@@ -3147,13 +3168,14 @@ function renderPlayerReview(b, C, x, y, w, win)
             { label = "HPS",       value = Util.shortNum(s.hps),         icon = "heartbeat" },
             { label = "DMG TAKEN", value = Util.shortNum(s.damageTaken), icon = "shield" },
             { label = "AVOIDABLE", value = avoidShare and string.format("%.1f%%", avoidShare * 100) or DASH,
-              icon = "shield", color = survScore and catScoreHex(survScore) or nil, scaleScore = survScore },
+              icon = "alert-triangle", color = survScore and catScoreHex(survScore) or nil, scaleScore = survScore },
         },
         {
             { label = "INTERRUPTS", value = Util.numOr(s.interrupts, "%d"), icon = "ban" },
             { label = "DISPELS",    value = Util.numOr(s.dispels, "%d"),    icon = "sparkles" },
             { label = "DEATHS",     value = Util.numOr(s.deaths, "%d"),     icon = "skull",
               color = (type(s.deaths) == "number" and s.deaths > 0) and "e0655a" or nil },
+            { label = "ILVL",       value = m.itemLevel and tostring(m.itemLevel) or DASH, icon = "backpack" },
         },
     }
     local gap, cols = 12, 4
@@ -3254,55 +3276,144 @@ function renderPlayerReview(b, C, x, y, w, win)
     contribCard("Interrupt Contribution", cats.interrupts)
     contribCard("Dispel Contribution", cats.dispels)
 
-    -- Dispel COACHING callout: the tool the spec has + EXACTLY what it could have cleared here, as real
-    -- Blizzard spell icons (hover = full tooltip), grouped by action (Dispel / Purge / Soothe). A
-    -- performance aid - it tells the player specifically what to watch for in THIS dungeon.
+    -- Interrupt + Dispel breakdowns: what THIS player actually did vs the dungeon's priority list, as real
+    -- Blizzard spell icons (hover = tooltip) grouped by priority tier - so "did they hit the right casts"
+    -- is visible. The DISPEL block folds in the old coaching callout: your clearing tool(s) on the left,
+    -- and the spec-addressable targets you did NOT clear as the "Not dispelled by you" row (spec-filtered,
+    -- so a Magic-only dispeller is never shown Curses). From the per-spell attribution x the season catalog
+    -- (same source as the Dungeon Guide). Target icons are CLICKABLE -> jump to that spell in the Guide.
+    -- Reference only; never changes the score. One shared renderer, called for kicks and for dispels.
     do
-        local cRes = cats.dispels
-        local targets = cRes and cRes.applicable and cRes.dispelTargets
-        if targets and #targets > 0 then
-            local ACTION_HEX = { Dispel = "5f8dff", Purge = "ff8c1a", Soothe = "e0c04a" }
-            local ACTION_ORD = { Dispel = 1, Purge = 2, Soothe = 3 }
-            local groups, order = {}, {}
-            for _, tg in ipairs(targets) do
-                if not groups[tg.action] then groups[tg.action] = {}; order[#order + 1] = tg.action end
-                table.insert(groups[tg.action], tg)
+        local scfg = ML.Scoring and ML.Scoring.Config
+        local cat = scfg and scfg.SeasonDungeon and scfg.SeasonDungeon(r.dungeonName)
+        local you, them = m.isPlayer and "you" or "they", m.isPlayer and "you" or "them"
+        local OFFLIST = { o = 9, c = "8b91a0" }
+
+        -- kind: "kick"|"dispel". landed = attribution list {id,amt}. prio = catalog (for tier + caster on
+        -- the landed rows). tierMap/prioSet = ordering+color and which tiers count as "priority". iconFn =
+        -- the pooled icon maker (own pool per kind). tools = your ability spellIDs shown left. missed =
+        -- precomputed { {id,e} } not-done row. alwaysShow renders even with nothing landed (dispels).
+        local function breakdown(kind, landed, prio, tierMap, prioSet, accentHex, iconFn, verbDid, spareWord, tools, missed, alwaysShow)
+            landed, missed = landed or {}, missed or {}
+            if #landed == 0 and not (alwaysShow and #missed > 0) then return end
+            if not (prio and #prio > 0) then return end
+            local byId = {}
+            for _, e in ipairs(prio) do if e.id then byId[e.id] = e end end
+            local buckets = {}
+            local function bucket(label, ti) buckets[label] = buckets[label] or { order = ti.o, color = ti.c, entries = {} }; return buckets[label] end
+            local prioCount, spareCount = 0, 0
+            for _, k in ipairs(landed) do
+                local cnt, e = k.amt or 1, k.id and byId[k.id]
+                if e then
+                    local tl = (e.tier == nil or e.tier == "unset") and "Spare" or e.tier
+                    local bk = bucket(tl, tierMap[tl] or tierMap["Spare"] or OFFLIST)
+                    bk.entries[#bk.entries + 1] = { id = k.id, count = cnt, e = e }
+                    if prioSet[e.tier] then prioCount = prioCount + cnt else spareCount = spareCount + cnt end
+                else
+                    local bk = bucket("Off-list", OFFLIST)
+                    bk.entries[#bk.entries + 1] = { id = k.id, count = cnt }
+                    spareCount = spareCount + cnt
+                end
             end
-            table.sort(order, function(a, bb) return (ACTION_ORD[a] or 9) < (ACTION_ORD[bb] or 9) end)
-            -- Ability per action: the spec's DEFENSIVE dispel for "Dispel"; the class's OFFENSIVE tool
-            -- (Purge / Soothe / Spellsteal / ...) for "Purge"/"Soothe". Its Blizzard tooltip names it.
-            local Cap = ML.Scoring and ML.Scoring.Capability
-            local offAbility = Cap and Cap.OffensiveAbility and Cap.OffensiveAbility(m.classFile)
-            local function abilityID(action)
-                if action == "Dispel" then return cRes.dispel and cRes.dispel.spellID end
-                return offAbility and offAbility.spellID
-            end
-            local H = 40 + #order * 32
+            local labels = {}
+            for l in pairs(buckets) do labels[#labels + 1] = l end
+            table.sort(labels, function(a, bb) return buckets[a].order < buckets[bb].order end)
+
+            local nLines = #labels + (#missed > 0 and 1 or 0)
+            if nLines == 0 then return end
+            local toolRow = (tools and #tools > 0) and 1 or 0
+            local H = 40 + (nLines + toolRow) * 30
             b:Box(LX, y, CW, H, 0.35, 0, C.card)
-            b:Box(LX, y, 3, H, 0.95, 2, theme:Color("a06cf0"))
-            b:Label("Dispel coaching - what your kit could have cleared in " .. (r.dungeonName or "this dungeon") .. ":",
+            b:Box(LX, y, 3, H, 0.95, 2, theme:Color(accentHex))
+            b:Label(string.format("%s - %s %s %d (%d priority, %d %s) in %s:", (kind == "kick") and "Interrupts" or "Dispels",
+                you, verbDid, prioCount + spareCount, prioCount, spareCount, spareWord, r.dungeonName or "this dungeon"),
                 LX + 14, y - 16, C.text, 12)
             local n, ry = 0, y - 44
-            for _, action in ipairs(order) do
-                local aID, ax = abilityID(action), LX + 14
-                if aID then   -- the dispel/purge ability icon (hover for its Blizzard tooltip)
+            -- Your clearing tool(s) on the LEFT, so "left = your ability, right = what it clears" reads
+            -- plainly (the ask). Not clickable (your spell, not a dungeon cast).
+            if toolRow == 1 then
+                local ax = LX + 14
+                for _, tid in ipairs(tools) do
                     n = n + 1
-                    local gi = coachIcon(theme, b.content, n, 22)
-                    gi:ClearAllPoints(); gi:SetPoint("TOPLEFT", b.content, "TOPLEFT", ax, ry + 1); gi:SetSpell(aID); gi:Show(); b:Transient(gi)
-                    ax = ax + 28
+                    local gi = iconFn(theme, b.content, n, 22)
+                    gi:ClearAllPoints(); gi:SetPoint("TOPLEFT", b.content, "TOPLEFT", ax, ry + 1)
+                    gi:SetSpell(tid); gi:SetScript("OnMouseUp", nil); gi:Show(); b:Transient(gi)
+                    ax = ax + 26
                 end
-                local lbl = b:Label(action, ax, ry - 3, theme:Color(ACTION_HEX[action] or "cdd2db"), 12)
-                local ix = ax + (lbl:GetStringWidth() or 44) + 14
-                for _, tg in ipairs(groups[action]) do   -- the buff/debuff icons (hover for tooltips)
-                    if ix > LX + CW - 30 then break end   -- don't overflow the card
-                    n = n + 1
-                    local gi = coachIcon(theme, b.content, n, 24)
-                    gi:ClearAllPoints(); gi:SetPoint("TOPLEFT", b.content, "TOPLEFT", ix, ry + 2); gi:SetAura(tg.id); gi:Show(); b:Transient(gi)
-                    ix = ix + 28
-                end
-                ry = ry - 32
+                b:Label("your tool  ·  right = what it clears (click an icon to open the Guide)",
+                    ax + 6, ry - 3, theme:Color("8b91a0"), 11)
+                ry = ry - 30
             end
+            local function drawRow(label, color, entries)
+                local lbl = b:Label(label, LX + 14, ry - 3, theme:Color(color), 12)
+                local ix = LX + 14 + math.max(96, (lbl:GetStringWidth() or 0) + 16)   -- fits the long "Not ... by you" label
+                for _, e in ipairs(entries) do
+                    if ix > LX + CW - 44 then break end
+                    n = n + 1
+                    local gi = iconFn(theme, b.content, n, 24)
+                    gi:ClearAllPoints(); gi:SetPoint("TOPLEFT", b.content, "TOPLEFT", ix, ry + 2); gi:SetSpell(e.id); gi:Show(); b:Transient(gi)
+                    local catEntry = e.e
+                    gi:SetScript("OnMouseUp", function()
+                        if catEntry and ML.DungeonGuide and ML.DungeonGuide.SelectAndOpen then
+                            ML.DungeonGuide.SelectAndOpen(r.dungeonName, catEntry)
+                        end
+                    end)
+                    ix = ix + 26
+                    if (e.count or 1) > 1 then b:Label("x" .. e.count, ix, ry - 3, C.subtext, 10); ix = ix + 18 end
+                    ix = ix + 6
+                end
+                ry = ry - 30
+            end
+            for _, l in ipairs(labels) do drawRow(l, buckets[l].color, buckets[l].entries) end
+            if #missed > 0 then drawRow("Not " .. verbDid .. " by " .. them, "8b91a0", missed) end
             y = y - H - 8
+        end
+
+        if cat then
+            -- Interrupts (tier-based; missed = priority casts not kicked).
+            local KICK_TIER = { ["Critical"] = { o = 1, c = "ff4d4d" }, ["Must kick"] = { o = 2, c = "ff7a45" },
+                ["Should kick"] = { o = 3, c = "ffd200" }, ["Spare"] = { o = 8, c = "9aa0ad" } }
+            local KICK_PRIO = { Critical = true, ["Must kick"] = true, ["Should kick"] = true }
+            local kicked = m.attribution and m.attribution.interrupts or {}
+            local kdone = {}
+            for _, k in ipairs(kicked) do if k.id then kdone[k.id] = true end end
+            local kmissed = {}
+            for _, e in ipairs(cat.kicks or {}) do
+                if e.id and KICK_PRIO[e.tier] and not kdone[e.id] then kmissed[#kmissed + 1] = { id = e.id, e = e } end
+            end
+            breakdown("kick", kicked, cat.kicks, KICK_TIER, KICK_PRIO, "ff9d5c", kickIcon, "kicked", "spare", nil, kmissed, false)
+
+            -- Dispels (tier-based; folds the coaching in). Addressable targets = cats.dispels.dispelTargets,
+            -- already filtered to THIS spec's cleanse/purge/soothe capability - cross-ref to the season
+            -- catalog for tier + caster so the "not dispelled" icons are correct AND clickable. Tools =
+            -- defensive dispel (+ the offensive purge/soothe ability when the dungeon has any).
+            local DISPEL_TIER = { ["Highest"] = { o = 1, c = "ff4d4d" }, ["High (remove)"] = { o = 2, c = "ff7a45" },
+                ["High"] = { o = 3, c = "ffb038" }, ["Medium"] = { o = 4, c = "ffd200" }, ["Conditional"] = { o = 5, c = "8fbf6b" },
+                ["When needed"] = { o = 6, c = "6fb0c9" }, ["Spare"] = { o = 8, c = "9aa0ad" } }
+            local DISPEL_PRIO = { Highest = true, ["High (remove)"] = true, High = true }
+            local dRes = cats.dispels
+            local dtargets = (dRes and dRes.dispelTargets) or {}   -- spec-filtered; empty for non-dispellers
+            local dispelled = m.attribution and m.attribution.dispels or {}
+            if #dispelled > 0 or #dtargets > 0 then
+                local ddone = {}
+                for _, k in ipairs(dispelled) do if k.id then ddone[k.id] = true end end
+                local catById = {}
+                for _, e in ipairs(cat.dispels or {}) do if e.id then catById[e.id] = e end end
+                local dmissed, hasOff = {}, false
+                for _, tg in ipairs(dtargets) do
+                    if tg.action == "Purge" or tg.action == "Soothe" then hasOff = true end
+                    if tg.id and not ddone[tg.id] then
+                        dmissed[#dmissed + 1] = { id = tg.id, e = catById[tg.id] or { id = tg.id, name = tg.name } }
+                    end
+                end
+                local tools = {}
+                if dRes and dRes.dispel and dRes.dispel.spellID then tools[#tools + 1] = dRes.dispel.spellID end
+                local Cap = ML.Scoring and ML.Scoring.Capability
+                local off = hasOff and Cap and Cap.OffensiveAbility and Cap.OffensiveAbility(m.classFile)
+                if off and off.spellID then tools[#tools + 1] = off.spellID end
+                breakdown("dispel", dispelled, cat.dispels, DISPEL_TIER, DISPEL_PRIO, "a06cf0", dispIcon,
+                    "dispelled", "situational", tools, dmissed, true)
+            end
         end
     end
 
@@ -3322,6 +3433,40 @@ function renderPlayerReview(b, C, x, y, w, win)
             or string.format("%d death%s · -%d penalty · weight %d%%", de.deaths, de.deaths == 1 and "" or "s", de.penalty or 0, pctOf(de.weight)))
         card("Death Impact", de.score, d)
     end
+
+    -- Death-cause breakdown (DISPLAY-ONLY, best-effort - does NOT affect the score). From C_DamageMeter's
+    -- per-spell death attribution: each death is bucketed as Avoidable (fatal hit was in the run's
+    -- avoidable-damage list), Threat (unmitigated melee while not tanking - pulled aggro / lost pickup),
+    -- or Other (unavoidable, or a death we couldn't pin to a hit). Buckets sum to the death total.
+    local dcz = m.deathCauses
+    if dcz and (dcz.avoidable + dcz.threat + dcz.other) > 0 then
+        local total = dcz.avoidable + dcz.threat + dcz.other
+        local H = 102
+        b:Box(LX, y, CW, H, 0.45, 0, C.card)
+        b:Box(LX, y, 3, H, 0.95, 2, theme:Color("e0655a"))
+        b:Label("Death Causes", LX + 16, y - 16, C.text, 13)
+        b:Label(hlNums(string.format("%d death%s classified  ·  best-effort, does not affect score",
+            total, total == 1 and "" or "s")), LX + 16, y - 34, C.subtext, 10)
+        local function causeBar(name, count, hex, yy, tipBody)
+            b:Label(name, LX + 20, yy, C.subtext, 11)
+            local bw = 190
+            b:Box(LX + 120, yy - 3, bw, 9, 0.16, 1, C.border)
+            if count > 0 then b:Box(LX + 120, yy - 3, bw * (count / total), 9, 0.95, 2, theme:Color(hex)) end
+            b:Label(tostring(count), LX + 322, yy, theme:Color(hex), 12)
+            if tipBody and b.theme.SetTipData then
+                b.theme:SetTipData(b:Hit(LX + 16, yy + 7, CW - 32, 18),
+                    { title = name, lines = { { text = tipBody, color = "subtext" } } })
+            end
+        end
+        causeBar("Avoidable", dcz.avoidable, "e0655a", y - 54,
+            "Died to a mechanic you could have sidestepped - the fatal hit was in this run's avoidable-damage list.")
+        causeBar("Threat", dcz.threat, "e0a030", y - 72,
+            "Died to unmitigated melee while not tanking - usually a threat/pickup issue (pulled aggro, or the tank never grabbed it). Note: fixate / soak / cleave mechanics can also read as melee.")
+        causeBar("Other", dcz.other, "8b91a0", y - 90,
+            "Unavoidable mechanics, or a death we couldn't pin to a specific hit.")
+        y = y - H - 8
+    end
+
     y = y - 10
 
     -- HOW TARGETS WERE SET: explain the expected totals the score compared against.
