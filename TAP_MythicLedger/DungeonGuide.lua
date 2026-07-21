@@ -312,11 +312,13 @@ Suite:RegisterModule({
     icon     = "clipboard",
     addon    = ML.ADDON,
     default  = true,
-    fullPage = true,               -- render our own page, no "SETTINGS" band
-    rendersWhenDisabled = true,    -- pure reference: always viewable
+    group      = "Mythic Ledger",   -- share the addon category with the main Ledger module
+    groupOrder = 2,                 -- our page sorts after the Ledger's pages
+    rendersWhenDisabled = true,     -- pure reference: always viewable
     OnEnable   = function() end,
     OnDisable  = function() end,
     OnSelect   = function() end,
     OnDeselect = function() Guide.Hide() end,
-    Settings   = renderGuide,
+    pages = { { id = "guide", label = "Dungeon Guide", icon = "clipboard", default = true,
+                disabledSafe = true, render = renderGuide } },
 })

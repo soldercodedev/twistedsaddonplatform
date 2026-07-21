@@ -1326,7 +1326,7 @@ local function renderDungeons(b, C, x, y, w, win)
         function(v) view.character = v; if win then win:Refresh() end end)
     -- The filter box is PERSISTENT (created once, parented to the content frame) so it isn't hidden by
     -- the builder's per-render Reset - that's what lets it keep keyboard focus while you type + it live-
-    -- filters. It's shown/positioned here and hidden by UI.Render whenever this list isn't the view.
+    -- filters. It's shown/positioned here and hidden by UI.RenderPage whenever this list isn't the view.
     if not dungeonSearch then
         dungeonSearch = b.theme:SearchBox(b.content, { width = 260, icon = "search",
             placeholder = "Filter dungeons (type 3+ letters)…", value = dungeonFilter.text,
@@ -1800,7 +1800,7 @@ local function renderPlayerDetails(b, C, x, y, w, win)
         "Player notes", "Private notes about this player. Never shown in recaps unless you opt in.")
     y = y - 32
     T(b, b:Button(x, y, 160, "View Runs Together", "primary", function()
-        runFilter.playerKey = p.identityKey; view.detailPlayer = nil; view.tab = "runs"; win:Refresh()
+        runFilter.playerKey = p.identityKey; view.detailPlayer = nil; UI.GoToPage(win, "runs")
     end), "View runs together", "Open the run list filtered to just the keys you did with this player.")
     T(b, b:Button(x + 170, y, 130, "Export Player", "default", function()
         local theme = _G.TAP and _G.TAP.uiTheme
@@ -1876,7 +1876,7 @@ local function topRunCard(b, C, cx, cy, cw, ch, rank, r, win)
     local ps = guid and Store and Store.Summary(r)[guid]
     if ps and ps.grade then b:Label(ps.grade, cx + cw - 46, cy - 24, b.theme:Color(ML.TierColor(ps.grade:sub(1, 1), true)), 20) end
     if r.bestOfKind then b:Tex(cx + cw - 22, cy - 52, 12, 12, "crown", nil, { 1, 0.82, 0.2 }) end
-    b:Hit(cx, cy, cw, ch, function() view.detailRun = r.id; view.tab = "runs"; win:Refresh() end,
+    b:Hit(cx, cy, cw, ch, function() view.detailRun = r.id; win:Refresh() end,
         (r.dungeonName or "Run") .. "  " .. Util.keyLabel(r.level), "Open this run's full details.")
 end
 
@@ -2101,6 +2101,21 @@ local function buildSampleRun()
     }
 end
 
+-- Settings page sub-tabs. Now that the module's top-level tabs live in the sidebar, the in-body
+-- top-nav is free for page-level navigation - each sub-tab shows one focused settings area full-width
+-- (replacing the old cramped 2-column grid).
+local settingsTab = "appearance"
+local SETTINGS_TABS = {
+    { "appearance",  "Appearance",   "palette" },
+    { "tooltips",    "Tooltips",     "message" },
+    { "scoreboard",  "Scoreboard",   "award" },
+    { "deathreport", "Death Report", "skull" },
+    { "tracking",    "Tracking",     "activity" },
+    { "recap",       "Recap",        "users" },
+    { "retention",   "Data",         "database" },
+    { "debug",       "Debug",        "tools" },
+}
+
 local function renderSettings(b, C, x, y, w, win)
     local s = DB.Settings()
     local rc = s.recap
@@ -2120,23 +2135,22 @@ local function renderSettings(b, C, x, y, w, win)
         y = y - 28
     end
 
-    -- MODULE enable/disable (shared platform block, full width). The ledger only records runs while
-    -- enabled; saved history is always kept.
+    -- MODULE enable/disable (shown at the top of every sub-tab, so it's always reachable to re-enable).
     if UI._mod then
         y = b:ModuleToggle(x, y, w, UI._mod, { onToggle = function() win:Refresh() end,
             sub = "When off, no runs are recorded and recaps stop. Your saved history is kept." })
     end
     y = y - 8
 
-    -- Two-column GRID. Each section below is a closure that draws at the current (x, y) and advances y.
-    -- The driver at the end pairs LEFT[i] with RIGHT[i] on a shared row top, then drops BOTH columns to
-    -- the taller of the two before the next row - so the section headers line up across the columns. `x`
-    -- and `y` are mutated live, so the toggle/slider helpers draw into whichever column is active; `COLW`
-    -- is the per-column width and wide controls are stacked to fit it. (Section bodies keep their original
-    -- indentation to keep this refactor's diff readable.)
-    local COLGAP = 28
-    local COLW   = math.floor((w - COLGAP) / 2)
-    local leftX, rightX, topY = x, x + COLW + COLGAP, y
+    -- Dock the settings sub-tab bar in the (now free) in-body top-nav; each sub-tab renders one focused
+    -- area full-width. `COLW = w` so the section closures below draw single-column; `x`/`y` flow down.
+    if win and win.SetTopNav then
+        local items = {}
+        for _, t in ipairs(SETTINGS_TABS) do items[#items + 1] = { key = t[1], label = t[2], icon = t[3] } end
+        win:SetTopNav({ items = items, active = settingsTab, height = 28,
+            onSelect = function(key) settingsTab = key; win:Refresh() end })
+    end
+    local COLW = w
 
     local function secTooltips()
     b:Sub("TOOLTIPS", x, y); y = y - 30
@@ -2500,20 +2514,20 @@ local function renderSettings(b, C, x, y, w, win)
         "Echo internal diagnostics to chat and the Debug page.")
     end
 
-    -- Grid driver: pair LEFT[i] with RIGHT[i] on a shared row top, then drop BOTH columns to the taller
-    -- section so the next row of headers lines up across the columns. LEFT is ordered so its taller
-    -- sections sit opposite the taller RIGHT ones (Scoreboard vs Recap, Date & Time vs Debug), keeping
-    -- the leftover whitespace under the shorter section in each row small.
-    local LEFT  = { secTooltips, secScoreboard, secStatTiles, secDateTime, secDeathReport }
-    local RIGHT = { secTracking, secRecap, secRetention, secDebug }
-    local rowTop = topY
-    for i = 1, math.max(#LEFT, #RIGHT) do
-        local lb, rb = rowTop, rowTop
-        if LEFT[i]  then x, y = leftX,  rowTop; LEFT[i]();  lb = y end
-        if RIGHT[i] then x, y = rightX, rowTop; RIGHT[i](); rb = y end
-        rowTop = math.min(lb, rb) - 10
-    end
-    return rowTop - 14
+    -- Render the active sub-tab's section(s), single-column full-width. Appearance groups the two small
+    -- display sections (Stat Tiles + Date & Time) so no sub-tab is nearly empty.
+    local SUBTABS = {
+        appearance  = { secStatTiles, secDateTime },
+        tooltips    = { secTooltips },
+        scoreboard  = { secScoreboard },
+        deathreport = { secDeathReport },
+        tracking    = { secTracking },
+        recap       = { secRecap },
+        retention   = { secRetention },
+        debug       = { secDebug },
+    }
+    for _, fn in ipairs(SUBTABS[settingsTab] or SUBTABS.appearance) do fn() end
+    return y - 14
 end
 
 ----------------------------------------------------------------------
@@ -2925,81 +2939,95 @@ local TAB_RENDER = {
     settings = renderSettings, debug = renderDebug,
 }
 
-function UI.Render(m, b, x, y, win)
+-- View id for one of this module's sidebar pages ("mod:<moduleId>:<pageId>").
+local function pageViewId(pid) return "mod:" .. ML.MODULE_ID .. ":" .. pid end
+
+-- Clear the record-parameterized drill-down overlays (run / dungeon / player / character / review).
+-- Fired when a sidebar page row is (re)clicked, so each page opens on its own list, not a stale detail.
+function UI.ClearDetails()
+    view.detailRun, view.detailPlayer, view.detailDungeon, view.detailCharacter, view.review = nil, nil, nil, nil, nil
+    reviewRunRef, reviewMemberRef = nil, nil
+end
+
+-- Navigate to one of this module's pages (a window view). In-window uses SelectView; without the window
+-- handle (e.g. a slash command) fall back to OpenWindow.
+function UI.GoToPage(win, pid)
+    if win and win.SelectView then win:SelectView(pageViewId(pid))
+    elseif _G.TAP and _G.TAP.OpenWindow then _G.TAP:OpenWindow(pageViewId(pid)) end
+end
+
+-- Render ONE of the module's sidebar pages. Top-level nav now lives in the sidebar (one row per page),
+-- which frees the in-body top-nav for page-level sub-tabs (see the Settings page). The record drill-downs
+-- still render OVER whichever page you're on and Back returns to it, so their precedence + selective
+-- clearing is unchanged.
+function UI.RenderPage(pageId, m, b, x, y, win)
     local C = b.theme.C
     local w = b.contentWidth - 40
-    UI._mod = m   -- module handle, so the Settings tab can offer the enable/disable toggle
+    UI._mod = m               -- module handle (the Settings page offers the enable/disable toggle)
+    view.tab = pageId         -- mirror the active page for internal code that reads view.tab
+
     if not DB.Ready() then
-        if win and win.SetTopNav then win:SetTopNav(nil) end
         b:Wrap("Mythic Ledger is still loading...", x, y, w - 20, C.subtext, 12)
         return y - 30
     end
 
-    -- Dock the tab strip as a fixed top-nav flush under the title bar (window chrome). It stays put
-    -- while the page scrolls and shows on every sub-view - detail pages render in the body below it.
-    if win and win.SetTopNav then
-        local items = {}
-        for _, t in ipairs(TABS) do items[#items + 1] = { key = t[1], label = t[2], icon = t[3] } end
-        win:SetTopNav({
-            items = items, active = view.tab, height = 30,
-            onSelect = function(key)
-                view.tab = key
-                view.detailRun, view.detailPlayer = nil, nil
-                view.detailDungeon, view.detailCharacter, view.review = nil, nil, nil
-                if win then win:Refresh() end
-            end,
-            tip = function(key) return TAB_TIPS[key] end,
-        })
-    end
-
-    y = y - 4   -- small breathing room below the docked nav
-
     -- The Dungeons filter box is a persistent frame (kept alive so it holds keyboard focus). Hide it
-    -- whenever the Dungeons LIST isn't the active view; renderDungeons re-shows + repositions it.
-    local onDungeonsList = (view.tab == "dungeons")
+    -- unless the Dungeons LIST is the active view; renderDungeons re-shows + repositions it.
+    local onDungeonsList = (pageId == "dungeons")
         and not (view.review or view.detailRun or view.detailPlayer or view.detailDungeon or view.detailCharacter)
     if dungeonSearch and not onDungeonsList then dungeonSearch:Hide() end
 
-    -- Disabled: overlay every tab / detail view except Settings (where the enable toggle lives), so
-    -- the ledger can always be switched back on. Saved history is never touched by this.
-    if m and m.IsEnabled and not m:IsEnabled() and view.tab ~= "settings" then
-        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings tab to turn Mythic Ledger back on.",
-            onSettings = function()
-                view.tab = "settings"
-                view.detailRun, view.detailPlayer, view.detailDungeon, view.detailCharacter, view.review = nil, nil, nil, nil, nil
-                if win then win:Refresh() end
-            end })
+    -- Disabled: overlay every page except Settings (where the enable toggle lives), so the ledger can
+    -- always be switched back on. Saved history is never touched by this.
+    if m and m.IsEnabled and not m:IsEnabled() and pageId ~= "settings" then
+        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings page to turn Mythic Ledger back on.",
+            onSettings = function() UI.GoToPage(win, "settings") end })
     end
 
+    -- Record-parameterized drill-downs render OVER the current page (Back returns here). detailDungeon is
+    -- checked BEFORE detailPlayer / detailCharacter so a dungeon card opened from either returns correctly.
     if view.review then return renderPlayerReview(b, C, x, y, w, win) end
     if view.detailRun then return renderRunDetails(b, C, x, y, w, win) end
-    -- detailDungeon is checked BEFORE detailPlayer / detailCharacter so a dungeon card opened from
-    -- either detail page shows the dungeon (and Back, which only clears detailDungeon, returns here).
     if view.detailDungeon then return renderDungeonDetails(b, C, x, y, w, win) end
     if view.detailPlayer then return renderPlayerDetails(b, C, x, y, w, win) end
     if view.detailCharacter then return renderCharacterDetails(b, C, x, y, w, win) end
 
-    local fn = TAB_RENDER[view.tab] or renderOverview
+    local fn = TAB_RENDER[pageId] or renderOverview
     return fn(b, C, x, y, w, win)
 end
 
+-- Build the module's page list for Suite:RegisterModule (each becomes a sidebar sub-row). Reuses TABS.
+function UI.SpecPages()
+    local pages = {}
+    for i, t in ipairs(TABS) do
+        local pid = t[1]
+        pages[i] = {
+            id = pid, label = t[2], icon = t[3],
+            default = (pid == "overview"), disabledSafe = true,   -- the module draws its own disabled overlay
+            render = function(m, b, x, y, w, win) return UI.RenderPage(pid, m, b, x, y, win) end,
+            onSelect = function() UI.ClearDetails() end,
+        }
+    end
+    return pages
+end
+
 function UI.ResetView()
-    view.detailRun = nil; view.detailPlayer = nil; view.detailDungeon = nil; view.detailCharacter = nil
-    view.review = nil; reviewRunRef = nil; reviewMemberRef = nil
+    UI.ClearDetails()
     runFilter.playerKey = nil
 end
 
--- Navigated away from the ledger page: hide the persistent Dungeons search box, which is parented to
+-- Navigated away from the ledger entirely: hide the persistent Dungeons search box, which is parented to
 -- the shared content frame and would otherwise linger on top of whatever module you switch to.
 function UI.OnHide()
     if dungeonSearch then dungeonSearch:Hide() end
 end
 
--- Open the module page, optionally jumping to a tab (used by slash commands).
-function UI.Show(tab)
-    if tab then view.tab = tab; view.detailRun = nil; view.detailPlayer = nil; view.detailDungeon = nil; view.detailCharacter = nil
-        view.review = nil; reviewRunRef = nil; reviewMemberRef = nil end
-    if _G.TAP and _G.TAP.OpenWindow then _G.TAP:OpenWindow("mod:" .. ML.MODULE_ID) end
+-- Open the module, optionally on a specific page (used by slash commands / minimap).
+function UI.Show(pid)
+    UI.ClearDetails()
+    if _G.TAP and _G.TAP.OpenWindow then
+        _G.TAP:OpenWindow(pid and pageViewId(pid) or ("mod:" .. ML.MODULE_ID))
+    end
 end
 
 ----------------------------------------------------------------------
@@ -3941,8 +3969,8 @@ function UI.ShowScoreboard(run, opts)
             { label = "View full run", kind = "default", onClick = function(m)
                 m:Close()
                 if _G.TAP and _G.TAP.OpenWindow then
-                    view.detailRun = run.id; view.detailPlayer = nil; view.tab = "runs"
-                    _G.TAP:OpenWindow("mod:" .. ML.MODULE_ID)
+                    view.detailRun = run.id; view.detailPlayer = nil
+                    _G.TAP:OpenWindow(pageViewId("runs"))   -- Open doesn't clear detail state; renders over Runs
                 end
             end },
             { label = "Close", kind = "primary", onClick = function(m) m:Close() end },
@@ -4130,8 +4158,8 @@ function UI.ShowScoreboard(run, opts)
                     onClick = function()
                         if sb and sb.Close then sb:Close() end
                         view.review = true; reviewRunRef = run; reviewMemberRef = m
-                        view.detailRun = run.id; view.detailPlayer = nil; view.tab = "runs"
-                        if _G.TAP and _G.TAP.OpenWindow then _G.TAP:OpenWindow("mod:" .. ML.MODULE_ID) end
+                        view.detailRun = run.id; view.detailPlayer = nil
+                        if _G.TAP and _G.TAP.OpenWindow then _G.TAP:OpenWindow(pageViewId("runs")) end
                     end })
                 specGlyph(b, x + 4, y - 7, 26, m.specId, m.specIcon)
                 roleIcon(b, x + 34, y - 11, 18, m.role)

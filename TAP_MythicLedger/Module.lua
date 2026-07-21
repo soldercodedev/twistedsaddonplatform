@@ -34,12 +34,10 @@ local function OnDisable(m)
     ML.Log("Module disabled")
 end
 
-local function Settings(m, b, x, y, w, win)
-    return ML.UI.Render(m, b, x, y, win)
-end
-
 ----------------------------------------------------------------------
 -- Register with the platform. Overview / Installed / About / sidebar all populate automatically.
+-- Each of the module's pages (Overview / Runs / ... / Settings) becomes a sidebar sub-row under the
+-- shared "Mythic Ledger" addon category (see ML.UI.SpecPages); the record drill-downs render in-body.
 ----------------------------------------------------------------------
 mod = Suite:RegisterModule({
     id      = ML.MODULE_ID,
@@ -49,14 +47,16 @@ mod = Suite:RegisterModule({
     icon    = "book",
     addon   = ML.ADDON,
     default = true,
-    fullPage = true,   -- we render our own tabbed page; suite skips the "SETTINGS" band
-    rendersWhenDisabled = true,   -- keep our page (and its Settings tab) reachable while disabled
+    group      = "Mythic Ledger",   -- addon category (shared with the Dungeon Guide module)
+    groupIcon  = "book",
+    groupOrder = 1,                 -- our pages sort before the Dungeon Guide's within the category
+    rendersWhenDisabled = true,     -- keep our pages (and the Settings page) reachable while disabled
     changelog = ML.CHANGELOG,
     OnEnable  = OnEnable,
     OnDisable = OnDisable,
     OnSelect  = function() ML.UI.ResetView() end,
     OnDeselect = function() ML.UI.OnHide() end,
-    Settings  = Settings,
+    pages     = ML.UI.SpecPages(),
 })
 
 -- Optional minimap icon for this module (hidden by default; toggled in the Ledger's Settings tab).

@@ -806,13 +806,14 @@ end
 local win
 local builtSig
 
--- A signature of the current module set AND each module's enabled state; when it changes we rebuild
--- the window so the sidebar reflects newly installed / removed plugins, and enabling/disabling a
--- module adds or removes its page rows (a disabled module collapses to just its reachable Settings).
+-- A signature of the current module set; when it changes we rebuild the window so the sidebar reflects
+-- newly installed / removed plugins. Enable/disable does NOT change the signature: a disabled module
+-- keeps its page rows and renders an in-place "disabled" overlay (see renderPage), so a live Refresh
+-- (not a full rebuild) is all that's needed - and it avoids racing ModuleToggle's own win:Refresh().
 local function moduleSig()
-    local parts = {}
-    for _, m in ipairs(Suite.modules) do parts[#parts + 1] = m.spec.id .. (m:IsEnabled() and "+" or "-") end
-    return table.concat(parts, ",")
+    local ids = {}
+    for _, m in ipairs(Suite.modules) do ids[#ids + 1] = m.spec.id end
+    return table.concat(ids, ",")
 end
 
 -- The Get Involved nav row pulses until the user actually clicks into it (per campaign), nudging
