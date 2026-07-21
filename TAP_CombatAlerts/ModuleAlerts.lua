@@ -1020,42 +1020,37 @@ local function renderAlerts(mod, b, x, y, w, win)
     return y - 6
 end
 
-local function Settings(mod, b, x, y, w, win)
+-- Renders ONE of the module's pages (its tabs now live in the sidebar as sub-rows). The rule editor
+-- stays an in-body drill-down over the Alerts list (editorId), with its own sub-tab bar; switching
+-- sidebar pages clears the editor (see the page onSelect in caPages).
+local function RenderPage(pageId, mod, b, x, y, w, win)
     if not TCC.db then b:Wrap("Loading...", x, y, w, b.theme.C.subtext, 12); return y - 20 end
     if editorId and TCC.GetSelectedRule then TCC.selectedRuleId = editorId end
 
-    -- Dock the tab strip flush under the title bar (matches Mythic Ledger). It must be re-issued every
-    -- render - Window:Refresh clears the nav first. While editing a rule the editor is a sub-view of the
-    -- Alerts page, so keep Alerts highlighted; picking any tab leaves the editor.
-    if win and win.SetTopNav then
-        win:SetTopNav({
-            items = {
-                { key = "alerts",   label = "Alerts",   icon = "bell" },
-                { key = "profiles", label = "Profiles", icon = "user" },
-                { key = "settings", label = "Settings", icon = "settings" },
-            },
-            active = editorId and "alerts" or listTab, height = 30,
-            onSelect = function(key)
-                editorId = nil   -- leave the editor (if open) when switching top-level page
-                listTab = key
-                if win then win:Refresh() end
-            end,
-            tip = function(key) return TAB_TIPS[key] end,
-        })
-        y = y - 4   -- small breathing room below the docked nav
-    end
-
     -- Disabled: overlay every view except the Settings page (where the enable toggle lives), so the
     -- module can always be switched back on but nothing else is usable meanwhile.
-    if mod and mod.IsEnabled and not mod:IsEnabled() and (editorId or listTab ~= "settings") then
-        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings tab to turn Combat Alerts back on.",
-            onSettings = function() editorId = nil; listTab = "settings"; if win then win:Refresh() end end })
+    if mod and mod.IsEnabled and not mod:IsEnabled() and (editorId or pageId ~= "settings") then
+        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings page to turn Combat Alerts back on.",
+            onSettings = function() editorId = nil; if win then win:SelectView("mod:combatAlerts:settings") end end })
     end
 
+    if pageId == "profiles" then return renderProfiles(mod, b, x, y, w, win) end
+    if pageId == "settings" then return renderGlobal(mod, b, x, y, w, win) end
+    -- Alerts page: the rule editor is an in-body drill-down over the Alerts list.
     if editorId then return renderEditor(mod, b, x, y, w, win) end
-    if listTab == "profiles" then return renderProfiles(mod, b, x, y, w, win) end
-    if listTab == "settings" then return renderGlobal(mod, b, x, y, w, win) end
     return renderAlerts(mod, b, x, y, w, win)
+end
+
+-- Page render closures for the sidebar. Each page clears the rule editor on select, so navigating a
+-- sidebar row always lands on that page's list (matching the old "picking a tab leaves the editor").
+local function caPages()
+    local function pg(id) return function(m, b, x, y, w, win) return RenderPage(id, m, b, x, y, w, win) end end
+    local function leaveEditor() editorId = nil end
+    return {
+        { id = "alerts",   label = "Alerts",   icon = "bell",     default = true, disabledSafe = true, render = pg("alerts"),   onSelect = leaveEditor },
+        { id = "profiles", label = "Profiles", icon = "user",     disabledSafe = true, render = pg("profiles"), onSelect = leaveEditor },
+        { id = "settings", label = "Settings", icon = "settings", disabledSafe = true, render = pg("settings"), onSelect = leaveEditor },
+    }
 end
 
 ----------------------------------------------------------------------
@@ -1091,13 +1086,13 @@ mod = Suite:RegisterModule({
     icon    = "bell",
     addon   = "TAP_CombatAlerts",
     default = true,
-    fullPage = true,   -- we render our own tabbed page; suite skips the "SETTINGS" band
-    rendersWhenDisabled = true,   -- keep our page (and its Settings tab) reachable while disabled
+    group   = "Combat Alerts",   -- single-module addon: its own sidebar category
+    rendersWhenDisabled = true,   -- keep our pages (and the Settings page) reachable while disabled
     changelog = TCC.CHANGELOG,
     OnEnable  = function() pushToEngine(true) end,
     OnDisable = function() pushToEngine(false) end,
-    OnSelect  = function() editorId = nil; listTab = "alerts" end,   -- reopening lands on the Alerts list
-    Settings  = Settings,
+    OnSelect  = function() editorId = nil; listTab = "alerts" end,   -- entering the module lands on Alerts
+    pages     = caPages(),
 })
 
 -- Optional minimap icon for this module (hidden by default; toggled in this module's settings).

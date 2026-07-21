@@ -84,7 +84,9 @@ local TAB_TIPS = {
 ----------------------------------------------------------------------
 -- Settings page (rebuilt on the Builder).
 ----------------------------------------------------------------------
-local function Settings(mod, b, x, y, w, win)
+-- Renders ONE of the module's pages (its tabs now live in the sidebar as sub-rows). Keeps all the
+-- per-tab render closures; only the top-nav dispatch is replaced by a pageId dispatch.
+local function RenderPage(pageId, mod, b, x, y, w, win)
     local C = b.theme.C
     local d = (FTI.SyncDB and FTI.SyncDB()) or FTI.db   -- ensure FTI.db points at persisted settings
     if not d then b:Wrap("Loading...", x, y, w, C.subtext, 12); return y - 20 end
@@ -302,39 +304,34 @@ local function Settings(mod, b, x, y, w, win)
         return y
     end
 
-    -- Dock the tab strip as a fixed top-nav flush under the title bar (matches Mythic Ledger). It must
-    -- be re-issued every render - Window:Refresh clears the nav before each render.
-    if win and win.SetTopNav then
-        win:SetTopNav({
-            items = {
-                { key = "macros",   label = "Macros",         icon = "keyboard" },
-                { key = "palette",  label = "Marker Palette",  icon = "target" },
-                { key = "announce", label = "Announce",        icon = "message" },
-                { key = "settings", label = "Settings",        icon = "settings" },
-            },
-            active = uiTab, height = 30,
-            onSelect = function(key) uiTab = key; if win then win:Refresh() end end,
-            tip = function(key) return TAB_TIPS[key] end,
-        })
-        y = y - 4   -- small breathing room below the docked nav
+    -- Top-level nav now lives in the sidebar (one row per page). Disabled: overlay every page except
+    -- Settings (where the enable toggle lives), so the module can always be switched back on.
+    if mod and mod.IsEnabled and not mod:IsEnabled() and pageId ~= "settings" then
+        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings page to turn Focus Target Interrupt back on.",
+            onSettings = function() if win then win:SelectView("mod:focusInterrupt:settings") end end })
     end
 
-    -- Disabled: overlay every tab except Settings (where the enable toggle lives).
-    if mod and mod.IsEnabled and not mod:IsEnabled() and uiTab ~= "settings" then
-        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings tab to turn Focus Target Interrupt back on.",
-            onSettings = function() uiTab = "settings"; if win then win:Refresh() end end })
-    end
-
-    if uiTab == "palette" then
+    if pageId == "palette" then
         y = renderPalette(y)
-    elseif uiTab == "announce" then
+    elseif pageId == "announce" then
         y = renderAnnounce(y)
-    elseif uiTab == "settings" then
+    elseif pageId == "settings" then
         y = renderSettings(y)
     else
         y = renderMacros(y)
     end
     return y
+end
+
+-- Page render closures for the sidebar (each delegates to RenderPage with its page id).
+local function ftiPages()
+    local function pg(id) return function(m, b, x, y, w, win) return RenderPage(id, m, b, x, y, w, win) end end
+    return {
+        { id = "macros",   label = "Macros",         icon = "keyboard", default = true, disabledSafe = true, render = pg("macros") },
+        { id = "palette",  label = "Marker Palette", icon = "target",   disabledSafe = true, render = pg("palette") },
+        { id = "announce", label = "Announce",       icon = "message",  disabledSafe = true, render = pg("announce") },
+        { id = "settings", label = "Settings",       icon = "settings", disabledSafe = true, render = pg("settings") },
+    }
 end
 
 ----------------------------------------------------------------------
@@ -348,8 +345,8 @@ Suite:RegisterModule({
     icon    = "target",
     addon   = "TAP_FocusInterrupt",
     default = true,
-    fullPage = true,   -- we render our own tabbed page; suite skips the "SETTINGS" band
-    rendersWhenDisabled = true,   -- keep our page (and its Settings tab) reachable while disabled
+    group   = "Focus Target Interrupt",   -- single-module addon: its own sidebar category
+    rendersWhenDisabled = true,   -- keep our pages (and the Settings page) reachable while disabled
     changelog = CHANGELOG,
     OnEnable = function()
         if FTI.SyncDB then FTI.SyncDB() end   -- ensure FTI.db is the persisted settings before use
@@ -362,7 +359,7 @@ Suite:RegisterModule({
         if FTI._paletteMoverOn and FTI.SetMarkerPaletteMover then FTI.SetMarkerPaletteMover(false) end
         if FTI.RefreshMarkerPaletteVisibility then FTI.RefreshMarkerPaletteVisibility() end   -- hides the bar
     end,
-    Settings = Settings,
+    pages = ftiPages(),
 })
 
 -- Optional minimap icon for this module (hidden by default; toggled in this module's settings).

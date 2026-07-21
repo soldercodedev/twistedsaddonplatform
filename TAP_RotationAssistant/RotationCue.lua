@@ -885,7 +885,9 @@ local TAB_TIPS = {
     settings   = "Enable or disable the module, and the minimap button.",
 }
 
-local function Settings(m, b, x, y, w, win)
+-- Renders ONE of the module's pages (its tabs now live in the sidebar as sub-rows). Keeps all the
+-- per-tab render closures; only the top-nav dispatch is replaced by a pageId dispatch.
+local function RenderPage(pageId, m, b, x, y, w, win)
     local C = b.theme.C
     local s = m:GetSettings()
     local function repage() if win then win:Refresh() end end
@@ -1182,39 +1184,34 @@ local function Settings(m, b, x, y, w, win)
         return cy
     end
 
-    -- Dock the tab strip as a fixed top-nav flush under the title bar (matches Mythic Ledger). It must
-    -- be re-issued every render - Window:Refresh clears the nav before each render.
-    if win and win.SetTopNav then
-        win:SetTopNav({
-            items = {
-                { key = "behavior",  label = "Behavior",  icon = "adjustments-horizontal" },
-                { key = "indicators", label = "Indicators", icon = "activity" },
-                { key = "appearance", label = "Appearance", icon = "palette" },
-                { key = "settings",   label = "Settings",   icon = "settings" },
-            },
-            active = uiTab, height = 30,
-            onSelect = function(key) uiTab = key; if win then win:Refresh() end end,
-            tip = function(key) return TAB_TIPS[key] end,
-        })
-        y = y - 4   -- small breathing room below the docked nav
+    -- Top-level nav now lives in the sidebar (one row per page). Disabled: overlay every page except
+    -- Settings (where the enable toggle lives), so the module can always be switched back on.
+    if m and m.IsEnabled and not m:IsEnabled() and pageId ~= "settings" then
+        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings page to turn Rotation Assistant back on.",
+            onSettings = function() if win then win:SelectView("mod:rotationCue:settings") end end })
     end
 
-    -- Disabled: overlay every tab except Settings (where the enable toggle lives).
-    if m and m.IsEnabled and not m:IsEnabled() and uiTab ~= "settings" then
-        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings tab to turn Rotation Assistant back on.",
-            onSettings = function() uiTab = "settings"; if win then win:Refresh() end end })
-    end
-
-    if uiTab == "indicators" then
+    if pageId == "indicators" then
         y = renderIndicators(y)
-    elseif uiTab == "appearance" then
+    elseif pageId == "appearance" then
         y = renderAppearance(y)
-    elseif uiTab == "settings" then
+    elseif pageId == "settings" then
         y = renderSettings(y)
     else
         y = renderBehavior(y)
     end
     return y
+end
+
+-- Page render closures for the sidebar (each delegates to RenderPage with its page id).
+local function rotationPages()
+    local function pg(id) return function(m, b, x, y, w, win) return RenderPage(id, m, b, x, y, w, win) end end
+    return {
+        { id = "behavior",   label = "Behavior",   icon = "adjustments-horizontal", default = true, disabledSafe = true, render = pg("behavior") },
+        { id = "indicators", label = "Indicators", icon = "activity", disabledSafe = true, render = pg("indicators") },
+        { id = "appearance", label = "Appearance", icon = "palette",  disabledSafe = true, render = pg("appearance") },
+        { id = "settings",   label = "Settings",   icon = "settings", disabledSafe = true, render = pg("settings") },
+    }
 end
 
 ----------------------------------------------------------------------
@@ -1277,12 +1274,12 @@ Suite:RegisterModule({
     icon    = "keyboard",
     addon   = "TAP_RotationAssistant",
     default = true,
-    fullPage = true,   -- we render our own tabbed page; suite skips the "SETTINGS" band
-    rendersWhenDisabled = true,   -- keep our page (and its Settings tab) reachable while disabled
+    group   = "Rotation Assistant",   -- single-module addon: its own sidebar category
+    rendersWhenDisabled = true,   -- keep our pages (and the Settings page) reachable while disabled
     changelog = CHANGELOG,
     OnEnable  = OnEnable,
     OnDisable = OnDisable,
-    Settings  = Settings,
+    pages     = rotationPages(),
 })
 
 -- Optional minimap icon for this module (hidden by default; toggled in this module's settings).
