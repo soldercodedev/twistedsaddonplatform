@@ -202,21 +202,27 @@ function DR.Dismiss()
     C_Timer.After(0.45, function() if not moving then frame:Hide() end end)
 end
 
--- Show the live overlay. `clickDismiss` = stays until clicked; otherwise it fades after `hold` seconds.
-local function show(entries, header, hold, clickDismiss)
+-- Show the live overlay. `clickDismiss` = a click dismisses it; `autoFade` = it fades after `hold`
+-- seconds. The two are independent, so "both" auto-fades AND accepts a click (whichever comes first;
+-- a click cancels the pending timer via DR.Dismiss).
+local function show(entries, header, hold, clickDismiss, autoFade)
     local f = ensureFrame()
     renderInto(f, entries, header, DB.DeathReport())
     DR.Reposition()
     f:SetAlpha(1); f:Show()
     if hideTimer then hideTimer:Cancel(); hideTimer = nil end
-    if clickDismiss and not moving then
-        f._clickDismiss = true
-        f:EnableMouse(true)          -- capture clicks so the user can dismiss it
-    else
-        f._clickDismiss = false
-        if not moving then f:EnableMouse(false) end
-        if hold and hold < 9000 then hideTimer = C_Timer.NewTimer(hold, DR.Dismiss) end
+    f._clickDismiss = (clickDismiss and not moving) or false
+    if not moving then f:EnableMouse(f._clickDismiss) end   -- capture clicks only when click-dismiss is on
+    if autoFade and not moving and hold and hold < 9000 then
+        hideTimer = C_Timer.NewTimer(hold, DR.Dismiss)
     end
+end
+
+-- Resolve the `dismiss` setting into (clickDismiss, autoFade). AUTO = fade only, CLICK = click only,
+-- BOTH = fade after the timer OR a click, whichever happens first.
+local function dismissModes(cfg)
+    local d = cfg.dismiss or "AUTO"
+    return (d == "CLICK" or d == "BOTH"), (d == "AUTO" or d == "BOTH")
 end
 
 ----------------------------------------------------------------------
@@ -233,8 +239,9 @@ function DR.Run(onlyNew, runOverride)
     local header = (onlyNew ~= false) and "Deaths this pull" or "Death Report"
     if #entries > cap then header = header .. string.format("  (top %d of %d)", cap, #entries) end
     lastReport = { header = header, entries = entries }   -- plain header for the chat re-post
-    local click = cfg.dismiss == "CLICK"
-    show(shown, click and (header .. "   |cff8b91a0(click to dismiss)|r") or header, cfg.duration, click)
+    local clickDismiss, autoFade = dismissModes(cfg)
+    local hdr = clickDismiss and (header .. "   |cff8b91a0(click to dismiss)|r") or header
+    show(shown, hdr, cfg.duration, clickDismiss, autoFade)
 end
 
 -- A representative sample - ONE OF EVERY cause - so Settings can preview / position without a real death.
@@ -250,9 +257,9 @@ end
 
 function DR.Test()
     local cfg = DB.DeathReport()
-    local click = cfg.dismiss == "CLICK"
-    show(sampleEntries(), click and "Death Report - test   |cff8b91a0(click to dismiss)|r" or "Death Report - test",
-        cfg.duration or 6, click)
+    local clickDismiss, autoFade = dismissModes(cfg)
+    local hdr = clickDismiss and "Death Report - test   |cff8b91a0(click to dismiss)|r" or "Death Report - test"
+    show(sampleEntries(), hdr, cfg.duration or 6, clickDismiss, autoFade)
 end
 
 -- Live Settings preview: render the sample into a pooled frame parented to the settings content at

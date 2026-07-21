@@ -2281,17 +2281,18 @@ local function renderSettings(b, C, x, y, w, win)
             y = y - 40
             b:Label("Dismiss", x, y - 2, C.subtext)
             T(b, b:Dropdown(x + 90, y), "How the report goes away",
-                "Auto = it fades on its own after the time below. Click to dismiss = it stays on screen until "
-                .. "you click it (it captures the mouse while shown)."):SetChoices(210, {
-                { "AUTO", "Auto (fade after time)" }, { "CLICK", "Click to dismiss" },
+                "Auto = it fades on its own after the time below. Click to dismiss = it stays until you "
+                .. "click it (it captures the mouse while shown). Both = it fades after the time below OR "
+                .. "when you click it, whichever happens first."):SetChoices(210, {
+                { "AUTO", "Auto (fade after time)" }, { "CLICK", "Click to dismiss" }, { "BOTH", "Both (fade or click)" },
             }, function() return dr.dismiss or "AUTO" end, function(v) dr.dismiss = v; win:Refresh() end)
             y = y - 40
             toggle("Only report my own deaths", function() return dr.onlyMe end, function(v) dr.onlyMe = v end,
                 "Show only your deaths, not the whole party's.")
-            if (dr.dismiss or "AUTO") == "AUTO" then
+            if (dr.dismiss or "AUTO") ~= "CLICK" then   -- AUTO and BOTH both auto-fade after this time
                 slider("On screen for", 130, 170,2, 20, 1, "%.0fs",
                     function() return dr.duration or 6 end, function(v) dr.duration = v end,
-                    "How long the overlay stays before it fades out.")
+                    "How long the overlay stays before it fades out (also applies to Both).")
             end
             slider("Max deaths shown", 130, 170,3, 20, 1, "%.0f",
                 function() return dr.maxLines or 8 end, function(v) dr.maxLines = v end,
