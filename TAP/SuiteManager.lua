@@ -327,41 +327,9 @@ local function pageOverview(b, win)
 end
 
 ----------------------------------------------------------------------
--- Page: one per module (the module's own dashboard + inline settings)
-----------------------------------------------------------------------
-local function pageModule(b, win, mod)
-    local C = theme.C
-    local w = b.contentWidth
-    local spec = mod.spec
-    local x, y = 24, -18
-
-    -- No in-page header: the module's name is shown as the window-title suffix, and its enable/disable
-    -- toggle + status live on the Overview and Installed pages. This page is just the module's settings -
-    -- it renders straight into its own sections with no redundant "SETTINGS" band on top.
-
-    -- A disabled module normally shows a short "turned off" note here. Modules that own a full tabbed
-    -- page (rendersWhenDisabled) instead render themselves even when off, so their Settings tab stays
-    -- reachable to re-enable them and the other tabs show the shared MODULE DISABLED overlay.
-    if not mod:IsEnabled() and not spec.rendersWhenDisabled then
-        b:Wrap("This module is turned off. Switch it on from the Overview page to configure it.",
-            x, y, w - 44, C.subtext, 12)
-        return y - 40
-    end
-    if not spec.Settings then
-        b:Wrap("This module has no configurable settings.", x, y, w - 44, C.subtext, 12)
-        return y - 40
-    end
-
-    local ok, newY = pcall(spec.Settings, mod, b, x + 4, y, w - 40, win)
-    if not ok then
-        b:Label("|cffff6666settings error:|r " .. tostring(newY), x + 4, y, C.subtext, 10)
-        return y - 24
-    end
-    return (type(newY) == "number" and newY or y) - 12
-end
-
-----------------------------------------------------------------------
 -- Page: Settings (suite appearance - shape, colors, accent, font)
+-- (Module pages are rendered by renderPage() further down, via each module's declared spec.pages
+-- or a single legacy fallback wrapping spec.Settings.)
 ----------------------------------------------------------------------
 
 -- Friendly labels for each editable palette variable (Custom mode).
@@ -838,12 +806,13 @@ end
 local win
 local builtSig
 
--- A signature of the current module set; when it changes we rebuild the window so the sidebar
--- reflects newly installed / removed plugins.
+-- A signature of the current module set AND each module's enabled state; when it changes we rebuild
+-- the window so the sidebar reflects newly installed / removed plugins, and enabling/disabling a
+-- module adds or removes its page rows (a disabled module collapses to just its reachable Settings).
 local function moduleSig()
-    local ids = {}
-    for _, m in ipairs(Suite.modules) do ids[#ids + 1] = m.spec.id end
-    return table.concat(ids, ",")
+    local parts = {}
+    for _, m in ipairs(Suite.modules) do parts[#parts + 1] = m.spec.id .. (m:IsEnabled() and "+" or "-") end
+    return table.concat(parts, ",")
 end
 
 -- The Get Involved nav row pulses until the user actually clicks into it (per campaign), nudging
@@ -859,6 +828,135 @@ local function markGetInvolvedEngaged(w)
     end
 end
 
+----------------------------------------------------------------------
+-- Module -> pages. A module may declare `spec.pages` (each becomes a sidebar sub-row under its addon
+-- category); a module without one falls back to a single page wrapping its legacy `spec.Settings`.
+-- View id for a page is "mod:<moduleId>:<pageId>"; a bare "mod:<moduleId>" resolves to the default.
+----------------------------------------------------------------------
+local function modulePages(mod)
+    local spec = mod.spec
+    if type(spec.pages) == "table" and #spec.pages > 0 then return spec.pages end
+    -- Legacy fallback: one page rendering the module's whole Settings page. It handles its own disabled
+    -- overlay internally, so mark it disabledSafe (the platform gate leaves it alone).
+    spec._fallbackPages = spec._fallbackPages or {
+        { id = "main", label = spec.title or spec.id, icon = spec.icon, default = true, disabledSafe = true,
+          render = function(m, b, x, y, w, win) if m.spec.Settings then return m.spec.Settings(m, b, x, y, w, win) end end },
+    }
+    return spec._fallbackPages
+end
+
+local function pageView(moduleId, pageId) return "mod:" .. moduleId .. ":" .. pageId end
+local function moduleById(id) for _, m in ipairs(Suite.modules) do if m.spec.id == id then return m end end end
+-- Module id embedded in a page view "mod:<id>:<page>" (or a bare legacy "mod:<id>"); nil for others.
+local function moduleIdOfView(view)
+    if type(view) ~= "string" then return nil end
+    return view:match("^mod:([^:]+):") or view:match("^mod:([^:]+)$")
+end
+local function defaultPageId(mod)
+    for _, p in ipairs(modulePages(mod)) do if p.default then return p.id end end
+    local first = modulePages(mod)[1]; return first and first.id
+end
+-- Resolve a bare "mod:<id>" to that module's default page view; pass anything else through unchanged.
+local function resolvePageView(view)
+    local id = view and view:match("^mod:([^:]+)$")
+    if id then local m = moduleById(id); if m then return pageView(id, defaultPageId(m)) end end
+    return view
+end
+local function settingsPageView(mod)
+    for _, p in ipairs(modulePages(mod)) do
+        if p.disabledSafe or p.id == "settings" then return pageView(mod.spec.id, p.id) end
+    end
+end
+
+-- Render one module page into the shared content, applying the platform's disabled gate:
+--   * module has no rendersWhenDisabled and is off -> a "turned off" note (no page reachable);
+--   * module off but this page isn't disabledSafe   -> a "disabled" overlay that jumps to Settings;
+--   * otherwise -> the page renders normally.
+local function renderPage(b, win, mod, page)
+    local C = theme.C
+    local w = b.contentWidth
+    local x, y = 24, -18
+    local spec = mod.spec
+    if not mod:IsEnabled() then
+        if not spec.rendersWhenDisabled then
+            b:Wrap("This module is turned off. Switch it on from the Installed page to configure it.",
+                x, y, w - 44, C.subtext, 12)
+            return y - 40
+        elseif not page.disabledSafe then
+            b:Heading("Module disabled", x, y, "h2"); y = y - 34
+            local _, hh = b:Wrap("This page is unavailable while " .. (spec.title or "this module")
+                .. " is turned off. Open its Settings to switch it back on.", x, y, w - 44, C.subtext, 12)
+            y = y - (hh + 16)
+            local sv = settingsPageView(mod)
+            if sv then b:Button(x, y, 150, "Open Settings", "primary", function() win:SelectView(sv) end) end
+            return y - 44
+        end
+    end
+    if not page.render then
+        b:Wrap("This page has no content.", x, y, w - 44, C.subtext, 12); return y - 40
+    end
+    local ok, newY = pcall(page.render, mod, b, x + 4, y, w - 40, win)
+    if not ok then
+        b:Label("|cffff6666render error:|r " .. tostring(newY), x + 4, y, C.subtext, 10)
+        return y - 24
+    end
+    return (type(newY) == "number" and newY or y) - 12
+end
+
+-- Page-enter: fire the MODULE-level OnSelect only when arriving from a DIFFERENT module (so it doesn't
+-- re-fire when switching between the module's own pages); always fire the page's own onSelect.
+-- `win.view` is still the OUTGOING view at this point (Window fires onSelect before SelectView).
+local function onPageEnter(w, mod, page)
+    if moduleIdOfView(w and w.view) ~= mod.spec.id and mod.spec.OnSelect then pcall(mod.spec.OnSelect, mod) end
+    if page.onSelect then pcall(page.onSelect, w, mod) end
+end
+-- Page-leave: always fire the page's onDeselect; fire the MODULE-level OnDeselect only when the
+-- INCOMING view leaves the module (so persistent frames survive inter-page navigation).
+local function onPageLeave(w, mod, page, incoming)
+    if page.onDeselect then pcall(page.onDeselect, w, mod) end
+    if moduleIdOfView(incoming) ~= mod.spec.id and mod.spec.OnDeselect then pcall(mod.spec.OnDeselect, mod) end
+end
+
+-- Group modules by addon into accordion categories; each category's rows are the pages of every
+-- module that addon registers. Label / icon / order come from spec.group / groupIcon / groupOrder.
+local function buildModuleCategories(pages)
+    local order, groups = {}, {}
+    for _, mod in ipairs(Suite.modules) do
+        local key = mod.spec.addon or mod.spec.id
+        local g = groups[key]
+        if not g then g = { key = key, modules = {} }; groups[key] = g; order[#order + 1] = g end
+        g.modules[#g.modules + 1] = mod
+    end
+    local activeMod = moduleIdOfView(win and win.view)
+    for _, g in ipairs(order) do
+        table.sort(g.modules, function(a, bb) return (a.spec.groupOrder or 50) < (bb.spec.groupOrder or 50) end)
+        local lead = g.modules[1]
+        local label
+        for _, mod in ipairs(g.modules) do if mod.spec.group then label = mod.spec.group; break end end
+        label = label or (lead and (lead.spec.title or lead.spec.id)) or g.key
+        local isActive = false
+        for _, mod in ipairs(g.modules) do if mod.spec.id == activeMod then isActive = true; break end end
+        pages[#pages + 1] = { header = label, collapsible = true, collapsed = not isActive, accordion = true }
+        for _, mod in ipairs(g.modules) do
+            local m = mod
+            for _, page in ipairs(modulePages(m)) do
+                local pg = page
+                pages[#pages + 1] = {
+                    view  = pageView(m.spec.id, pg.id),
+                    label = pg.label or m.spec.title or m.spec.id,
+                    icon  = (pg.icon and theme:ResolveIcon(pg.icon)) or moduleNavIcon(m.spec),
+                    titleSuffix = pg.titleSuffix or ("  ·  " .. (m.spec.title or m.spec.id)
+                        .. (pg.label and (" · " .. pg.label) or "")),
+                    subViews = pg.subViews,
+                    render = function(b, w2) return renderPage(b, w2, m, pg) end,
+                    onSelect = function(w2) onPageEnter(w2, m, pg) end,
+                    onDeselect = function(w2, incoming) onPageLeave(w2, m, pg, incoming) end,
+                }
+            end
+        end
+    end
+end
+
 local function buildPages()
     local pages = {
         { header = "Platform" },
@@ -866,24 +964,7 @@ local function buildPages()
         { view = "settings",  label = "Settings",  icon = theme:GetIcon("adjustments-horizontal"), render = pageSettings },
         { view = "installed", label = "Installed", icon = theme:GetIcon("database"),               render = pageInstalled },
     }
-    if #Suite.modules > 0 then
-        pages[#pages + 1] = { header = "Modules" }
-        for _, mod in ipairs(Suite.modules) do
-            local m = mod
-            pages[#pages + 1] = {
-                view   = "mod:" .. m.spec.id,
-                label  = m.spec.title or m.spec.id,
-                icon   = moduleNavIcon(m.spec),
-                -- Shown after the platform name in the window title while this module is selected.
-                titleSuffix = "  ·  " .. (m.spec.title or m.spec.id),
-                render = function(b, w) return pageModule(b, w, m) end,
-                -- Let a module reset its page state when its nav entry is (re)clicked.
-                onSelect = function() if m.spec.OnSelect then m.spec.OnSelect(m) end end,
-                -- Let a module tidy up (e.g. hide a persistent frame) when you navigate away from it.
-                onDeselect = function() if m.spec.OnDeselect then m.spec.OnDeselect(m) end end,
-            }
-        end
-    end
+    if #Suite.modules > 0 then buildModuleCategories(pages) end
     pages[#pages + 1] = { header = "Help" }
     pages[#pages + 1] = { view = "getinvolved", label = "Get Involved", icon = theme:GetIcon("heart"),
         render = pageGetInvolved, pulse = getInvolvedShouldPulse(), onSelect = function(w) markGetInvolvedEngaged(w) end }
@@ -947,6 +1028,7 @@ local function ensureWindow()
         if win.frame then win.frame:Hide() end
         win = nil
         createWindow()
+        view = resolvePageView(view)
         if not viewExists(view) then view = "overview" end
         if shown then win:Open(view) end
     elseif not win then
@@ -987,6 +1069,7 @@ end
 function Suite:RefreshWindow() if win and win:IsShown() then win:Refresh() end end
 function Suite:OpenWindow(view)
     ensureWindow()
+    view = resolvePageView(view)   -- legacy "mod:<id>" -> that module's default page
     if view and viewExists(view) then win:Open(view) else win:Open() end
 end
 function Suite:CloseWindow() if win and win.frame then win.frame:Hide() end end

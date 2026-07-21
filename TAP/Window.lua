@@ -193,6 +193,8 @@ local function build(win)
         if page.header then
             local hb = makeCategoryHeader(page.header, page.collapsible)
             hb._rows, hb._collapsed, hb._collapsible = {}, page.collapsed or false, page.collapsible ~= false
+            -- `accordion` categories auto-collapse to just the active one (see ExpandCategoryForView).
+            hb._accordion = page.accordion and true or false
             if hb._collapsible then hb:SetScript("OnClick", function() hb._collapsed = not hb._collapsed; win:layoutNav() end) end
             win.navHeaders[#win.navHeaders + 1] = hb; order[#order + 1] = { header = hb }; curHeader = hb
         else
@@ -624,16 +626,38 @@ function WindowMixin:SetTopNav(spec)
     anchorContent(band:GetHeight() or 38)
 end
 
+-- Accordion: when categories are marked `accordion = true`, keep only the one that owns the active
+-- view expanded and collapse the rest. Categories WITHOUT the flag (e.g. Platform / Help) are left
+-- alone. A no-op on windows that don't use accordion categories.
+function WindowMixin:ExpandCategoryForView(view)
+    if not self.built or not self.navHeaders then return end
+    local activeHeader
+    for _, r in ipairs(self.navRows or {}) do
+        if r._page and r._page.view == view then activeHeader = r._header; break end
+    end
+    local changed = false
+    for _, hb in ipairs(self.navHeaders) do
+        if hb._accordion then
+            local want = (hb ~= activeHeader)   -- collapse everything except the active category
+            if hb._collapsed ~= want then hb._collapsed = want; changed = true end
+        end
+    end
+    if changed and self.layoutNav then self:layoutNav() end
+end
+
 -- Switch page and re-render.
 function WindowMixin:SelectView(view)
     -- Notify the OUTGOING page it's being left (only on a real change), so a page can hide any
     -- persistent frame it parked over the shared content (e.g. a search box that survives Reset to
     -- keep focus). Not fired on in-page Refresh(), so it won't fight a focused control mid-edit.
+    -- The incoming `view` is passed as a 2nd arg so a page's onDeselect can tell WHERE you're going
+    -- (used to fire module-level leave hooks only when actually leaving the module).
     if view ~= self.view then
         local prev = self:_pageFor(self.view)
-        if prev and prev.onDeselect then pcall(prev.onDeselect, self) end
+        if prev and prev.onDeselect then pcall(prev.onDeselect, self, view) end
     end
     self.view = view
+    self:ExpandCategoryForView(view)
     self:Refresh()
 end
 
@@ -641,6 +665,7 @@ end
 function WindowMixin:Open(view)
     build(self)
     if view then self.view = view end
+    self:ExpandCategoryForView(self.view)   -- sync accordion for a deep-linked open (doesn't go via SelectView)
     -- Self-heal size / position so a corrupt saved state can't leave it off-screen.
     local mgr, o = self.frame, self.opts
     if not self._maximized then mgr:SetSize(self:_size()) end
