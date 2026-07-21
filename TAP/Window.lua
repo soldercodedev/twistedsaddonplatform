@@ -8,6 +8,10 @@
 --     width = 920, height = 600, sidebarWidth = 210, contentWidth = 660,
 --     savedPos = db.windowPos, onMovePos = function(p) db.windowPos = p end,
 --     onScale  = function() return db.scale end,          -- optional: window scale
+--     onSize   = function() return db.w, db.h end,        -- optional: live width/height (resizable)
+--     collapsibleSidebar = true, collapsedWidth = 52,     -- optional: a bottom toggle shrinks the
+--     savedCollapsed = db.collapsed,                      --   sidebar to an icon strip; state persists
+--     onCollapse = function(c) db.collapsed = c end,      --   via onCollapse (win:ToggleSidebar())
 --     pages = {
 --       { view = "home", label = "Home", icon = "...\\home.tga",
 --         render = function(b, win) ...; return finalY end },      -- return the last y used
@@ -102,19 +106,32 @@ local function build(win)
         mgr:SetPoint(o.savedPos.point, UIParent, o.savedPos.point, o.savedPos.x or 0, o.savedPos.y or 0)
     end
 
+    -- Collapsible sidebar (opt-in via opts.collapsibleSidebar): the bar can shrink to an icon-only
+    -- strip, and the content + scrollbar re-anchor to the live width on Refresh. `savedCollapsed`
+    -- seeds the initial state; `onCollapse(bool)` persists a toggle; `collapsedWidth` sets the strip.
+    local COLLAPSED_W = o.collapsedWidth or 46
+    win._sideWFull = SIDE_W
+    win._collapsed = (o.collapsibleSidebar and o.savedCollapsed) and true or false
+    win._sideW     = win._collapsed and COLLAPSED_W or SIDE_W
+
     -- Sidebar
     local side = CreateFrame("Frame", nil, mgr)
-    side:SetPoint("TOPLEFT", 1, -HEADER_H); side:SetPoint("BOTTOMLEFT", 1, FOOTER_H + 1); side:SetWidth(SIDE_W)
+    side:SetPoint("TOPLEFT", 1, -HEADER_H); side:SetPoint("BOTTOMLEFT", 1, FOOTER_H + 1); side:SetWidth(win._sideW)
+    win.side = side
     local sbg = side:CreateTexture(nil, "BACKGROUND"); sbg:SetAllPoints(); UIF.paint(sbg, C.sidebar); win._sbg = sbg
     local sedge = side:CreateTexture(nil, "ARTWORK"); UIF.paint(sedge, C.border); sedge:SetWidth(1); win._sedge = sedge
     sedge:SetPoint("TOPRIGHT"); sedge:SetPoint("BOTTOMRIGHT")
 
+    -- Bottom-of-sidebar reserve: room for an optional action button and/or the collapse toggle.
+    local bottomReserve = o.sidebarButton and 46 or 6
+    if o.collapsibleSidebar then bottomReserve = bottomReserve + 34 end
+
     -- Scrollable nav area so many pages + category headers still fit, with a themed scrollbar.
     local navScroll = CreateFrame("ScrollFrame", nil, side)
     navScroll:SetPoint("TOPLEFT", 0, -6)
-    navScroll:SetPoint("BOTTOMRIGHT", -9, o.sidebarButton and 46 or 6)   -- room for the scrollbar
-    local navChild = CreateFrame("Frame", nil, navScroll); navChild:SetSize(SIDE_W - 11, 10); navScroll:SetScrollChild(navChild)
-    win.navScroll = navScroll
+    navScroll:SetPoint("BOTTOMRIGHT", -9, bottomReserve)   -- room for the scrollbar + bottom controls
+    local navChild = CreateFrame("Frame", nil, navScroll); navChild:SetSize(win._sideW - 11, 10); navScroll:SetScrollChild(navChild)
+    win.navScroll, win._navChild = navScroll, navChild
 
     local nbar = CreateFrame("Frame", nil, side); nbar:SetWidth(6)
     nbar:SetPoint("TOPRIGHT", navScroll, "TOPRIGHT", 8, 0); nbar:SetPoint("BOTTOMRIGHT", navScroll, "BOTTOMRIGHT", 8, 0)
@@ -194,14 +211,21 @@ local function build(win)
         end
     end
 
-    -- (Re)position everything by current collapse state.
+    -- (Re)position everything by current collapse state. When the sidebar itself is collapsed to an
+    -- icon strip, category headers are hidden (replaced by a slim gap) and every row is shown as an
+    -- icon regardless of its category's own collapsed state (there's no header to expand it from).
     function win:layoutNav()
+        local barCollapsed = self._collapsed
+        local rowX = barCollapsed and 6 or 8
         local ty = -6
         -- NB: row items ALSO carry `.header` (their parent category), so branch on `.row`.
         for i, item in ipairs(order) do
             if item.row then
-                if item.header and item.header._collapsed then item.row:Hide()
-                else item.row:ClearAllPoints(); item.row:SetPoint("TOPLEFT", 8, ty); item.row:Show(); ty = ty - 30 end
+                if not barCollapsed and item.header and item.header._collapsed then item.row:Hide()
+                else item.row:ClearAllPoints(); item.row:SetPoint("TOPLEFT", rowX, ty); item.row:Show(); ty = ty - 30 end
+            elseif barCollapsed then
+                item.header:Hide()
+                if i > 1 then ty = ty - 12 end   -- slim gap between groups in place of the header
             else
                 if i > 1 then ty = ty - 8 end
                 item.header:ClearAllPoints(); item.header:SetPoint("TOPLEFT", 8, ty); item.header:SetPoint("RIGHT", navChild, "RIGHT", -6, 0); item.header:Show()
@@ -214,19 +238,36 @@ local function build(win)
     end
     win:layoutNav()
 
-    -- Optional bottom-of-sidebar action button.
+    -- Optional bottom-of-sidebar action button. Sits above the collapse toggle when both are present.
     if o.sidebarButton then
         local sb = o.sidebarButton
         local btn = theme:Button(side)
         btn:Configure(sb.label, SIDE_W - 20, 28, sb.kind or "primary", sb.onClick)
-        btn:ClearAllPoints(); btn:SetPoint("BOTTOMLEFT", 10, 10)
+        btn:ClearAllPoints(); btn:SetPoint("BOTTOMLEFT", 10, o.collapsibleSidebar and 44 or 10)
         if sb.tip then theme:SetTip(btn, sb.tip[1], sb.tip[2]) end
         win.sidebarButton = btn
     end
 
+    -- Optional collapse toggle, pinned to the very bottom of the sidebar.
+    if o.collapsibleSidebar then
+        local tgl = theme:Button(side)
+        win._collapseBtn = tgl
+        function win:_updateCollapseBtn()
+            local collapsed = self._collapsed
+            local bw = collapsed and (COLLAPSED_W - 12) or (self._sideWFull - 16)
+            tgl:Configure(collapsed and "" or "Collapse", bw, 26, "default",
+                function() win:ToggleSidebar() end,
+                { icon = collapsed and "chevron-right" or "chevron-left", iconSize = collapsed and 14 or 12 })
+            tgl:ClearAllPoints(); tgl:SetPoint("BOTTOMLEFT", side, "BOTTOMLEFT", collapsed and 6 or 8, 8)
+            theme:SetTip(tgl, collapsed and "Expand sidebar" or "Collapse sidebar",
+                collapsed and "Show the full navigation labels." or "Shrink the sidebar to icons only.")
+        end
+        win:_updateCollapseBtn()
+    end
+
     -- Content scroll + child
     local contentScroll = CreateFrame("ScrollFrame", nil, mgr)
-    contentScroll:SetPoint("TOPLEFT", SIDE_W + 2, -HEADER_H - 6)
+    contentScroll:SetPoint("TOPLEFT", win._sideW + 2, -HEADER_H - 6)
     contentScroll:SetPoint("BOTTOMRIGHT", -20, FOOTER_H + 6)   -- room for the scrollbar + footer
     local content = CreateFrame("Frame", nil, contentScroll); content:SetSize(o.contentWidth or (W - SIDE_W - 40), 1)
     contentScroll:SetScrollChild(content)
@@ -347,9 +388,17 @@ local function build(win)
         if mgr.titleFS then mgr.titleFS:SetTextColor(unpack(C.text)) end
         if self._fLeftFS then self._fLeftFS:SetTextColor(unpack(C.subtext)) end
         if self.sidebarButton then self.sidebarButton:Retheme() end
+        if self._updateCollapseBtn then self:_updateCollapseBtn() end
     end
 
     win.built = true
+
+    -- Apply a persisted "start collapsed" state now that every piece exists (Open() will Refresh,
+    -- which re-anchors the content/scrollbar to the collapsed width).
+    if o.collapsibleSidebar and win._collapsed then
+        win._collapsed = false            -- flip through _applyCollapse so rows/button take the compact path
+        win:_applyCollapse(true, true)    -- silent: don't re-persist the seed value
+    end
 end
 
 -- Render the current page into the content builder.
@@ -359,13 +408,15 @@ function WindowMixin:Refresh()
     self.theme:ApplyAccent()   -- keep highlight code / accent-derived colors current
     local mgr = self.frame
     mgr:SetScale((o.onScale and o.onScale()) or o.scale or 1)
-    if self._maximized then mgr:SetSize(self._maxW, self._maxH) else mgr:SetSize(o.width or 920, o.height or 600) end
+    local W, H = self:_size()
+    if self._maximized then mgr:SetSize(self._maxW, self._maxH) else mgr:SetSize(W, H) end
     self.viewportH = mgr:GetHeight() - (self._headerH or 44) - (self._footerH or 22) - 12
 
     -- Fluid content: stretch the content child (and builder) to the live viewport width so pages
-    -- and responsive grids fill the window and react to maximize. Opt-in via opts.contentFluid.
+    -- and responsive grids fill the window and react to maximize / a collapsed sidebar. Opt-in via
+    -- opts.contentFluid.
     if o.contentFluid and self.content and self.builder then
-        local vw = mgr:GetWidth() - (o.sidebarWidth or 210) - 24
+        local vw = mgr:GetWidth() - (self._sideW or o.sidebarWidth or 210) - 24
         if UIF.CanRead(vw) and vw > 120 then
             self.content:SetWidth(vw)
             self.builder.contentWidth = vw
@@ -433,6 +484,50 @@ function WindowMixin:Refresh()
     end
     if self.updateScrollbar then C_Timer.After(0, self.updateScrollbar) end
 end
+
+-- The window's current (unmaximized) size. `opts.onSize` lets the host drive it live from saved
+-- settings (e.g. width/height sliders); falls back to the fixed opts.width/height.
+function WindowMixin:_size()
+    local o = self.opts
+    if o.onSize then
+        local ok, w, h = pcall(o.onSize)
+        if ok and type(w) == "number" and type(h) == "number" then return w, h end
+    end
+    return o.width or 920, o.height or 600
+end
+
+-- Collapsible sidebar --------------------------------------------------------------------------
+-- Re-lay the sidebar for the given collapsed state WITHOUT a page re-render: resize the bar, make
+-- every nav row compact (icon-only) or full, and reflow the nav. `silent` skips the onCollapse
+-- persistence callback (used to apply a saved seed at build).
+function WindowMixin:_applyCollapse(collapsed, silent)
+    if not self.built or not self.opts.collapsibleSidebar then return end
+    local o = self.opts
+    collapsed = collapsed and true or false
+    self._collapsed = collapsed
+    if not silent and o.onCollapse then pcall(o.onCollapse, collapsed) end
+    local full = self._sideWFull or (o.sidebarWidth or 210)
+    local cw   = o.collapsedWidth or 46
+    self._sideW = collapsed and cw or full
+    if self.side then self.side:SetWidth(self._sideW) end
+    if self._navChild then self._navChild:SetWidth(self._sideW - 11) end
+    for _, r in ipairs(self.navRows or {}) do
+        r:SetWidth(collapsed and (cw - 12) or (full - 20))
+        if r.SetCompact then r:SetCompact(collapsed) end
+    end
+    if self._updateCollapseBtn then self:_updateCollapseBtn() end
+    if self.layoutNav then self:layoutNav() end
+end
+
+-- Toggle/set the collapsed state and re-render (Refresh re-anchors the content + scrollbar to the
+-- new sidebar width via SetTopNav(nil) -> anchorContent).
+function WindowMixin:SetSidebarCollapsed(collapsed)
+    if not self.opts.collapsibleSidebar then return end
+    self:_applyCollapse(collapsed)
+    self:Refresh()
+end
+function WindowMixin:ToggleSidebar() self:SetSidebarCollapsed(not self._collapsed) end
+function WindowMixin:IsSidebarCollapsed() return self._collapsed and true or false end
 
 -- Maximize the window up to a cap: opts.maxWidth/maxHeight (window-coord px) or
 -- opts.maxWidthPct/maxHeightPct (fraction of the viewport). Defaults to (almost) full screen.
@@ -548,7 +643,7 @@ function WindowMixin:Open(view)
     if view then self.view = view end
     -- Self-heal size / position so a corrupt saved state can't leave it off-screen.
     local mgr, o = self.frame, self.opts
-    if not self._maximized then mgr:SetSize(o.width or 920, o.height or 600) end
+    if not self._maximized then mgr:SetSize(self:_size()) end
     mgr:Show()
     local l, r, t, b = mgr:GetLeft(), mgr:GetRight(), mgr:GetTop(), mgr:GetBottom()
     local sw, sh = UIParent:GetWidth(), UIParent:GetHeight()

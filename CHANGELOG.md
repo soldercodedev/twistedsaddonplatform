@@ -3,17 +3,26 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
-## 1.4.0-beta.1
+## 1.4.0
 
-A Mythic Ledger beta on top of the **1.3.0** release: death attribution now flags a **Missed Kick** as its own cause, and a new on-screen **death report** flashes who died and why after each pull. Each module's full notes also live in its in-game **What's New** (`/tap` > module > *What's New*).
+Death attribution grows a **Missed Kick** cause and an on-screen **death report**, the player review gains an **avoidable-damage breakdown** and plain-language target explanations, and the platform window is now **collapsible and resizable**. Each module's full notes also live in its in-game **What's New** (`/tap` > module > *What's New*).
+
+**Platform**
+
+- **[NEW]** **Collapsible sidebar.** A toggle at the bottom of the `/tap` sidebar shrinks the navigation to an icon-only strip (hover an icon for its name); the content area reflows to fill the freed space, and the collapsed state is remembered.
+- **[NEW]** **Resizable window.** **Settings** gains **width** and **height** sliders, so you can size the `/tap` window to taste - alongside the existing menu-scale and maximize controls.
 
 ### Mythic Ledger (1.0.0-beta.8)
 
-**Missed Kick** deaths and an on-screen **death report**, building on beta.7's attribution. The scoring change below **re-scores your existing runs automatically** on login.
+**Missed Kick** deaths, an on-screen **death report**, and a new **avoidable-damage breakdown** with clearer, personalized coaching. The scoring change below **re-scores your existing runs automatically** on login.
 
 - **[NEW]** **Missed Kick is now its own death cause.** Death attribution adds a fourth cause: a **Missed Kick** - a cast that should have been interrupted landed and helped kill you - shown alongside Avoidable, Threat, and Other, naming the exact cast. It reads the death recap and weighs the whole sequence, so a kickable cast that dropped you gets the blame even when a normal hit lands the killing blow.
 - **[CHANGE]** **Missed-kick deaths are scored like an "Other" death.** A death from a missed interrupt now carries the same penalty as an unavoidable one - carved out of the old "Other" bucket, so the death count and total weight are unchanged. Existing runs recompute this cause from their stored recaps on login.
 - **[NEW]** **On-screen death report.** After a pull (or at the run's end), a customizable overlay flashes who died since the last report and why - time in the key, the killing blow, and the cause (including a missed kick's cast). Styleable font/size/colors/background/position (drag-to-move), **auto- or click-dismiss**, per-pull or once at the finish. **/ledger deathreport** reposts the last one to party chat.
+- **[NEW]** **Avoidable-damage breakdown on the score card.** The player review now lists the exact mechanics behind your Survival score - biggest first, each a real **spell icon** (hover for the game's tooltip) with the damage taken, a share bar, and its share of your avoidable total. Reference only; it never changes the score.
+- **[CHANGE]** **Clearer, personalized score explanations.** "How your targets were set" now sits **below** the coaching (What went well / Focus on), and every category is explained in plain language using **your own numbers** with a worked example - Survival and Deaths included, which now show your actual avoidable share and what each death cost.
+- **[BUG FIX]** **Scoreboard "Least Avoidable" leader fixed.** A player who took **no** avoidable damage (logged as "-") was skipped, so the crown went to someone who actually stood in something; a clean player is now correctly read as zero and credited.
+- **[CHANGE]** **Settings page redesigned.** The module's settings now use a **two-column layout**, and the scoreboard **Scale** slider shows its numeric value again.
 - **[BUG FIX]** **Interrupt cooldown-class labels corrected.** Several kicks sat in the wrong CD band - 15-second melee kicks (Kick, Pummel, Mind Freeze, Disrupt, Skull Bash, Spear Hand Strike, Rebuke) now read **Short-CD**, and 24-second ranged kicks (Counter Shot, Counterspell, Spell Lock) read **Standard**. Labels only; expected kick rates and grades are unchanged.
 
 ## 1.3.0

@@ -386,6 +386,22 @@ local function applyMenuScaleWhenReleased(w)
     end)
 end
 
+-- Window width / height sliders. Same story as the menu-scale slider above: the control lives inside
+-- the window it resizes, so we don't resize on every drag tick (a mid-drag rebuild of the slider makes
+-- the thumb jump out from under the cursor). Instead we poll until the left button is released, then do
+-- one win:Refresh() - which reads opts.onSize (the saved winW/winH) and re-sizes + reflows cleanly.
+local windowSizeTimer
+local function applyWindowSizeWhenReleased(w)
+    if windowSizeTimer then windowSizeTimer:Cancel() end
+    windowSizeTimer = C_Timer.NewTimer(0.06, function()
+        if IsMouseButtonDown and IsMouseButtonDown("LeftButton") then
+            applyWindowSizeWhenReleased(w); return   -- still dragging - check again shortly
+        end
+        windowSizeTimer = nil
+        if w and w:IsShown() then w:Refresh() end
+    end)
+end
+
 -- Ensure a.custom holds an {r,g,b} for every palette variable, seeded from what's on screen
 -- now (so entering Custom starts from the current colors). Idempotent - keeps existing edits.
 -- IMPORTANT: reuse the existing per-key table instead of replacing it. The color picker holds
@@ -509,6 +525,30 @@ local function pageSettings(b, win)
     local _, mh = b:Wrap("Only affects this /tap window - the scoreboard and on-screen combat cues keep "
         .. "their own size.", x, y, w - 44, C.subtext, 10)
     y = y - (mh + 14)
+
+    -- Window size - width & height. Applied when you release the slider (see the helper above), so the
+    -- slider you're dragging doesn't move out from under the cursor mid-drag.
+    y = b:Section("WINDOW SIZE", x, y); y = y - 36
+    local m = managerDB()
+    theme:SetTip(b:Slider(x, y):Configure(300, 900, 1720, 10,
+        function() return m.winW or 1000 end,
+        function(v) m.winW = v; applyWindowSizeWhenReleased(win) end, "%.0f px"),
+        "Window width", "How wide the /tap window is. Release the slider to apply.")
+    y = y - 42
+    theme:SetTip(b:Slider(x, y):Configure(300, 560, 1180, 10,
+        function() return m.winH or 680 end,
+        function(v) m.winH = v; applyWindowSizeWhenReleased(win) end, "%.0f px"),
+        "Window height", "How tall the /tap window is. Release the slider to apply.")
+    y = y - 30
+    local _, wh = b:Wrap("Tip: use the |cffffffffCollapse|r button at the bottom of the sidebar to shrink "
+        .. "the navigation to icons only, or the maximize button in the title bar for a full-screen view.",
+        x, y, w - 44, C.subtext, 10)
+    y = y - (wh + 6)
+    b:Button(x, y, 150, "Reset Size", "default", function()
+        local mm = managerDB(); mm.winW, mm.winH = nil, nil
+        win:Refresh()
+    end)
+    y = y - 40
 
     -- Minimap button (the platform's own; each module toggles its own icon in the module's settings).
     y = b:Section("MINIMAP", x, y); y = y - 30
@@ -861,6 +901,12 @@ local function createWindow()
         width = 1000, height = 680, sidebarWidth = 220, contentWidth = 740,
         maximizable = true, maxWidthPct = 0.95, maxHeightPct = 0.95,
         contentFluid = true,   -- content stretches to the window width (and grows when maximized)
+        -- Live window size, driven by the Settings sliders (falls back to the width/height above).
+        onSize = function() local m = managerDB(); return m.winW or 1000, m.winH or 680 end,
+        -- Collapsible sidebar: a bottom toggle shrinks the nav to an icon-only strip; state persists.
+        collapsibleSidebar = true, collapsedWidth = 52,
+        savedCollapsed = managerDB().sidebarCollapsed,
+        onCollapse = function(v) managerDB().sidebarCollapsed = v and true or nil end,
         savedPos = managerDB().pos,
         onMovePos = function(p) managerDB().pos = p end,
         -- "Menu scale": scale the whole /tap panel (text + chrome) proportionally. Per-frame, so it

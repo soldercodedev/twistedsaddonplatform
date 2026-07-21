@@ -49,6 +49,24 @@ local function dispIcon(theme, parent, i, size)
     gi:SetSize(size, size)
     return gi
 end
+-- Its own pool for the AVOIDABLE-damage breakdown (Blizzard spell icons + game tooltips).
+local avoidIconPool = {}
+local function avoidIcon(theme, parent, i, size)
+    local gi = avoidIconPool[i]
+    if not gi then gi = theme:GameIcon(parent, { size = size }); avoidIconPool[i] = gi end
+    if gi:GetParent() ~= parent then gi:SetParent(parent) end
+    gi:SetSize(size, size)
+    return gi
+end
+
+-- Best-effort spell display name (Blizzard API) for inline labels beside a spell icon.
+local function spellNameOf(id)
+    if not id then return nil end
+    local n
+    if _G.C_Spell and _G.C_Spell.GetSpellName then n = _G.C_Spell.GetSpellName(id) end
+    if not n and _G.GetSpellInfo then n = _G.GetSpellInfo(id) end
+    return n
+end
 
 -- Text/accent colors for cards with a forced-dark background (the dungeon-art hero cards). The theme's
 -- own text goes DARK on light mode and vanishes over the art, so these stay light on BOTH themes.
@@ -2092,22 +2110,35 @@ local function renderSettings(b, C, x, y, w, win)
         b.theme:SetTip(tg, lbl, tip or lbl)
         b:Label(lbl, x + 46, y - 2, C.text); y = y - 30
     end
-    -- Slider row: reserves headroom above the thumb for the value readout (v-padding), like the
-    -- other modules, so the readout can't clip the control above it.
+    -- Slider row: reserves headroom above the thumb for the value readout (it sits ABOVE the thumb),
+    -- so the number clears the row above instead of hiding behind it, then draws the label + slider on
+    -- one line within the current column.
     local function slider(lbl, ctlX, sw, minv, maxv, step, fmt, get, set, tip)
-        y = y - 12
+        y = y - 22
         b:Label(lbl, x, y - 2, C.subtext)
         T(b, b:Slider(x + ctlX, y), lbl, tip):Configure(sw, minv, maxv, step, get, set, fmt)
-        y = y - 26
+        y = y - 28
     end
 
-    -- MODULE enable/disable (shared platform block). The ledger only records runs while enabled;
-    -- saved history is always kept.
+    -- MODULE enable/disable (shared platform block, full width). The ledger only records runs while
+    -- enabled; saved history is always kept.
     if UI._mod then
         y = b:ModuleToggle(x, y, w, UI._mod, { onToggle = function() win:Refresh() end,
             sub = "When off, no runs are recorded and recaps stop. Your saved history is kept." })
     end
+    y = y - 8
 
+    -- Two-column GRID. Each section below is a closure that draws at the current (x, y) and advances y.
+    -- The driver at the end pairs LEFT[i] with RIGHT[i] on a shared row top, then drops BOTH columns to
+    -- the taller of the two before the next row - so the section headers line up across the columns. `x`
+    -- and `y` are mutated live, so the toggle/slider helpers draw into whichever column is active; `COLW`
+    -- is the per-column width and wide controls are stacked to fit it. (Section bodies keep their original
+    -- indentation to keep this refactor's diff readable.)
+    local COLGAP = 28
+    local COLW   = math.floor((w - COLGAP) / 2)
+    local leftX, rightX, topY = x, x + COLW + COLGAP, y
+
+    local function secTooltips()
     b:Sub("TOOLTIPS", x, y); y = y - 30
     toggle("Show my history with a player on their tooltip", function() return s.playerTooltip ~= false end,
         function(v) s.playerTooltip = v end,
@@ -2136,64 +2167,75 @@ local function renderSettings(b, C, x, y, w, win)
         end
         y = y - 4
     end
+    end
 
+    local function secStatTiles()
     b:Sub("STAT TILES", x, y); y = y - 30
     b:Label("Tile style", x, y - 2, C.subtext)
     T(b, b:Dropdown(x + 90, y), "Stat tile style",
         "How the stat tiles on the run scoreboard and detail pages look. Clean = flat dashboard tiles; "
         .. "Panel = darker WoW-style in-game tiles with a rank meter; Compact = data-rich cards with an "
-        .. "extra footer line. (The Overview and Bests hero cards use a fixed style to match the dungeon cards.)"):SetChoices(240, {
+        .. "extra footer line. (The Overview and Bests hero cards use a fixed style to match the dungeon cards.)"):SetChoices(210, {
         { "CLEAN", "Clean (dashboard)" }, { "PANEL", "Panel (WoW tiles)" }, { "COMPACT", "Compact (data-rich)" },
     }, function() return s.cardStyle or "PANEL" end, function(v) s.cardStyle = v; win:Refresh() end)
     y = y - 40
     -- Live preview of two stat tiles in the currently-selected style.
     do
         local pstyle = ({ CLEAN = "clean", PANEL = "panel", COMPACT = "compact" })[s.cardStyle or "COMPACT"] or "compact"
-        b:StatTile(x, y, { style = pstyle, width = 168, height = 96, iconSize = 22,
+        local tileW = math.min(168, math.floor((COLW - 12) / 2))
+        b:StatTile(x, y, { style = pstyle, width = tileW, height = 96, iconSize = 22,
             label = "AVG SCORE", value = "112.4", accent = "a06cf0", icon = "trophy",
             sub = "best +18", footer = { "best +18", "3 timed" } })
-        b:StatTile(x + 180, y, { style = pstyle, width = 168, height = 96, iconSize = 22,
+        b:StatTile(x + tileW + 12, y, { style = pstyle, width = tileW, height = 96, iconSize = 22,
             label = "TIMED", value = "86%", accent = "33dd66", icon = "circle-check",
             sub = "42 of 49 this season", footer = { "42 of 49", "this season" } })
-        b:Label("Live preview of the selected style.", x + 360, y - 28, C.subtext, 10)
-        y = y - 96 - 14
+        y = y - 96 - 6
+        b:Label("Live preview of the selected style.", x, y - 2, C.subtext, 10)
+        y = y - 18
+    end
     end
 
+    local function secDateTime()
     b:Sub("DATE & TIME", x, y); y = y - 30
     b:Label("Date format", x, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 90, y), "Date format",
+    T(b, b:Dropdown(x + 100, y), "Date format",
         "How dates are written throughout the ledger. NA = mm/dd/yy, ISO = yyyy-mm-dd, EU = dd/mm/yy. "
         .. "The local time is always shown next to the date."):SetChoices(200, {
         { "NA", "NA (mm/dd/yy)" }, { "ISO", "ISO (yyyy-mm-dd)" }, { "EU", "EU (dd/mm/yy)" },
     }, function() return s.dateFormat or "NA" end, function(v) s.dateFormat = v; win:Refresh() end)
-    T(b, b:Dropdown(x + 340, y), "Clock",
-        "12- or 24-hour clock for the time shown next to each date. Times are always in your local timezone."):SetChoices(160, {
+    y = y - 34
+    b:Label("Clock", x, y - 2, C.subtext)
+    T(b, b:Dropdown(x + 100, y), "Clock",
+        "12- or 24-hour clock for the time shown next to each date. Times are always in your local timezone."):SetChoices(180, {
         { "24H", "24-hour (21:33)" }, { "12H", "12-hour (9:33 PM)" },
     }, function() return s.clockFormat or "24H" end, function(v) s.clockFormat = v; win:Refresh() end)
-    y = y - 38
+    y = y - 34
     b:Label("Preview:  " .. Util.dateTime(time()), x, y - 2, C.subtext, 11)
-    y = y - 30
+    y = y - 26
+    end
 
+    local function secScoreboard()
     b:Sub("SCOREBOARD", x, y); y = y - 30
-    slider("Scale", 90, 200, 0.5, 3.0, 0.05, "%.2fx",
+    slider("Scale", 90, 180, 0.5, 3.0, 0.05, "%.2fx",
         function() return s.scoreboardScale or 1.5 end, function(v) s.scoreboardScale = v end,
         "How big the end-of-run scoreboard opens (still capped to fit your screen). Also: /ledger scale <n>.")
     b:Label("Font", x, y - 2, C.subtext)
-    b:FontSelect(x + 90, y, { width = 220, value = (s.scoreboardFont ~= "" and s.scoreboardFont) or "UBUNTU",
+    b:FontSelect(x + 90, y, { width = 200, value = (s.scoreboardFont ~= "" and s.scoreboardFont) or "UBUNTU",
         onChange = function(key) s.scoreboardFont = key end })
-    T(b, b:Button(x + 320, y, 130, "Use UI font", "default", function() s.scoreboardFont = ""; win:Refresh() end),
+    y = y - 30
+    T(b, b:Button(x, y, 130, "Use UI font", "default", function() s.scoreboardFont = ""; win:Refresh() end),
         "Use UI font", "Reset the scoreboard to use the same font as the rest of the UI.")
-    y = y - 40
+    y = y - 38
 
     toggle("Play a sound when the scoreboard opens", function() return s.scoreboardSound end,
         function(v) s.scoreboardSound = v end,
         "Play a sound (default: FFVII Victory Fanfare) when the scoreboard appears.")
     if s.scoreboardSound then
         b:Label("Sound", x, y - 2, C.subtext)
-        T(b, b:SoundSelect(x + 90, y, { width = 200, value = s.scoreboardSoundKey or "VictoryFanfare",
+        T(b, b:SoundSelect(x + 90, y, { width = 140, value = s.scoreboardSoundKey or "VictoryFanfare",
             channel = s.scoreboardSoundChannel or "Master",
             onChange = function(v) s.scoreboardSoundKey = v end }), "Scoreboard sound", "The sound played when the scoreboard opens.")
-        T(b, b:Button(x + 300, y, 70, "Test", "default", function()
+        T(b, b:Button(x + 238, y, 58, "Test", "default", function()
             local theme = _G.TAP and _G.TAP.uiTheme
             if theme and theme.PlaySound then theme:PlaySound(s.scoreboardSoundKey or "VictoryFanfare", s.scoreboardSoundChannel or "Master") end
         end, { icon = "volume", iconSize = 13 }), "Test sound", "Preview the selected scoreboard sound.")
@@ -2203,10 +2245,11 @@ local function renderSettings(b, C, x, y, w, win)
             "Which audio channel the scoreboard sound plays on (e.g. Master, or Sound FX so it follows that "
             .. "volume slider)."):SetChoices(150, CHANNEL_CHOICES,
             function() return s.scoreboardSoundChannel or "Master" end, function(v) s.scoreboardSoundChannel = v end)
-        b:Label("Play sound", x + 260, y - 2, C.subtext)
-        T(b, b:Dropdown(x + 340, y), "When to play the scoreboard sound",
+        y = y - 34
+        b:Label("Play sound", x, y - 2, C.subtext)
+        T(b, b:Dropdown(x + 90, y), "When to play the scoreboard sound",
             "End of run only = just the automatic post-run popup; Every view = also when you re-open a "
-            .. "scoreboard from history."):SetChoices(150, {
+            .. "scoreboard from history."):SetChoices(180, {
             { "END", "End of run only" }, { "ALWAYS", "Every time it's viewed" },
         }, function() return s.scoreboardSoundWhen or "END" end, function(v) s.scoreboardSoundWhen = v end)
         y = y - 36
@@ -2216,9 +2259,10 @@ local function renderSettings(b, C, x, y, w, win)
     end, { icon = "layout-grid", iconSize = 13 }), "Test scoreboard",
         "Open the end-of-run scoreboard with a sample run so you can preview your scale, font, tile style and sound.")
     y = y - 40
+    end
 
     -- DEATH REPORT: on-screen post-pull recap of who died and why.
-    do
+    local function secDeathReport()
         local dr = s.deathReport
         if type(dr) ~= "table" then dr = {}; s.deathReport = dr end
         b:Sub("DEATH REPORT", x, y); y = y - 30
@@ -2231,25 +2275,25 @@ local function renderSettings(b, C, x, y, w, win)
             b:Label("When", x, y - 2, C.subtext)
             T(b, b:Dropdown(x + 90, y), "When to show the report",
                 "As soon as combat drops = a report after every pull (that pull's new deaths only). At the end "
-                .. "of the run = one report of every death, when the key finishes."):SetChoices(240, {
+                .. "of the run = one report of every death, when the key finishes."):SetChoices(210, {
                 { "COMBAT", "As soon as combat drops" }, { "RUN_END", "At the end of the run" },
             }, function() return dr.trigger or "COMBAT" end, function(v) dr.trigger = v end)
             y = y - 40
             b:Label("Dismiss", x, y - 2, C.subtext)
             T(b, b:Dropdown(x + 90, y), "How the report goes away",
                 "Auto = it fades on its own after the time below. Click to dismiss = it stays on screen until "
-                .. "you click it (it captures the mouse while shown)."):SetChoices(240, {
+                .. "you click it (it captures the mouse while shown)."):SetChoices(210, {
                 { "AUTO", "Auto (fade after time)" }, { "CLICK", "Click to dismiss" },
             }, function() return dr.dismiss or "AUTO" end, function(v) dr.dismiss = v; win:Refresh() end)
             y = y - 40
             toggle("Only report my own deaths", function() return dr.onlyMe end, function(v) dr.onlyMe = v end,
                 "Show only your deaths, not the whole party's.")
             if (dr.dismiss or "AUTO") == "AUTO" then
-                slider("On screen for", 130, 190, 2, 20, 1, "%.0fs",
+                slider("On screen for", 130, 170,2, 20, 1, "%.0fs",
                     function() return dr.duration or 6 end, function(v) dr.duration = v end,
                     "How long the overlay stays before it fades out.")
             end
-            slider("Max deaths shown", 130, 190, 3, 20, 1, "%.0f",
+            slider("Max deaths shown", 130, 170,3, 20, 1, "%.0f",
                 function() return dr.maxLines or 8 end, function(v) dr.maxLines = v end,
                 "Cap how many deaths are listed at once.")
 
@@ -2257,10 +2301,11 @@ local function renderSettings(b, C, x, y, w, win)
             b:Label("Font", x, y - 2, C.subtext)
             b:FontSelect(x + 90, y, { width = 200, value = (dr.font ~= "" and dr.font) or "UBUNTU",
                 onChange = function(key) dr.font = key; win:Refresh() end })
-            T(b, b:Button(x + 300, y, 120, "Use UI font", "default", function() dr.font = ""; win:Refresh() end),
+            y = y - 30
+            T(b, b:Button(x, y, 120, "Use UI font", "default", function() dr.font = ""; win:Refresh() end),
                 "Use UI font", "Use the same font as the rest of the UI.")
-            y = y - 40
-            slider("Text size", 130, 190, 10, 30, 1, "%.0f",
+            y = y - 38
+            slider("Text size", 130, 170,10, 30, 1, "%.0f",
                 function() return dr.fontSize or 15 end, function(v) dr.fontSize = v; win:Refresh() end, "Overlay text size.")
 
             b:Label("Header color", x, y - 2, C.subtext)
@@ -2276,7 +2321,7 @@ local function renderSettings(b, C, x, y, w, win)
                 b:Swatch(x + 110, y - 2, dr.bgColor or { 0.03, 0.04, 0.06, 0.82 }, refreshPrev,
                     "Panel color", "The backing panel color (opacity is the slider below).")
                 y = y - 30
-                slider("Panel opacity", 130, 190, 0, 1, 0.05, "%.2f",
+                slider("Panel opacity", 130, 170,0, 1, 0.05, "%.2f",
                     function() return (dr.bgColor and dr.bgColor[4]) or 0.82 end,
                     function(v) dr.bgColor = dr.bgColor or { 0.03, 0.04, 0.06, 0.82 }; dr.bgColor[4] = v; refreshPrev() end,
                     "How opaque the background panel is (0 = invisible).")
@@ -2298,6 +2343,7 @@ local function renderSettings(b, C, x, y, w, win)
         end
     end
 
+    local function secTracking()
     b:Sub("TRACKING", x, y); y = y - 30
     toggle("Track abandoned runs", function() return s.trackAbandoned end, function(v) s.trackAbandoned = v end,
         "Save keys you leave or reset before completion (kept apart from your timed %).")
@@ -2314,16 +2360,20 @@ local function renderSettings(b, C, x, y, w, win)
     toggle("Show minimap icon", function() return _G.TAP and _G.TAP.IsMinimapButtonShown and _G.TAP:IsMinimapButtonShown(ML.MODULE_ID) end,
         function(v) if _G.TAP and _G.TAP.SetMinimapButtonShown then _G.TAP:SetMinimapButtonShown(ML.MODULE_ID, v) end end,
         "Show a Mythic Ledger button on the minimap (left-click opens the ledger).")
+    end
 
-    b:Sub("RETURNING-PLAYER RECAP  (local only - never posted to group)", x, y); y = y - 30
+    local function secRecap()
+    b:Sub("RETURNING-PLAYER RECAP", x, y); y = y - 26
+    b:Label("Local only - never posted to group.", x, y - 2, C.subtext, 10); y = y - 22
     toggle("Show previous-player recaps", function() return rc.enabled end, function(v) rc.enabled = v end,
         "When you group with someone you've keyed with, print a short local-only reminder.")
     b:Label("Display", x, y - 2, C.subtext)
     T(b, b:Dropdown(x + 90, y), "Recap display", "Where recaps appear. Local chat is only visible to you."):SetChoices(160, {
         { "CHAT", "Local chat" }, { "TOAST", "Toast" }, { "BOTH", "Both" }, { "OFF", "Off" },
     }, function() return rc.display end, function(v) rc.display = v end)
-    b:Label("Detail", x + 270, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 320, y), "Recap detail", "How much a recap shows."):SetChoices(140, {
+    y = y - 34
+    b:Label("Detail", x, y - 2, C.subtext)
+    T(b, b:Dropdown(x + 90, y), "Recap detail", "How much a recap shows."):SetChoices(160, {
         { "COMPACT", "Compact" }, { "DETAILED", "Detailed" }, { "OFF", "Off" },
     }, function() return rc.detail end, function(v) rc.detail = v end)
     y = y - 34
@@ -2331,14 +2381,15 @@ local function renderSettings(b, C, x, y, w, win)
     T(b, b:Dropdown(x + 90, y), "Recap history", "Count shared runs from the current season only, or all seasons."):SetChoices(160, {
         { "SEASON", "Current season" }, { "ALL", "All seasons" },
     }, function() return rc.history end, function(v) rc.history = v end)
-    b:Label("Fires on", x + 270, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 340, y), "Recap trigger",
+    y = y - 34
+    b:Label("Fires on", x, y - 2, C.subtext)
+    T(b, b:Dropdown(x + 90, y), "Recap trigger",
         "When a recap fires. On join = as soon as a returning player is in your group; On ready check "
-        .. "= only when a ready check starts; Both = either. (It never fires on zoning in/out.)"):SetChoices(150, {
+        .. "= only when a ready check starts; Both = either. (It never fires on zoning in/out.)"):SetChoices(160, {
         { "JOIN", "On join" }, { "READY", "On ready check" }, { "BOTH", "Both" },
     }, function() return rc.trigger or "JOIN" end, function(v) rc.trigger = v end)
     y = y - 34
-    slider("Minimum shared runs", 200, 150, 1, 10, 1, "%d",
+    slider("Minimum shared runs", 160, 130, 1, 10, 1, "%d",
         function() return rc.minShared or 1 end, function(v) rc.minShared = v end,
         "Only recap someone once you've done at least this many keys together.")
     toggle("Include performance averages", function() return rc.includeAverages end, function(v) rc.includeAverages = v end,
@@ -2351,10 +2402,10 @@ local function renderSettings(b, C, x, y, w, win)
         "Play a sound once per group (a single sound even if several returning players are found).")
     if rc.sound then
         b:Label("Sound", x, y - 2, C.subtext)
-        T(b, b:SoundSelect(x + 90, y, { width = 200, value = rc.soundKey or "Applause",
+        T(b, b:SoundSelect(x + 90, y, { width = 140, value = rc.soundKey or "Applause",
             channel = rc.soundChannel or "Master",
             onChange = function(v) rc.soundKey = v end }), "Recap sound", "The sound played when a returning player is detected.")
-        T(b, b:Button(x + 300, y, 70, "Test", "default", function()
+        T(b, b:Button(x + 238, y, 58, "Test", "default", function()
             local theme = _G.TAP and _G.TAP.uiTheme
             if theme and theme.PlaySound then theme:PlaySound(rc.soundKey or "Applause", rc.soundChannel or "Master") end
         end, { icon = "volume", iconSize = 13 }), "Test sound", "Preview the selected recap sound.")
@@ -2379,10 +2430,12 @@ local function renderSettings(b, C, x, y, w, win)
             b:Label("|cff5a606c" .. "\226\128\162" .. "|r  " .. ln, x + pad + 4, ty - 2, C.text, 11); ty = ty - 17
         end
         ty = ty - pad
-        b:Box(x, top, w - 8, top - ty, 0.06, 0, C.accent)
+        b:Box(x, top, COLW - 8, top - ty, 0.06, 0, C.accent)
         y = ty - 14
     end
+    end
 
+    local function secRetention()
     b:Sub("DATA RETENTION", x, y); y = y - 30
     -- The scope, numeric cap and keep-top toggle only STAGE a policy; nothing is removed until Apply
     -- is clicked (guarding against accidental deletion). The applied policy still auto-enforces as new
@@ -2397,13 +2450,13 @@ local function renderSettings(b, C, x, y, w, win)
     b:Label("Retain", x, y - 2, C.subtext)
     T(b, b:Dropdown(x + 90, y), "Retention scope",
         "Which runs to keep. Current season / expansion delete every run OUTSIDE that window when you "
-        .. "Apply; All keeps every season. Runs recorded before this tag existed are always kept."):SetChoices(230, {
+        .. "Apply; All keeps every season. Runs recorded before this tag existed are always kept."):SetChoices(200, {
         { "ALL", "All seasons" }, { "SEASON", "Current season only" }, { "EXPANSION", "Current expansion only" },
     }, function() return retScopePending end, function(v) retScopePending = v; win:Refresh() end)
     y = y - 34
-    b:Label("Also cap to newest (0 = no cap)", x, y - 2, C.subtext)
+    b:Label("Also cap to newest (0 = no cap)", x, y - 2, C.subtext); y = y - 22
     -- Digits only, 0-10000; sanitised on commit. Only STAGES the value - Apply enforces it.
-    T(b, b:EditBox(x + 240, y, 90, tostring(retentionPending), function(txt)
+    T(b, b:EditBox(x, y, 90, tostring(retentionPending), function(txt)
         local n = tonumber((tostring(txt or "")):gsub("%D", "")) or 0
         if n > 10000 then n = 10000 end
         retentionPending = n
@@ -2429,7 +2482,7 @@ local function renderSettings(b, C, x, y, w, win)
     if dirty then b:Label("staged - not yet applied", x + 100, y - 2, b.theme:Color("e0a030", C.subtext), 11) end
     y = y - 28
     local _, wh = b:Wrap("|cffe0a030Warning:|r applying removes every run that falls outside the policy above. "
-        .. "This permanently deletes runs and cannot be undone.", x, y, w - 20, { 0.85, 0.68, 0.35 }, 11)
+        .. "This permanently deletes runs and cannot be undone.", x, y, COLW - 20, { 0.85, 0.68, 0.35 }, 11)
     y = y - (wh + 14)
     T(b, b:Button(x, y, 160, "Delete All History", "danger", function()
         local theme = _G.TAP and _G.TAP.uiTheme
@@ -2438,11 +2491,28 @@ local function renderSettings(b, C, x, y, w, win)
             onConfirm = function() DB.WipeHistory(); win:Refresh() end })
     end, { icon = "trash", iconSize = 13 }), "Delete all", "Permanently erase every recorded run. Notes/tags are kept.")
     y = y - 44
+    end
 
+    local function secDebug()
     b:Sub("DEBUG", x, y); y = y - 30
     toggle("Debug logging", function() return s.debug end, function(v) s.debug = v; ML._debugEcho = v end,
         "Echo internal diagnostics to chat and the Debug page.")
-    return y - 24
+    end
+
+    -- Grid driver: pair LEFT[i] with RIGHT[i] on a shared row top, then drop BOTH columns to the taller
+    -- section so the next row of headers lines up across the columns. LEFT is ordered so its taller
+    -- sections sit opposite the taller RIGHT ones (Scoreboard vs Recap, Date & Time vs Debug), keeping
+    -- the leftover whitespace under the shorter section in each row small.
+    local LEFT  = { secTooltips, secScoreboard, secStatTiles, secDateTime, secDeathReport }
+    local RIGHT = { secTracking, secRecap, secRetention, secDebug }
+    local rowTop = topY
+    for i = 1, math.max(#LEFT, #RIGHT) do
+        local lb, rb = rowTop, rowTop
+        if LEFT[i]  then x, y = leftX,  rowTop; LEFT[i]();  lb = y end
+        if RIGHT[i] then x, y = rightX, rowTop; RIGHT[i](); rb = y end
+        rowTop = math.min(lb, rb) - 10
+    end
+    return rowTop - 14
 end
 
 ----------------------------------------------------------------------
@@ -3506,6 +3576,55 @@ function renderPlayerReview(b, C, x, y, w, win)
             or ((sv.note or "estimate") .. " · weight " .. pctOf(sv.weight) .. "%"))
     end
 
+    -- Avoidable-damage breakdown: the actual mechanics behind the Survival score, biggest first. Each is a
+    -- real Blizzard spell icon (hover = the game's spell tooltip) with the damage taken, a share bar, and
+    -- its % of your avoidable total. Reference only; it's the detail behind Survival and never changes it.
+    do
+        local av = m.attribution and m.attribution.avoidable
+        if av and #av > 0 then
+            local total = 0
+            for _, e in ipairs(av) do total = total + (e.amt or 0) end
+            if type(s.avoidableDamageTaken) == "number" and s.avoidableDamageTaken > total then total = s.avoidableDamageTaken end
+            local maxAmt = (av[1] and av[1].amt) or 0
+            local shown = math.min(#av, 8)
+            local more  = #av > shown
+            -- Header (y-16) + subtitle (y-34) + rows from y-52 (each 22px, 18px icon) + bottom pad.
+            local H = 56 + shown * 22 + (more and 16 or 0)
+            b:Box(LX, y, CW, H, 0.35, 0, C.card)
+            b:Box(LX, y, 3, H, 0.95, 2, theme:Color("e0a030"))
+            local you = m.isPlayer and "you" or "they"
+            b:Label(hlNums(string.format("Avoidable Damage - %s took %s from %d source%s", you,
+                Util.shortNum(total), #av, #av == 1 and "" or "s")), LX + 16, y - 16, C.text, 13)
+            b:Label("What's behind your Survival score - hover an icon for the spell. Reference only.",
+                LX + 16, y - 34, C.subtext, 10)
+            -- Right-aligned amount + % columns; the share bar fills the gap between the name and the amount.
+            local amtX, pctX = LX + CW - 150, LX + CW - 58
+            local bx = LX + 250
+            local bw = math.max(40, (amtX - 14) - bx)
+            local ry = y - 52
+            for i = 1, shown do
+                local e = av[i]
+                -- Icon top at `ry`; text/bar/amount centered on the icon (18px -> center ry-9).
+                local gi = avoidIcon(theme, b.content, i, 18)
+                gi:ClearAllPoints(); gi:SetPoint("TOPLEFT", b.content, "TOPLEFT", LX + 18, ry)
+                gi:SetSpell(e.id); gi:Show(); b:Transient(gi)
+                b:Label(spellNameOf(e.id) or ("Spell " .. tostring(e.id)), LX + 46, ry - 4, C.subtext, 11)
+                b:Box(bx, ry - 5, bw, 8, 0.16, 1, C.border)
+                if maxAmt > 0 and (e.amt or 0) > 0 then b:Box(bx, ry - 5, bw * ((e.amt or 0) / maxAmt), 8, 0.95, 2, theme:Color("e0a030")) end
+                b:Label(Util.shortNum(e.amt or 0), amtX, ry - 4, C.text, 11)
+                if total > 0 then b:Label(string.format("%d%%", math.floor((e.amt or 0) / total * 100 + 0.5)), pctX, ry - 4, C.subtext, 10) end
+                ry = ry - 22
+            end
+            -- Defensive: hide any pooled icons left from a render that showed more rows (Reset also clears them).
+            for i = shown + 1, #avoidIconPool do if avoidIconPool[i] then avoidIconPool[i]:Hide() end end
+            if more then
+                b:Label(string.format("+ %d more source%s", #av - shown, (#av - shown) == 1 and "" or "s"),
+                    LX + 46, ry - 2, C.subtext, 10)
+            end
+            y = y - H - 8
+        end
+    end
+
     -- Deaths
     local de = cats.deaths
     if de then
@@ -3555,56 +3674,7 @@ function renderPlayerReview(b, C, x, y, w, win)
 
     y = y - 10
 
-    -- HOW TARGETS WERE SET: explain the expected totals the score compared against.
-    y = b:Section("HOW TARGETS WERE SET", LX, y); y = y - 32
-    local function expl(title, body)
-        b:Label(hlNums(title), LX + 16, y - 2, C.text, 12)
-        local _, hh = b:Wrap(hlNums(body), LX + 16, y - 20, CW - 32, C.subtext, 10)
-        y = y - 22 - (hh or 12) - 8
-    end
-    if t and t.detail and t.detail.dps then
-        expl(string.format("Damage — %s DPS target  (%s %s, %.2fx)",
-                Util.shortNum(t.detail.dps.expected), didV, Util.shortNum(t.detail.dps.value), t.detail.dps.ratio or 0),
-            Poss .. " modeled share of the group's total damage this run - group-relative, so it scales with the party instead of a fixed number. Meeting the share is full marks; beating it never hurts.")
-    end
-    if t and t.detail and t.detail.hps then
-        local h = t.detail.hps
-        if h.requirementModel then
-            local rd = h.reqDetail or {}
-            local why = (sc.role == "TANK")
-                and string.format("Target = %d%% of your unavoidable damage taken (self-coverage by spec); the healer covers the rest. Output counts healing + absorbs.", math.floor((rd.selfCoverage or 0) * 100 + 0.5))
-                or "Target = the damage the group took that it couldn't self-cover (tank remainder + 90% of group unavoidable + a slice of avoidable). Standing in bad hits the stander's Survival, not your target. Output counts healing + absorbs."
-            expl(string.format("Healing — %s required  (%s %s, %.2fx)",
-                    Util.shortNum(h.expected), didV, Util.shortNum(h.value), h.ratio or 0), why)
-        else
-            expl(string.format("Healing — %s HPS target  (%s %s, %.2fx)",
-                    Util.shortNum(h.expected), didV, Util.shortNum(h.value), h.ratio or 0),
-                Poss .. " modeled share of the group's total healing. Tanks are expected to self-sustain a portion by spec.")
-        end
-    end
-    local iC = cats.interrupts
-    if iC and iC.applicable and iC.expected then
-        local kit = iC.interruptSpell and string.format("%s (%ds CD)%s", iC.interruptSpell, iC.interruptCD or 0,
-            iC.interruptExtras and (" + " .. iC.interruptExtras) or "") or (iC.profile or "?")
-        expl(string.format("Interrupts — ~%.1f target  (%s %s)", iC.expected, landedV, iC.actual and tostring(iC.actual) or "-"),
-            string.format("Your fair share of this run's kick supply. The season profile for %s puts ~%.0f kickable casts in reach (trash + the bosses you killed); that pool is split by each spec's kick cooldown — %s draws about %.0f%% of it. A teammate over-capping their share lowers everyone else's target instead of yours.",
-                r.dungeonName or "this dungeon", iC.supply or 0, kit, (iC.share or 0) * 100))
-    end
-    local dC = cats.dispels
-    if dC and dC.applicable and dC.expected then
-        expl(string.format("Dispels — ~%.1f target  (%s %s)", dC.expected, didV, dC.actual and tostring(dC.actual) or "-"),
-            string.format("Your fair share of this run's dispel/purge supply for the schools a %s kit can address. Each school's supply (from the season profile's trash + boss content) is split only among the teammates who can touch that school, so a school only you can cleanse lands entirely on you. Over-capping by a teammate lowers everyone else's target.",
-                dC.profile or "?"))
-    end
-    if Cfg and Cfg.survival then
-        expl(string.format("Survival — %.1f%% avoidable or less = 100, %.0f%%+ = 0",
-                (Cfg.survival.graceShare or 0.025) * 100, (Cfg.survival.zeroShare or 0.40) * 100),
-            "Scored purely on avoidable damage as a share of " .. poss .. " total damage taken - scale-free, so it ignores key level and health pools.")
-    end
-    if Cfg and Cfg.deaths then
-        expl("Deaths — 100 minus 25 per death",
-            "Every death is heavily penalised; four deaths zero the category. Dying is the single most costly thing that can happen to a run.")
-    end
+    -- (HOW TARGETS WERE SET now renders AFTER the coaching sections below - see the end of this function.)
 
     -- What went well.
     if review and #review.strengths > 0 then
@@ -3634,6 +3704,90 @@ function renderPlayerReview(b, C, x, y, w, win)
         y = b:Section("FOCUS ON", LX, y); y = y - 32
         b:Label("Nothing meaningful to fix - a clean key. Keep it up.", LX + 18, y - 2, theme:Color("6fd06f"), 12)
         y = y - 28
+    end
+
+    -- HOW TARGETS WERE SET: plain-language explanation of every target this player's score was measured
+    -- against, using their own numbers and a quick example. Drawn AFTER the coaching so the takeaways come
+    -- first. Reference only - none of it changes the score.
+    y = y - 4
+    y = b:Section("HOW YOUR TARGETS WERE SET", LX, y); y = y - 32
+    local youW = m.isPlayer and "you" or "they"
+    local YouW = m.isPlayer and "You" or "They"
+    local function expl(title, body)
+        b:Label(hlNums(title), LX + 16, y - 2, C.text, 12)
+        local _, hh = b:Wrap(hlNums(body), LX + 16, y - 20, CW - 32, C.subtext, 10)
+        y = y - 22 - (hh or 12) - 8
+    end
+    if t and t.detail and t.detail.dps then
+        local d = t.detail.dps
+        expl(string.format("Damage — %s DPS target  (%s %s, %.2fx)",
+                Util.shortNum(d.expected), didV, Util.shortNum(d.value), d.ratio or 0),
+            string.format("You're measured against a fair slice of the group's damage this run, not a fixed number - so a slow key and a fast key are judged the same. Meeting your slice is full marks; going over never hurts. Example: %s did %s against a %s target, about %.0f%% of it.",
+                youW, Util.shortNum(d.value), Util.shortNum(d.expected), (d.ratio or 0) * 100))
+    end
+    if t and t.detail and t.detail.hps then
+        local h = t.detail.hps
+        if h.requirementModel then
+            local rd = h.reqDetail or {}
+            local why = (sc.role == "TANK")
+                and string.format("As a tank you're expected to self-cover about %d%% of the unavoidable damage you take; the healer covers the rest. Healing and absorbs both count. Example: %s covered %s of the %s asked, about %.0f%%.",
+                    math.floor((rd.selfCoverage or 0) * 100 + 0.5), youW, Util.shortNum(h.value), Util.shortNum(h.expected), (h.ratio or 0) * 100)
+                or string.format("Your target is the damage the group couldn't self-cover - the tank's leftover plus most of the group's unavoidable damage. Someone standing in avoidable stuff hits their own Survival, not your target, and absorbs count as healing. Example: %s healed %s of the %s asked, about %.0f%%.",
+                    youW, Util.shortNum(h.value), Util.shortNum(h.expected), (h.ratio or 0) * 100)
+            expl(string.format("Healing — %s required  (%s %s, %.2fx)",
+                    Util.shortNum(h.expected), didV, Util.shortNum(h.value), h.ratio or 0), why)
+        else
+            expl(string.format("Healing — %s HPS target  (%s %s, %.2fx)",
+                    Util.shortNum(h.expected), didV, Util.shortNum(h.value), h.ratio or 0),
+                string.format("A fair slice of the group's healing this run, group-relative like damage. Tanks are expected to self-sustain some of it. Example: %s did %s against a %s target, about %.0f%%.",
+                    youW, Util.shortNum(h.value), Util.shortNum(h.expected), (h.ratio or 0) * 100))
+        end
+    end
+    local iC = cats.interrupts
+    if iC and iC.applicable and iC.expected then
+        local kit = iC.interruptSpell and string.format("%s (%ds CD)%s", iC.interruptSpell, iC.interruptCD or 0,
+            iC.interruptExtras and (" + " .. iC.interruptExtras) or "") or (iC.profile or "?")
+        expl(string.format("Interrupts — ~%.1f target  (%s %s)", iC.expected, landedV, iC.actual and tostring(iC.actual) or "-"),
+            string.format("Your fair share of the kicks in reach. %s had about %.0f kickable casts (trash + the bosses you killed), split by each spec's kick cooldown - %s draws roughly %.0f%% of them, so ~%.1f is your share. Landing that is full marks and extra never hurts; a teammate over-kicking lowers their share, not yours. Example: %s landed %s of ~%.1f.",
+                r.dungeonName or "This dungeon", iC.supply or 0, kit, (iC.share or 0) * 100, iC.expected,
+                youW, iC.actual and tostring(iC.actual) or "-", iC.expected))
+    end
+    local dC = cats.dispels
+    if dC and dC.applicable and dC.expected then
+        expl(string.format("Dispels — ~%.1f target  (%s %s)", dC.expected, didV, dC.actual and tostring(dC.actual) or "-"),
+            string.format("Your fair share of the dispels a %s kit can actually handle. Each school's cleanses (from this run's trash + bosses) are split only among teammates who can touch that school, so anything only you can clear falls entirely to you. Example: %s cleared %s of ~%.1f asked.",
+                dC.profile or "?", youW, dC.actual and tostring(dC.actual) or "-", dC.expected))
+    end
+    if Cfg and Cfg.survival then
+        local grace = (Cfg.survival.graceShare or 0.025) * 100
+        local zero  = (Cfg.survival.zeroShare or 0.40) * 100
+        local shr   = sv and sv.detail and sv.detail.avoidableShare
+        local body
+        if shr and type(s.avoidableDamageTaken) == "number" and type(s.damageTaken) == "number" then
+            body = string.format("Only damage %s could have dodged counts, as a share of all the damage %s took - so it's fair whatever the key level or health pool. %s took %.1f%% avoidable (%s of %s), scoring %d. %.1f%% or less is a perfect 100; %.0f%%+ is 0. Example: cutting that roughly in half moves this well up toward 100.",
+                youW, youW, YouW, shr * 100, Util.shortNum(s.avoidableDamageTaken), Util.shortNum(s.damageTaken), sv.score or 0, grace, zero)
+        else
+            body = string.format("Only damage %s could have dodged counts, as a share of all the damage %s took - scale-free, so key level and health pools don't matter. %.1f%% or less scores 100; %.0f%%+ scores 0.",
+                youW, youW, grace, zero)
+        end
+        expl(string.format("Survival — %.1f%% avoidable or less = 100, %.0f%%+ = 0", grace, zero), body)
+    end
+    if Cfg and Cfg.deaths then
+        local n = de and de.deaths
+        if n == nil then
+            expl("Deaths — no death data recorded",
+                "No death information was captured for this run, so the Death score is left neutral rather than guessed.")
+        elseif n == 0 then
+            expl(string.format("Deaths — no deaths, scored %d", (de and de.score) or 100),
+                string.format("%s didn't die - a perfect Death score. Dying is the single most expensive thing that can happen in a run, so a clean key really counts.", YouW))
+        else
+            local weighted = dcz and dczTotal > 0
+            expl(string.format("Deaths — %d death%s, -%d, scored %d", n, n == 1 and "" or "s", de.penalty or 0, de.score or 0),
+                string.format("Dying costs more than anything else in a run%s. %s died %d time%s for a %d-point hit, leaving %d.%s",
+                    weighted and ", and not every death costs the same: an avoidable-mechanic death hurts most, a missed-kick or unavoidable death less, and a pulled-aggro death least (see Death Causes above)" or "",
+                    YouW, n, n == 1 and "" or "s", de.penalty or 0, de.score or 0,
+                    weighted and " Example: turning your most costly death into a survived pull recovers the biggest chunk of these points." or " Example: one fewer death is the biggest single score gain available."))
+        end
     end
 
     return y - 14
@@ -3713,10 +3867,24 @@ function UI.ShowScoreboard(run, opts)
     local timelineOK = run.duration and run.duration > 0
 
     -- Hero highlights: the party leader for each metric (min for avoidable, max for the rest).
-    local function bestOf(key, cmp)
+    -- A member who took NO avoidable damage usually has it recorded as nil (shown as "-"), not 0 - the
+    -- meter simply never reported an avoidable hit. For the LEAST AVOIDABLE leader we must read that as
+    -- a true 0 (a clean run), matching the scoring normalize, so a genuinely clean player wins the crown
+    -- instead of being skipped in favor of someone who actually stood in something.
+    local function effAvoid(m)
+        local s = m.stats
+        if not s then return nil end
+        if type(s.avoidableDamageTaken) == "number" then return s.avoidableDamageTaken end
+        -- Participated (has any throughput / damage-taken number) but no avoidable logged => took 0.
+        if type(s.damageTaken) == "number" or type(s.dps) == "number" or type(s.damage) == "number"
+            or type(s.hps) == "number" or type(s.healing) == "number" then return 0 end
+        return nil   -- no usable data for this member at all
+    end
+    local function statVal(key) return function(m) return m.stats and m.stats[key] end end
+    local function bestOf(cmp, valueFn)
         local bestM, bestV
         for _, m in ipairs(run.party or {}) do
-            local v = m.stats and m.stats[key]
+            local v = valueFn(m)
             if type(v) == "number" then
                 if bestV == nil or (cmp == "min" and v < bestV) or (cmp == "max" and v > bestV) then
                     bestV, bestM = v, m
@@ -3726,16 +3894,19 @@ function UI.ShowScoreboard(run, opts)
         return bestM, bestV
     end
     local HERO_DEFS = {
-        { label = "TOP DPS",        key = "dps",                  cmp = "max", fmt = Util.shortNum, icon = "sword" },
-        { label = "TOP HPS",        key = "hps",                  cmp = "max", fmt = Util.shortNum, icon = "heartbeat" },
-        { label = "INTERRUPTS",     key = "interrupts",           cmp = "max", fmt = function(v) return string.format("%d", v) end, icon = "ban" },
-        { label = "DISPELS",        key = "dispels",              cmp = "max", fmt = function(v) return string.format("%d", v) end, icon = "sparkles" },
-        { label = "LEAST AVOIDABLE",key = "avoidableDamageTaken", cmp = "min", fmt = Util.shortNum, icon = "shield" },
+        { label = "TOP DPS",        cmp = "max", val = statVal("dps"),        fmt = Util.shortNum, icon = "sword" },
+        { label = "TOP HPS",        cmp = "max", val = statVal("hps"),        fmt = Util.shortNum, icon = "heartbeat" },
+        { label = "INTERRUPTS",     cmp = "max", val = statVal("interrupts"), fmt = function(v) return string.format("%d", v) end, icon = "ban" },
+        { label = "DISPELS",        cmp = "max", val = statVal("dispels"),    fmt = function(v) return string.format("%d", v) end, icon = "sparkles" },
+        -- Lower is better; a clean 0 IS worth crowning, so this card shows even when the leader is at 0.
+        { label = "LEAST AVOIDABLE",cmp = "min", val = effAvoid,              fmt = Util.shortNum, icon = "shield", showZero = true },
     }
     local heroes = {}
     for _, h in ipairs(HERO_DEFS) do
-        local m, v = bestOf(h.key, h.cmp)
-        if m and v and v > 0 then heroes[#heroes + 1] = { label = h.label, member = m, value = v, fmt = h.fmt, icon = h.icon } end
+        local m, v = bestOf(h.cmp, h.val)
+        if m and v and (h.showZero or v > 0) then
+            heroes[#heroes + 1] = { label = h.label, member = m, value = v, fmt = h.fmt, icon = h.icon }
+        end
     end
     local heroStyle = ({ CLEAN = "clean", PANEL = "panel", COMPACT = "compact" })[DB.Settings().cardStyle] or "compact"
 

@@ -545,5 +545,16 @@ function Mixin:NavRow(parent, width)
         -- Pause the attention pulse while selected; resume on deselect if still wanted.
         if sel then self:StopPulse() elseif self._wantPulse then self:StartPulse() end
     end
+
+    -- Compact (icon-only) mode for a collapsed sidebar: hide the label and center the icon.
+    function b:SetCompact(compact)
+        self._compact = compact and true or false
+        self.icon:ClearAllPoints()
+        if self._compact then
+            self.icon:SetPoint("CENTER", 0, 0); self.fs:Hide()
+        else
+            self.icon:SetPoint("LEFT", 12, 0); self.fs:Show()
+        end
+    end
     return b
 end
