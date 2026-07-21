@@ -5,6 +5,13 @@ local ADDON, ML = ...
 ML.CHANGELOG = [==[
 # Mythic Ledger - What's New
 
+## 1.0.0-beta.9
+
+Part of the platform's new **two-tier navigation** (TAP 1.5.0-beta.1).
+
+- **[NEW]** **Every page is now a sidebar row.** Overview, Runs, Dungeons, Characters, Players, Bests, Settings and Debug live in the left sidebar under the **Mythic Ledger** category (with the Dungeon Guide) instead of an in-body tab strip. Opening a run, player, dungeon or the player review still happens in place, and Back returns where you came from.
+- **[CHANGE]** **Settings, reorganized into sub-tabs.** The two-column Settings grid is replaced by in-body sub-tabs - **Appearance, Tooltips, Scoreboard, Death Report, Tracking, Recap, Data, Debug** - each showing one focused area full-width. *(Beta: please report any navigation quirks.)*
+
 ## 1.0.0-beta.8
 
 **Missed Kick** deaths, a new on-screen **death report**, and an **avoidable-damage breakdown** with clearer, personalized coaching - building on beta.7's attribution. The scoring change below **re-scores your existing runs automatically** on login.

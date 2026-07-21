@@ -3,6 +3,21 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
+## 1.5.0-beta.1
+
+A ground-up **navigation overhaul**. Each installed add-on now gets its own **category in the left sidebar**, and its pages live there as sub-items - so a feature-rich module's pages are discoverable at a glance instead of crammed into an in-body tab strip. Freeing that in-body top-nav lets a page carry its **own sub-tabs** (the Mythic Ledger Settings page is the first to use them). *(Beta: please report any navigation or rendering quirks.)*
+
+**Platform**
+
+- **[NEW]** **Two-tier sidebar navigation.** The old single "Modules" list is replaced by one **collapsible category per add-on** (Mythic Ledger, Combat Alerts, Focus Target Interrupt, Rotation Assistant), with each module's pages as sub-rows. Only the add-on you're in stays expanded (accordion), so the list stays tidy. The Dungeon Guide now sits inside the Mythic Ledger category.
+- **[NEW]** **Page-level sub-tabs.** With top-level nav in the sidebar, the in-body top-nav is free for a page's own tabs.
+- **[CHANGE]** **Every module's tabs moved to the sidebar.** Combat Alerts (Alerts / Profiles / Settings), Focus Target Interrupt (Macros / Marker Palette / Announce / Settings), and Rotation Assistant (Behavior / Indicators / Appearance / Settings) now list their pages in the sidebar. Drill-downs (a run's details, a rule's editor) still open in-body over the page they came from. Deep links, minimap buttons and slash commands are unchanged.
+
+### Mythic Ledger (1.0.0-beta.9)
+
+- **[NEW]** **All eight pages in the sidebar.** Overview, Runs, Dungeons, Characters, Players, Bests, Settings and Debug are now sidebar sub-rows under the **Mythic Ledger** category. Clicking a run/player/dungeon still opens its detail view in place, with Back returning where you came from.
+- **[CHANGE]** **Settings, reorganized into sub-tabs.** The cramped two-column Settings grid is replaced by in-body sub-tabs - **Appearance, Tooltips, Scoreboard, Death Report, Tracking, Recap, Data, Debug** - each showing one focused area full-width.
+
 ## 1.4.0
 
 Death attribution grows a **Missed Kick** cause and an on-screen **death report**, the player review gains an **avoidable-damage breakdown** and plain-language target explanations, and the platform window is now **collapsible and resizable**. Each module's full notes also live in its in-game **What's New** (`/tap` > module > *What's New*).
