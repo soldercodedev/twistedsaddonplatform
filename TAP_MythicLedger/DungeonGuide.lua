@@ -313,12 +313,14 @@ Suite:RegisterModule({
     addon    = ML.ADDON,
     default  = true,
     group      = "Mythic Ledger",   -- share the addon category with the main Ledger module
-    groupOrder = 2,                 -- our page sorts after the Ledger's pages
+    groupOrder = 2,
     rendersWhenDisabled = true,     -- pure reference: always viewable
     OnEnable   = function() end,
     OnDisable  = function() end,
     OnSelect   = function() end,
     OnDeselect = function() Guide.Hide() end,
+    -- navOrder slots this row directly under the Ledger's Overview (key 101) instead of after its whole
+    -- page list. The Ledger is groupOrder 1, so Overview = 1*100+1 = 101 and Runs = 102; 101.5 sits between.
     pages = { { id = "guide", label = "Dungeon Guide", icon = "clipboard", default = true,
-                disabledSafe = true, render = renderGuide } },
+                disabledSafe = true, navOrder = 101.5, render = renderGuide } },
 })

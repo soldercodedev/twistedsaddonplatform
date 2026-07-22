@@ -322,7 +322,12 @@ local function pageOverview(b, win)
         b:Glyph(x + 12, hy - 3, { icon = spec.groupIcon or spec.icon, size = 20, color = enabled and C.accent or C.subtext })
         local titleFs = b:Label(rowTitle, x + 42, hy - 5, enabled and C.text or C.subtext, 13)
         local mver = addonVersion(spec.addon)
-        if mver then b:Badge(x + 42 + (titleFs:GetStringWidth() or 60) + 10, hy - 4, { text = "v" .. mver, variant = "neutral" }) end
+        if mver then
+            -- Green for a stable release, blue for a beta/alpha/rc pre-release (detected in the version string).
+            local isPre = mver:lower():find("beta") or mver:lower():find("alpha") or mver:lower():find("rc")
+            b:Badge(x + 42 + (titleFs:GetStringWidth() or 60) + 10, hy - 4,
+                { text = "v" .. mver, variant = isPre and "info" or "success" })
+        end
         statusBadge(b, lead, x + rowW - 200 - rpad, hy - 5)
         b:Toggle(x + rowW - 112 - rpad, hy - 4, enabled, function(v) setAddonModulesEnabled(spec.addon or spec.id, v) end, { color = C.accent })
         b:Button(x + rowW - 66 - rpad, hy, 66, "Open", "default", function()
@@ -878,22 +883,32 @@ local function buildModuleCategories(pages)
         local isActive = false
         for _, mod in ipairs(g.modules) do if mod.spec.id == activeMod then isActive = true; break end end
         pages[#pages + 1] = { header = label, collapsible = true, collapsed = not isActive, accordion = true }
+        -- Flatten every page of every module in this addon into one ordered list. A page sorts by its
+        -- own `navOrder` when set, else by (module groupOrder, page index) - so a companion module (e.g.
+        -- Dungeon Guide) can slot its page next to a specific host page (right under Overview) instead of
+        -- only ever appearing after the host module's entire list. Keys are unique, so the sort is stable.
+        local entries = {}
         for _, mod in ipairs(g.modules) do
-            local m = mod
+            local m, base, i = mod, (mod.spec.groupOrder or 50) * 100, 0
             for _, page in ipairs(modulePages(m)) do
-                local pg = page
-                pages[#pages + 1] = {
-                    view  = pageView(m.spec.id, pg.id),
-                    label = pg.label or m.spec.title or m.spec.id,
-                    icon  = (pg.icon and theme:ResolveIcon(pg.icon)) or moduleNavIcon(m.spec),
-                    titleSuffix = pg.titleSuffix or ("  ·  " .. (m.spec.title or m.spec.id)
-                        .. (pg.label and (" · " .. pg.label) or "")),
-                    subViews = pg.subViews,
-                    render = function(b, w2) return renderPage(b, w2, m, pg) end,
-                    onSelect = function(w2) onPageEnter(w2, m, pg) end,
-                    onDeselect = function(w2, incoming) onPageLeave(w2, m, pg, incoming) end,
-                }
+                i = i + 1
+                entries[#entries + 1] = { m = m, pg = page, key = page.navOrder or (base + i) }
             end
+        end
+        table.sort(entries, function(a, bb) return a.key < bb.key end)
+        for _, e in ipairs(entries) do
+            local m, pg = e.m, e.pg
+            pages[#pages + 1] = {
+                view  = pageView(m.spec.id, pg.id),
+                label = pg.label or m.spec.title or m.spec.id,
+                icon  = (pg.icon and theme:ResolveIcon(pg.icon)) or moduleNavIcon(m.spec),
+                titleSuffix = pg.titleSuffix or ("  ·  " .. (m.spec.title or m.spec.id)
+                    .. (pg.label and (" · " .. pg.label) or "")),
+                subViews = pg.subViews,
+                render = function(b, w2) return renderPage(b, w2, m, pg) end,
+                onSelect = function(w2) onPageEnter(w2, m, pg) end,
+                onDeselect = function(w2, incoming) onPageLeave(w2, m, pg, incoming) end,
+            }
         end
     end
 end

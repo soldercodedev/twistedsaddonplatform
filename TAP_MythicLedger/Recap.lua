@@ -145,7 +145,7 @@ end
 local function scan()
     local cfg = DB.Recap()
     if not cfg or not cfg.enabled then return end
-    if cfg.detail == ML.RECAP_DETAIL.OFF or cfg.display == ML.RECAP_DISPLAY.OFF then return end
+    if cfg.display == ML.RECAP_DISPLAY.OFF then return end
     if not IsInGroup() then return end
     -- Never recap during an active or completing key. That window IS the dungeon start/finish, where
     -- the just-saved run would flip the whole group to "returning" and re-toast everyone - and where
@@ -312,8 +312,8 @@ end
 function Recap.Simulate(n)
     n = math.max(1, math.min(4, tonumber(n) or 2))
     local cfg = DB.Recap()
-    if not cfg or not cfg.enabled or cfg.display == ML.RECAP_DISPLAY.OFF or cfg.detail == ML.RECAP_DETAIL.OFF then
-        ML.Print("Recaps are disabled in Settings - enable them (and pick a display) to preview.")
+    if not cfg or not cfg.enabled or cfg.display == ML.RECAP_DISPLAY.OFF then
+        ML.Print("Regroup recaps are disabled in Settings - enable them (and pick a display) to preview.")
         return
     end
     local minShared = tonumber(cfg.minShared) or 1
@@ -348,8 +348,8 @@ function Recap.Simulate(n)
         end
         return
     end
-    ML.Print("Simulating a group with %d returning player%s (display: %s, detail: %s):",
-        #ready, #ready == 1 and "" or "s", cfg.display, cfg.detail)
+    ML.Print("Simulating a group with %d returning player%s (display: %s):",
+        #ready, #ready == 1 and "" or "s", cfg.display)
     for _, e in ipairs(ready) do
         emit(e.name, e.rc, cfg)
     end

@@ -2197,8 +2197,20 @@ local SETTINGS_TABS = {
     { "scoreboard",  "Scoreboard",   "award" },
     { "deathreport", "Death Report", "skull" },
     { "tracking",    "Tracking",     "activity" },   -- Tracking + Data retention (2-column)
-    { "recap",       "Recap",        "users" },
+    { "regroup",     "Regroup",      "users" },
     { "misc",        "Misc",         "tools" },       -- Debug logging + minimap
+}
+
+-- Title + one-line description shown as a page heading below the sub-tab bar, matching every other
+-- /tap page. Keyed by the sub-tab id above.
+local SETTINGS_META = {
+    appearance  = { "Appearance",   "How the ledger looks - the stat-tile style, and the date & time format used throughout." },
+    tooltips    = { "Tooltips",     "Add your shared Mythic+ history with a player to their Blizzard tooltip, and choose where it appears." },
+    scoreboard  = { "Scoreboard",   "The end-of-run scoreboard: how it's scaled, its font, and the sound it plays." },
+    deathreport = { "Death Report", "An on-screen overlay after each pull (or at the run's end) listing who died and why." },
+    tracking    = { "Tracking",     "What gets recorded, the post-run summary, and how long your history is kept." },
+    regroup     = { "Regroup",      "When you group up again with someone you've keyed with, show a short local-only recap of your history together." },
+    misc        = { "Misc",         "Debug logging, and the minimap button." },
 }
 
 local function renderSettings(b, C, x, y, w, win)
@@ -2233,7 +2245,6 @@ local function renderSettings(b, C, x, y, w, win)
     local COLW = w
 
     local function secTooltips()
-    b:Sub("TOOLTIPS", x, y); y = y - 30
     toggle("Show my history with a player on their tooltip", function() return s.playerTooltip ~= false end,
         function(v) s.playerTooltip = v end,
         "Adds your shared Mythic+ history (keys together, timed %, best key, averages, your notes) to a "
@@ -2328,7 +2339,6 @@ local function renderSettings(b, C, x, y, w, win)
     end
 
     local function secScoreboard()
-    b:Sub("SCOREBOARD", x, y); y = y - 30
     slider("Scale", 90, 180, 0.5, 3.0, 0.05, "%.2fx",
         function() return s.scoreboardScale or 1.5 end, function(v) s.scoreboardScale = v end,
         "How big the end-of-run scoreboard opens (still capped to fit your screen). Also: /ledger scale <n>.")
@@ -2381,19 +2391,19 @@ local function renderSettings(b, C, x, y, w, win)
         if type(dr) ~= "table" then dr = {}; s.deathReport = dr end
         local fullW, baseX = COLW, x
         local halfW = math.floor((COLW - 28) / 2)
-        b:Sub("DEATH REPORT", x, y); y = y - 30
-        toggle("On-screen death report after each pull", function() return dr.enabled end,
+        local refreshPrev = function() if ML.DeathReport and ML.DeathReport.RefreshPreview then ML.DeathReport.RefreshPreview() end end
+        local rowTop = y
+
+        -- LEFT column: behavior. The enable switch lives here now (as "Enable Death Report"); the rest of
+        -- the behavior controls appear once it's on.
+        x, COLW = baseX, halfW
+        b:Sub("BEHAVIOR", x, y, halfW); y = y - 30
+        toggle("Enable Death Report", function() return dr.enabled end,
             function(v) dr.enabled = v; win:Refresh() end,
             "After combat drops (or at the run's end), flash a short overlay listing who died since the last "
             .. "report and why - time in the key, the killing blow, and the cause (including a missed kick's "
             .. "cast). Repost the last one to party chat with /ledger deathreport.")
         if dr.enabled then
-            local refreshPrev = function() if ML.DeathReport and ML.DeathReport.RefreshPreview then ML.DeathReport.RefreshPreview() end end
-            local rowTop = y
-
-            -- LEFT column: behavior (when / dismiss / limits).
-            x, COLW = baseX, halfW
-            b:Label("BEHAVIOR", x, y - 2, C.subtext, 10); y = y - 22
             b:Label("When", x, y - 2, C.subtext)
             T(b, b:Dropdown(x + 90, y), "When to show the report",
                 "As soon as combat drops = a report after every pull (that pull's new deaths only). At the end "
@@ -2419,11 +2429,13 @@ local function renderSettings(b, C, x, y, w, win)
             slider("Max deaths shown", 130, 170, 3, 20, 1, "%.0f",
                 function() return dr.maxLines or 8 end, function(v) dr.maxLines = v end,
                 "Cap how many deaths are listed at once.")
-            local lb = y
+        end
+        local lb = y
 
+        if dr.enabled then
             -- RIGHT column: appearance (font / size / colors / panel).
             x, y, COLW = baseX + halfW + 28, rowTop, halfW
-            b:Label("APPEARANCE", x, y - 2, C.subtext, 10); y = y - 22
+            b:Sub("APPEARANCE", x, y, halfW); y = y - 30
             b:Label("Font", x, y - 2, C.subtext)
             b:FontSelect(x + 90, y, { width = 200, value = (dr.font ~= "" and dr.font) or "UBUNTU",
                 onChange = function(key) dr.font = key; win:Refresh() end })
@@ -2454,7 +2466,7 @@ local function renderSettings(b, C, x, y, w, win)
 
             -- Full width below both columns: live preview (all four causes) + Test / Move.
             x, y, COLW = baseX, math.min(lb, rb) - 12, fullW
-            b:Label("Preview", x, y - 2, C.subtext); y = y - 24
+            b:Sub("PREVIEW", x, y, fullW); y = y - 30
             local ph = (ML.DeathReport and ML.DeathReport.RenderPreview and ML.DeathReport.RenderPreview(b, x, y)) or 40
             y = y - ph - 14
             T(b, b:Button(x, y, 90, "Test", "default", function() if ML.DeathReport then ML.DeathReport.Test() end end,
@@ -2484,36 +2496,30 @@ local function renderSettings(b, C, x, y, w, win)
         "After a reload/disconnect with an unfinished key, ask before saving it as abandoned.")
     end
 
-    local function secRecap()
+    local function secRegroup()
     local fullW, baseX = COLW, x
     local halfW = math.floor((COLW - 28) / 2)
-    b:Sub("RETURNING-PLAYER RECAP", x, y); y = y - 26
     b:Label("Local only - never posted to group.", x, y - 2, C.subtext, 10); y = y - 22
-    toggle("Show previous-player recaps", function() return rc.enabled end, function(v) rc.enabled = v end,
-        "When you group with someone you've keyed with, print a short local-only reminder.")
+    toggle("Show a recap when a past teammate returns", function() return rc.enabled end, function(v) rc.enabled = v end,
+        "When you group up again with someone you've keyed with, print a short local-only recap of your history together.")
     local rowTop = y
 
     -- LEFT column: when it fires + what it counts.
     x, COLW = baseX, halfW
-    b:Label("TRIGGERS", x, y - 2, C.subtext, 10); y = y - 22
+    b:Sub("TRIGGERS", x, y, halfW); y = y - 30
     b:Label("Display", x, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 90, y), "Recap display", "Where recaps appear. Local chat is only visible to you."):SetChoices(180, {
+    T(b, b:Dropdown(x + 90, y), "Regroup display", "Where the recap appears. Local chat is only visible to you."):SetChoices(180, {
         { "CHAT", "Local chat" }, { "TOAST", "Toast" }, { "BOTH", "Both" }, { "OFF", "Off" },
     }, function() return rc.display end, function(v) rc.display = v end)
     y = y - 34
-    b:Label("Detail", x, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 90, y), "Recap detail", "How much a recap shows."):SetChoices(180, {
-        { "COMPACT", "Compact" }, { "DETAILED", "Detailed" }, { "OFF", "Off" },
-    }, function() return rc.detail end, function(v) rc.detail = v end)
-    y = y - 34
     b:Label("History", x, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 90, y), "Recap history", "Count shared runs from the current season only, or all seasons."):SetChoices(180, {
+    T(b, b:Dropdown(x + 90, y), "Regroup history", "Count shared runs from the current season only, or all seasons."):SetChoices(180, {
         { "SEASON", "Current season" }, { "ALL", "All seasons" },
     }, function() return rc.history end, function(v) rc.history = v end)
     y = y - 34
     b:Label("Fires on", x, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 90, y), "Recap trigger",
-        "When a recap fires. On join = as soon as a returning player is in your group; On ready check "
+    T(b, b:Dropdown(x + 90, y), "Regroup trigger",
+        "When the recap fires. On join = as soon as a returning player is in your group; On ready check "
         .. "= only when a ready check starts; Both = either. (It never fires on zoning in/out.)"):SetChoices(180, {
         { "JOIN", "On join" }, { "READY", "On ready check" }, { "BOTH", "Both" },
     }, function() return rc.trigger or "JOIN" end, function(v) rc.trigger = v end)
@@ -2525,7 +2531,7 @@ local function renderSettings(b, C, x, y, w, win)
 
     -- RIGHT column: what a recap includes + its sound.
     x, y, COLW = baseX + halfW + 28, rowTop, halfW
-    b:Label("INCLUDE", x, y - 2, C.subtext, 10); y = y - 22
+    b:Sub("INCLUDE", x, y, halfW); y = y - 30
     toggle("Performance averages", function() return rc.includeAverages end, function(v) rc.includeAverages = v end,
         "Add role-relevant averages (e.g. DPS/HPS, deaths) to the recap line.")
     toggle("Last-run result", function() return rc.includeLastResult end, function(v) rc.includeLastResult = v end,
@@ -2538,15 +2544,15 @@ local function renderSettings(b, C, x, y, w, win)
         b:Label("Sound", x, y - 2, C.subtext)
         T(b, b:SoundSelect(x + 90, y, { width = 150, value = rc.soundKey or "Applause",
             channel = rc.soundChannel or "Master",
-            onChange = function(v) rc.soundKey = v end }), "Recap sound", "The sound played when a returning player is detected.")
+            onChange = function(v) rc.soundKey = v end }), "Regroup sound", "The sound played when a returning player is detected.")
         T(b, b:Button(x + 248, y, 58, "Test", "default", function()
             local theme = _G.TAP and _G.TAP.uiTheme
             if theme and theme.PlaySound then theme:PlaySound(rc.soundKey or "Applause", rc.soundChannel or "Master") end
-        end, { icon = "volume", iconSize = 13 }), "Test sound", "Preview the selected recap sound.")
+        end, { icon = "volume", iconSize = 13 }), "Test sound", "Preview the selected sound.")
         y = y - 34
         b:Label("Channel", x, y - 2, C.subtext)
-        T(b, b:Dropdown(x + 90, y), "Recap sound channel",
-            "Which audio channel the recap sound plays on."):SetChoices(150, CHANNEL_CHOICES,
+        T(b, b:Dropdown(x + 90, y), "Regroup sound channel",
+            "Which audio channel the sound plays on."):SetChoices(150, CHANNEL_CHOICES,
             function() return rc.soundChannel or "Master" end, function(v) rc.soundChannel = v end)
         y = y - 34
     end
@@ -2659,9 +2665,12 @@ local function renderSettings(b, C, x, y, w, win)
         scoreboard  = { single = { secScoreboard } },
         deathreport = { single = { secDeathReport } },
         tracking    = { cols   = { { secTracking }, { secRetention } } },
-        recap       = { single = { secRecap } },
+        regroup     = { single = { secRegroup } },
         misc        = { single = { secDebug, secMinimap } },
     }
+    -- Page heading for the active sub-tab, below the sub-tab bar, matching every other /tap page.
+    local smeta = SETTINGS_META[settingsTab] or SETTINGS_META.appearance
+    y = b:PageHeading(x, y, smeta[1], smeta[2], w)
     local spec = SUBTABS[settingsTab] or SUBTABS.appearance
     local bottom = y
     if spec.cols then
