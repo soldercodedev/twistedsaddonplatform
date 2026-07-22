@@ -2,7 +2,7 @@
 -- The control panel for the suite. `/tap` opens a UIFoundry window.
 --
 -- Navigation:
---   Suite     -> Overview (dashboard), Settings (appearance), Installed (hard load control)
+--   Suite     -> Overview (dashboard + enable/disable + fully-unload), Settings (appearance)
 --   Modules   -> ONE sidebar entry per registered sidecar, each its own page with a live
 --                on/off switch and that module's inline settings
 --   Help      -> About
@@ -252,21 +252,6 @@ local function whatsNewLink(b, spec, x, y)
     return y - 28
 end
 
--- The module (and its changelog) that a given plug-in addon folder provides, if any. One addon can
--- register MORE THAN ONE module (e.g. TAP_MythicLedger registers both Mythic Ledger and the Dungeon
--- Guide) - prefer whichever carries release notes, so the Installed page's "What's New" resolves to the
--- addon's changelog instead of a companion module that has none. Falls back to the first match.
-local function moduleForAddon(name)
-    local fallback
-    for _, mod in ipairs(Suite.modules) do
-        if mod.spec.addon == name then
-            if mod.spec.changelog then return mod end
-            fallback = fallback or mod
-        end
-    end
-    return fallback
-end
-
 ----------------------------------------------------------------------
 -- Page: Overview (dashboard - stats + a quick list that links to each module's page)
 ----------------------------------------------------------------------
@@ -298,6 +283,7 @@ local function pageOverview(b, win)
     y = b:Section("MODULES", x, y); y = y - 30
     local rowW = w - 48
     local rpad = 14   -- inset for the right-aligned controls, so they don't sit flush to the row edge
+    local seenAddons = {}   -- the "Fully disable" (hard unload) control shows once per add-on
     for _, mod in ipairs(Suite.modules) do
         local spec = mod.spec
         local yTop = y
@@ -317,8 +303,32 @@ local function pageOverview(b, win)
             local _, dh = b:Wrap(spec.desc, x + 42, y, rowW - 70, C.subtext, 10)
             y = y - (dh + 8)
         end
-        y = whatsNewLink(b, spec, x + 42, y)
-        y = y - 10
+        -- What's New + (once per add-on) a "Fully disable" that unloads the add-on's code (reload).
+        local wnY = y
+        if spec.changelog then
+            b:Button(x + 42, wnY - 2, 116, "What's New", "default",
+                function() openWhatsNew(spec.title or spec.id, spec.changelog) end,
+                { icon = "sparkles", iconSize = 12, height = 22 })
+        end
+        if spec.addon and not seenAddons[spec.addon] then
+            seenAddons[spec.addon] = true
+            local aname, atitle = spec.addon, (spec.title or spec.addon)
+            local fx = (spec.changelog and (x + 42 + 124)) or (x + 42)
+            theme:SetTip(b:Button(fx, wnY - 2, 150, "Fully disable", "default", function()
+                theme:Confirm({
+                    title = "Fully disable " .. atitle .. "?",
+                    message = "The on/off toggle above just pauses this add-on. Fully disabling unloads its "
+                        .. "code and reloads the UI (frees memory). Re-enable it later from Blizzard's AddOns menu.",
+                    variant = "warning", confirmLabel = "Reload UI",
+                    onConfirm = function()
+                        if C_AddOns and C_AddOns.DisableAddOn then pcall(C_AddOns.DisableAddOn, aname) end
+                        if C_UI and C_UI.Reload then C_UI.Reload() end
+                    end,
+                })
+            end, { icon = "power", iconSize = 12, height = 22 }), "Fully disable",
+                "Unload " .. atitle .. " entirely (reloads the UI). Different from the on/off toggle above, which just pauses it live.")
+        end
+        y = wnY - 30
         b:Box(x, yTop, rowW, yTop - y, mod:IsEnabled() and 0.05 or 0.03, 0, mod:IsEnabled() and C.accent or C.card)
         if mod:IsEnabled() then b:VRule(x, yTop - 1, y + 1, 0, C.accent) end
         y = y - 16
@@ -499,12 +509,12 @@ local function pageSettings(b, win)
     y = b:Section("WINDOW SIZE", x, y); y = y - 36
     local m = managerDB()
     theme:SetTip(b:Slider(x, y):Configure(300, 900, 1720, 10,
-        function() return m.winW or 1000 end,
+        function() return m.winW or 1366 end,
         function(v) m.winW = v; applyWindowSizeWhenReleased(win) end, "%.0f px"),
         "Window width", "How wide the /tap window is. Release the slider to apply.")
     y = y - 42
     theme:SetTip(b:Slider(x, y):Configure(300, 560, 1180, 10,
-        function() return m.winH or 680 end,
+        function() return m.winH or 768 end,
         function(v) m.winH = v; applyWindowSizeWhenReleased(win) end, "%.0f px"),
         "Window height", "How tall the /tap window is. Release the slider to apply.")
     y = y - 30
@@ -537,95 +547,6 @@ local function pageSettings(b, win)
 end
 
 ----------------------------------------------------------------------
--- Page: Installed (hard load control - scan addons that depend on the suite)
-----------------------------------------------------------------------
-local function scanSidecars()
-    local out = {}
-    if not (C_AddOns and C_AddOns.GetNumAddOns) then return out end
-    local n = C_AddOns.GetNumAddOns() or 0
-    for i = 1, n do
-        local name = C_AddOns.GetAddOnInfo(i)
-        if name and name ~= "TAP" then
-            local deps = { C_AddOns.GetAddOnDependencies(i) }
-            local dependsOnSuite = false
-            for _, d in ipairs(deps) do if d == "TAP" then dependsOnSuite = true break end end
-            if dependsOnSuite then
-                local title = C_AddOns.GetAddOnMetadata(i, "Title") or name
-                local version = C_AddOns.GetAddOnMetadata(i, "Version")
-                local loaded = C_AddOns.IsAddOnLoaded(name)
-                local enabled = true
-                if C_AddOns.GetAddOnEnableState then
-                    local ok, state = pcall(C_AddOns.GetAddOnEnableState, name)
-                    if not ok then ok, state = pcall(C_AddOns.GetAddOnEnableState, nil, i) end
-                    if ok then enabled = (state or 0) > 0 end
-                end
-                out[#out + 1] = { name = name, title = title, version = version, loaded = loaded, enabled = enabled }
-            end
-        end
-    end
-    return out
-end
-
-local function setAddonEnabled(name, on)
-    if not C_AddOns then return end
-    local fn = on and C_AddOns.EnableAddOn or C_AddOns.DisableAddOn
-    if fn then pcall(fn, name) end
-end
-
-local function pageInstalled(b, win)
-    local C = theme.C
-    local w = b.contentWidth
-    local x, y = 24, -18
-
-    b:Heading("Installed Plugins", x, y, "h1"); y = y - 34
-    local _, hh = b:Wrap("These add-ons plug into the platform. Disabling one here unloads its code "
-        .. "completely (Blizzard addon disable + reload). Use a module's own page for the "
-        .. "reload-free on/off switch instead.", x, y, w - 44, C.subtext, 11)
-    y = y - (hh + 16)
-
-    local list = scanSidecars()
-    y = b:Section("PLATFORM ADD-ONS", x, y); y = y - 30
-
-    if #list == 0 then
-        b:Wrap("No platform plugin add-ons found in your AddOns folder yet.", x, y, w - 44, C.subtext, 12)
-        return y - 40
-    end
-
-    local rowW = w - 48
-    for _, ad in ipairs(list) do
-        local yTop = y
-        y = y - 12
-        -- Header band: controls centered within a 26px band (see pageOverview for the offsets).
-        local hy = y
-        b:Glyph(x + 12, hy - 3, { icon = "power", size = 20, color = ad.enabled and C.accent or C.subtext })
-        b:Label((ad.title:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")), x + 42, hy - 5, ad.enabled and C.text or C.subtext, 13)
-        b:Badge(x + rowW - 210, hy - 5,
-            { text = ad.loaded and "LOADED" or (ad.enabled and "ENABLED" or "DISABLED"),
-              variant = ad.loaded and "success" or (ad.enabled and "info" or "neutral") })
-        b:Button(x + rowW - 100, hy, 100, ad.enabled and "Disable" or "Enable",
-            ad.enabled and "danger" or "primary", function()
-                local turnOn = not ad.enabled
-                theme:Confirm({
-                    title = (turnOn and "Enable " or "Disable ") .. ad.name .. "?",
-                    message = (turnOn and "Enable this plugin and reload the UI to load it?"
-                        or "Disable this plugin and reload the UI to unload it completely?"),
-                    variant = turnOn and "info" or "warning",
-                    confirmLabel = "Reload UI",
-                    onConfirm = function() setAddonEnabled(ad.name, turnOn); C_UI.Reload() end,
-                })
-            end)
-        y = y - 26
-        local meta = ad.version and (ad.name .. "  ·  v" .. ad.version) or ad.name
-        b:Label(meta, x + 42, y, C.subtext, 10); y = y - 16
-        local amod = moduleForAddon(ad.name)
-        if amod then y = whatsNewLink(b, amod.spec, x + 42, y - 2) - 2 end
-        b:Box(x, yTop, rowW, yTop - y, 0.03, 0, C.card)
-        y = y - 14
-    end
-    return y - 8
-end
-
-----------------------------------------------------------------------
 -- Page: About
 ----------------------------------------------------------------------
 local function pageAbout(b, win)
@@ -652,10 +573,9 @@ local function pageAbout(b, win)
     -- Getting around (what the sidebar pages do)
     y = b:Section("GETTING AROUND", x, y); y = y - 30
     for _, line in ipairs({
-        { "Overview",    "See all your modules at a glance and jump to any one." },
+        { "Overview",    "Turn modules on or off, jump to any one, or fully unload an add-on." },
         { "Settings",    "Change the platform's look - theme, accent color and font." },
-        { "Installed",   "Fully load or unload the add-ons that plug in here." },
-        { "The sidebar", "Every module has its own page - click it to configure it." },
+        { "The sidebar", "Each add-on is a category; its pages sit under it - click one to open it." },
     }) do
         b:Label(line[1], x, y - 2, C.accent, 12)
         local _, lh = b:Wrap(line[2], x + 120, y, w - 44 - 120, C.subtext, 11)
@@ -880,7 +800,7 @@ local function renderPage(b, win, mod, page)
     local spec = mod.spec
     if not mod:IsEnabled() then
         if not spec.rendersWhenDisabled then
-            b:Wrap("This module is turned off. Switch it on from the Installed page to configure it.",
+            b:Wrap("This module is turned off. Switch it on from the Platform Overview page to configure it.",
                 x, y, w - 44, C.subtext, 12)
             return y - 40
         elseif not page.disabledSafe then
@@ -963,7 +883,6 @@ local function buildPages()
         { header = "Platform" },
         { view = "overview",  label = "Overview",  icon = theme:GetIcon("layout-grid"),            render = pageOverview },
         { view = "settings",  label = "Settings",  icon = theme:GetIcon("adjustments-horizontal"), render = pageSettings },
-        { view = "installed", label = "Installed", icon = theme:GetIcon("database"),               render = pageInstalled },
     }
     if #Suite.modules > 0 then buildModuleCategories(pages) end
     pages[#pages + 1] = { header = "Help" }
@@ -980,11 +899,11 @@ local function createWindow()
         name = UIF.NextId("TAPManagerWindow"),
         title = "Twisteds Addon Platform",
         logo = theme:GetIcon("adjustments-horizontal"),
-        width = 1000, height = 680, sidebarWidth = 220, contentWidth = 740,
+        width = 1366, height = 768, sidebarWidth = 220, contentWidth = 740,
         maximizable = true, maxWidthPct = 0.95, maxHeightPct = 0.95,
         contentFluid = true,   -- content stretches to the window width (and grows when maximized)
         -- Live window size, driven by the Settings sliders (falls back to the width/height above).
-        onSize = function() local m = managerDB(); return m.winW or 1000, m.winH or 680 end,
+        onSize = function() local m = managerDB(); return m.winW or 1366, m.winH or 768 end,
         -- Collapsible sidebar: a bottom toggle shrinks the nav to an icon-only strip; state persists.
         collapsibleSidebar = true, collapsedWidth = 52,
         savedCollapsed = managerDB().sidebarCollapsed,

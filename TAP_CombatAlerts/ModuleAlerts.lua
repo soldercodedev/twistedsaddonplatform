@@ -867,9 +867,7 @@ local function renderGlobal(mod, b, x, y, w, win)
     ensureDB(d)
     local P = newPen(b, win, x, w)
 
-    -- MODULE: the master enable/disable for Combat Alerts (shared platform block).
-    y = b:ModuleToggle(x, y, w, mod, { onToggle = function() if win then win:Refresh() end end,
-        sub = "When off, no alerts fire. Your alerts and profiles are kept." })
+    -- (enable/disable lives on the Platform Overview page, not repeated here)
 
     -- SOUND: which channel alert sounds play on.
     b:Sub("SOUND", x, y); y = y - 36
@@ -1030,8 +1028,8 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
     -- Disabled: overlay every view except the Settings page (where the enable toggle lives), so the
     -- module can always be switched back on but nothing else is usable meanwhile.
     if mod and mod.IsEnabled and not mod:IsEnabled() and (editorId or pageId ~= "settings") then
-        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings page to turn Combat Alerts back on.",
-            onSettings = function() editorId = nil; if win then win:SelectView("mod:combatAlerts:settings") end end })
+        return b:DisabledOverlay(x, y, w, { subtitle = "Enable Combat Alerts from the Platform Overview.",
+            onSettings = function() editorId = nil; if win then win:SelectView("overview") end end })
     end
 
     if pageId == "profiles" then return renderProfiles(mod, b, x, y, w, win) end

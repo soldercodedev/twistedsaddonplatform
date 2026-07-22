@@ -2135,12 +2135,7 @@ local function renderSettings(b, C, x, y, w, win)
         y = y - 28
     end
 
-    -- MODULE enable/disable (shown at the top of every sub-tab, so it's always reachable to re-enable).
-    if UI._mod then
-        y = b:ModuleToggle(x, y, w, UI._mod, { onToggle = function() win:Refresh() end,
-            sub = "When off, no runs are recorded and recaps stop. Your saved history is kept." })
-    end
-    y = y - 8
+    -- (The enable/disable toggle lives on the Platform Overview page - not repeated here.)
 
     -- Dock the settings sub-tab bar in the (now free) in-body top-nav; each sub-tab renders one focused
     -- area full-width. `COLW = w` so the section closures below draw single-column; `x`/`y` flow down.
@@ -2980,8 +2975,8 @@ function UI.RenderPage(pageId, m, b, x, y, win)
     -- Disabled: overlay every page except Settings (where the enable toggle lives), so the ledger can
     -- always be switched back on. Saved history is never touched by this.
     if m and m.IsEnabled and not m:IsEnabled() and pageId ~= "settings" then
-        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings page to turn Mythic Ledger back on.",
-            onSettings = function() UI.GoToPage(win, "settings") end })
+        return b:DisabledOverlay(x, y, w, { subtitle = "Enable Mythic Ledger from the Platform Overview.",
+            onSettings = function() if win then win:SelectView("overview") end end })
     end
 
     -- Record-parameterized drill-downs render OVER the current page (Back returns here). detailDungeon is

@@ -150,10 +150,11 @@ function BuilderMixin:DisabledOverlay(x, y, w, opts)
     self:Tex(cx - isz / 2, cy + 58, isz, isz, opts.icon or "lock", nil, RED, 2)
     local t = self:Label(opts.title or "MODULE DISABLED", x, cy + 2, RED, 22)
     t:SetWidth(w); t:SetJustifyH("CENTER")
-    local s = self:Label(opts.subtitle or "Go to the Settings tab to enable it.", x, cy - 28, C.subtext, 13)
+    local s = self:Label(opts.subtitle or "Enable it from the Platform Overview.", x, cy - 28, C.subtext, 13)
     s:SetWidth(w); s:SetJustifyH("CENTER")
     if opts.onSettings then
-        self:Button(cx - 78, cy - 70, 156, "Go to Settings", "primary", opts.onSettings, { icon = "settings", iconSize = 13 })
+        self:Button(cx - 88, cy - 70, 176, opts.buttonLabel or "Go to Overview", "primary", opts.onSettings,
+            { icon = opts.buttonIcon or "layout-grid", iconSize = 13 })
     end
     return y - h - 12
 end

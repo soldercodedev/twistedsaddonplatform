@@ -1170,8 +1170,7 @@ local function RenderPage(pageId, m, b, x, y, w, win)
     end
     -- SETTINGS page: the master enable/disable and the minimap button (moved here from Behavior).
     local function renderSettings(cy)
-        cy = b:ModuleToggle(x, cy, w, m, { onToggle = function() if win then win:Refresh() end end,
-            sub = "When off, the on-screen cue is hidden and all its checks stop; your settings are kept." })
+        -- (enable/disable lives on the Platform Overview page, not repeated here)
         if Suite and Suite.IsMinimapButtonShown then
             b:Sub("MINIMAP", x, cy, w); cy = cy - 30
             local tg = b:Toggle(x, cy, Suite:IsMinimapButtonShown("rotationCue"),
@@ -1187,8 +1186,8 @@ local function RenderPage(pageId, m, b, x, y, w, win)
     -- Top-level nav now lives in the sidebar (one row per page). Disabled: overlay every page except
     -- Settings (where the enable toggle lives), so the module can always be switched back on.
     if m and m.IsEnabled and not m:IsEnabled() and pageId ~= "settings" then
-        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings page to turn Rotation Assistant back on.",
-            onSettings = function() if win then win:SelectView("mod:rotationCue:settings") end end })
+        return b:DisabledOverlay(x, y, w, { subtitle = "Enable Rotation Assistant from the Platform Overview.",
+            onSettings = function() if win then win:SelectView("overview") end end })
     end
 
     if pageId == "indicators" then

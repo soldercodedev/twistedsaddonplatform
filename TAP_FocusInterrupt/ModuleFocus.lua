@@ -287,8 +287,7 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
     -- SETTINGS page: the master enable/disable plus module-wide options (the minimap button), on
     -- their own tab so they aren't buried under the Announce controls.
     local function renderSettings(y)
-        y = b:ModuleToggle(x, y, w, mod, { onToggle = function() if win then win:Refresh() end end,
-            sub = "When off, the marker bar and focus call-outs stand down; your macros and settings are kept." })
+        -- (enable/disable lives on the Platform Overview page, not repeated here)
         b:Sub("MINIMAP", x, y); y = y - 30
         if Suite and Suite.IsMinimapButtonShown then
             tip(b:Toggle(x, y, Suite:IsMinimapButtonShown("focusInterrupt"),
@@ -307,8 +306,8 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
     -- Top-level nav now lives in the sidebar (one row per page). Disabled: overlay every page except
     -- Settings (where the enable toggle lives), so the module can always be switched back on.
     if mod and mod.IsEnabled and not mod:IsEnabled() and pageId ~= "settings" then
-        return b:DisabledOverlay(x, y, w, { subtitle = "Go to the Settings page to turn Focus Target Interrupt back on.",
-            onSettings = function() if win then win:SelectView("mod:focusInterrupt:settings") end end })
+        return b:DisabledOverlay(x, y, w, { subtitle = "Enable Focus Target Interrupt from the Platform Overview.",
+            onSettings = function() if win then win:SelectView("overview") end end })
     end
 
     if pageId == "palette" then
