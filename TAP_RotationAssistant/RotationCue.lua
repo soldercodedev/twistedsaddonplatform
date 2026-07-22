@@ -1190,6 +1190,15 @@ local function RenderPage(pageId, m, b, x, y, w, win)
             onSettings = function() if win then win:SelectView("overview") end end })
     end
 
+    -- Standard page heading (matches the platform + other modules).
+    local HEAD = {
+        behavior   = { "Behavior",   "How the on-screen keybind cue behaves - what it reads, when it shows, and its checks." },
+        indicators = { "Indicators", "Optional cast, GCD, range, and resource indicators around the cue." },
+        appearance = { "Appearance", "Size, position, colors, and keybind text of the on-screen cue." },
+        settings   = { "Settings",   "Master options for Rotation Assistant and its minimap button." },
+    }
+    if HEAD[pageId] then y = b:PageHeading(x, y, HEAD[pageId][1], HEAD[pageId][2]) end
+
     if pageId == "indicators" then
         y = renderIndicators(y)
     elseif pageId == "appearance" then

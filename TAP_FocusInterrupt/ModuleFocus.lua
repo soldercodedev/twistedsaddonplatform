@@ -310,6 +310,15 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
             onSettings = function() if win then win:SelectView("overview") end end })
     end
 
+    -- Standard page heading (matches the platform + other modules).
+    local HEAD = {
+        macros   = { "Macros",         "Ready-made focus + mark, interrupt, and stun macros for your spec - copy them or save them straight to your macro list." },
+        palette  = { "Marker Palette", "An on-screen raid-marker palette to tag your focus / interrupt target with a click." },
+        announce = { "Announce",       "Call out your focus / interrupt target to the group when you set it." },
+        settings = { "Settings",       "Master options for Focus Target Interrupt and its minimap button." },
+    }
+    if HEAD[pageId] then y = b:PageHeading(x, y, HEAD[pageId][1], HEAD[pageId][2]) end
+
     if pageId == "palette" then
         y = renderPalette(y)
     elseif pageId == "announce" then

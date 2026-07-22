@@ -1032,10 +1032,23 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
             onSettings = function() editorId = nil; if win then win:SelectView("overview") end end })
     end
 
-    if pageId == "profiles" then return renderProfiles(mod, b, x, y, w, win) end
-    if pageId == "settings" then return renderGlobal(mod, b, x, y, w, win) end
-    -- Alerts page: the rule editor is an in-body drill-down over the Alerts list.
+    -- Standard page heading (matches the platform + other modules).
+    local HEAD = {
+        alerts   = { "Alerts",   "Build audible & visual cues for combat-safe signals - no target, out of range, aggro, pet down, item ready." },
+        profiles = { "Profiles", "Save, switch, and copy whole sets of alerts as named profiles." },
+        settings = { "Settings", "Master options for Combat Alerts - sound channel and defaults." },
+    }
+    if pageId == "profiles" then
+        y = b:PageHeading(x, y, HEAD.profiles[1], HEAD.profiles[2])
+        return renderProfiles(mod, b, x, y, w, win)
+    end
+    if pageId == "settings" then
+        y = b:PageHeading(x, y, HEAD.settings[1], HEAD.settings[2])
+        return renderGlobal(mod, b, x, y, w, win)
+    end
+    -- Alerts page: the rule editor is an in-body drill-down over the Alerts list (its own Back header).
     if editorId then return renderEditor(mod, b, x, y, w, win) end
+    y = b:PageHeading(x, y, HEAD.alerts[1], HEAD.alerts[2])
     return renderAlerts(mod, b, x, y, w, win)
 end
 
