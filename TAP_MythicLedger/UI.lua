@@ -96,7 +96,7 @@ local SB_PALETTE = {
 }
 local runFilter    = { character = nil, mapId = nil, status = nil, playerKey = nil, level = nil, role = nil }
 local runSort      = { key = "date", dir = "desc" }
-local playerFilter = { search = "", role = nil, favorite = false, minShared = 1 }
+local playerFilter = { search = "", role = nil, favorite = false, minShared = 1, class = nil, spec = nil }
 local playerSort   = { key = "runs", dir = "desc" }
 local retentionPending = nil   -- staged retention cap; committed only via the Settings "Apply" button
 local retScopePending   = nil  -- staged retention scope (ALL / SEASON / EXPANSION); committed on Apply
@@ -1503,6 +1503,8 @@ local function filteredPlayers()
         local ok = true
         if (p.totals.runs or 0) < (playerFilter.minShared or 1) then ok = false end
         if ok and playerFilter.role and p.lastKnownRole ~= playerFilter.role then ok = false end
+        if ok and playerFilter.class and p.classFile ~= playerFilter.class then ok = false end
+        if ok and playerFilter.spec and p.lastKnownSpecId ~= playerFilter.spec then ok = false end
         if ok and playerFilter.favorite and not p.favorite then ok = false end
         if ok and search ~= "" then
             local hay = ((p.fullName or "") .. " " .. (p.name or "") .. " " .. (p.realm or "")):lower()
@@ -1528,20 +1530,57 @@ local function filteredPlayers()
     return list
 end
 
+-- Distinct classes / specs present among tracked players, for the Players filters.
+local function playerClassChoices()
+    local seen, list = {}, {}
+    for _, p in ipairs(History.PlayerList()) do
+        if p.classFile and not seen[p.classFile] then
+            seen[p.classFile] = true
+            local nm = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[p.classFile]) or p.classFile
+            list[#list + 1] = { p.classFile, classColorText(p.classFile, nm), nm }
+        end
+    end
+    table.sort(list, function(a, bb) return (a[3] or "") < (bb[3] or "") end)
+    table.insert(list, 1, { "all", "All Classes" })
+    return list
+end
+local function playerSpecChoices()
+    local seen, list = {}, {}
+    for _, p in ipairs(History.PlayerList()) do
+        local sid = p.lastKnownSpecId
+        if sid and not seen[sid] then
+            seen[sid] = true
+            local nm = specName(sid, p.lastKnownSpecIcon) or ("Spec " .. tostring(sid))
+            list[#list + 1] = { sid, nm, nm }
+        end
+    end
+    table.sort(list, function(a, bb) return (a[3] or "") < (bb[3] or "") end)
+    table.insert(list, 1, { "all", "All Specs" })
+    return list
+end
+
 local function renderPlayers(b, C, x, y, w, win)
-    -- Controls.
-    b:Label("Search", x, y - 2, C.subtext)
-    T(b, b:EditBox(x + 56, y, 160, playerFilter.search or "", function(t) playerFilter.search = t; win:Refresh() end),
-        "Search", "Filter by player name or realm.")
-    b:Label("Role", x + 234, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 274, y), "Role filter", "Show only players last seen in this role."):SetChoices(110, {
-        { "all", "All" }, { "TANK", "Tank" }, { "HEALER", "Healer" }, { "DAMAGER", "DPS" },
-    }, function() return playerFilter.role or "all" end,
-       function(v) playerFilter.role = (v ~= "all") and v or nil; win:Refresh() end)
-    T(b, b:Toggle(x + 400, y - 1, playerFilter.favorite, function(v) playerFilter.favorite = v; win:Refresh() end),
-        "Favorites only", "Show only players you've marked as favorite.")
-    b:Label("Favorites", x + 448, y - 2, C.text)
-    y = y - 34
+    -- Filter toolbar: Search, Role, Class, Spec, Favorites - flowing across the width.
+    local fields = {
+        { label = "Search", build = function(fx, cy, cw)
+            T(b, b:EditBox(fx, cy, cw, playerFilter.search or "", function(t) playerFilter.search = t; win:Refresh() end),
+                "Search", "Filter by player name or realm.") end },
+        { label = "Role", build = function(fx, cy, cw)
+            b:Dropdown(fx, cy):SetChoices(cw, {
+                { "all", "All" }, { "TANK", "Tank" }, { "HEALER", "Healer" }, { "DAMAGER", "DPS" },
+            }, function() return playerFilter.role or "all" end,
+               function(v) playerFilter.role = (v ~= "all") and v or nil; win:Refresh() end) end },
+        { label = "Class", build = function(fx, cy, cw)
+            b:Dropdown(fx, cy):SetChoices(cw, playerClassChoices(), function() return playerFilter.class or "all" end,
+                function(v) playerFilter.class = (v ~= "all") and v or nil; win:Refresh() end) end },
+        { label = "Spec", build = function(fx, cy, cw)
+            b:Dropdown(fx, cy):SetChoices(cw, playerSpecChoices(), function() return playerFilter.spec or "all" end,
+                function(v) playerFilter.spec = (v ~= "all") and v or nil; win:Refresh() end) end },
+        { label = "Favorites", build = function(fx, cy, cw)
+            T(b, b:Toggle(fx, cy - 4, playerFilter.favorite, function(v) playerFilter.favorite = v; win:Refresh() end),
+                "Favorites only", "Show only players you've marked as favorite.") end },
+    }
+    y = filterBar(b, C, x, y, w - 12, fields)
 
     local list = filteredPlayers()
     local rowW = w - 12
