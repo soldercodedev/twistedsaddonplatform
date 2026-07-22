@@ -22,7 +22,6 @@ end
 -- Render title + lines into a frame (used by TooltipPreview and the live tooltip).
 local function renderLines(theme, target, title, lines, width, isPreview)
     -- target is a frame with :CreateFontString; returns total height used.
-    local C = theme.C
     local y = -10
     if title then
         local t = target._uifTitle or target:CreateFontString(nil, "OVERLAY"); target._uifTitle = t

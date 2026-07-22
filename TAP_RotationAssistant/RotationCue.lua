@@ -120,7 +120,6 @@ local driver                 -- event-only driver frame (the poll is a C_Timer t
 local slotToButton = {}      -- reverse map: action slot -> the action button frame that owns it
 local keyCache = {}          -- spellID -> resolved key string (false = looked-up-but-unbound)
 local glowing = {}           -- spellID -> true while its proc (spell activation overlay) is up
-local uiTab = "behavior"     -- active settings page (docked top-nav): behavior | indicators | appearance
 local testMode = false       -- preview mode (settings page / placement) - shows the cue on-demand
 local placing = false        -- true only while in placement mode (the ONLY time the cue is draggable)
 local inCombat = false       -- tracked from REGEN events (reliable, unlike InCombatLockdown timing)
@@ -872,13 +871,6 @@ end
 -- Inline settings, rendered into the Suite Manager's builder. Returns the new y.
 -- `win` (the manager window) lets us re-render when a control changes what's shown (e.g.
 -- picking the Custom text position reveals the X / Y sliders).
-local TAB_TIPS = {
-    behavior  = "When the cue shows, who it shows for, performance, and placement.",
-    indicators = "On-icon feedback: cast vs instant, GCD sweep, out of range, and can't-afford.",
-    appearance = "Icon shape/size, border, keybind text, and a live preview.",
-    settings   = "Enable or disable the module, and the minimap button.",
-}
-
 -- Renders ONE of the module's pages (its tabs now live in the sidebar as sub-rows). Keeps all the
 -- per-tab render closures; only the top-nav dispatch is replaced by a pageId dispatch.
 local function RenderPage(pageId, m, b, x, y, w, win)

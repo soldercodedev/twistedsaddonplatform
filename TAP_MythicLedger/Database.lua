@@ -5,7 +5,6 @@
 -- which History.lua rebuilds. No raw combat events are ever stored here.
 
 local ADDON, ML = ...
-local Util = ML.Util
 local DB = {}
 ML.DB = DB
 

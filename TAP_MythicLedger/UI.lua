@@ -427,17 +427,6 @@ end
 ----------------------------------------------------------------------
 -- Tab bar + season selector.
 ----------------------------------------------------------------------
-local TAB_TIPS = {
-    overview = "Season totals and highlights at a glance.",
-    runs = "Every recorded run, with filters and sorting.",
-    dungeons = "Per-dungeon timed %, best times, and best keys.",
-    characters = "Your runs broken down by character.",
-    players = "Everyone you've run keys with - searchable and sortable.",
-    bests = "Your personal bests (kept per key level and role).",
-    settings = "Tracking, provider, recap, and data options.",
-    debug = "Live diagnostics and a copyable summary.",
-}
-
 -- One labelled dropdown in a horizontal scope row. The label is anchored to the dropdown's LEFT
 -- edge (vertically centred) so "Season" / "Character" always line up with the box, not float above
 -- it. Returns the x just past this control so the caller can place the next one beside it.
@@ -3565,8 +3554,6 @@ function renderPlayerReview(b, C, x, y, w, win)
     -- big score in the exact grade color that score would earn as an overall. Throughput splits DPS/HPS.
     local cats = sc.categories
     local Cfg = ML.Scoring and ML.Scoring.Config
-    local poss = m.isPlayer and "your" or "their"
-    local Poss = m.isPlayer and "Your" or "Their"
     local didV = m.isPlayer and "you did" or "they did"
     local landedV = m.isPlayer and "you landed" or "they landed"
     local function rnd(v) return math.floor((v or 0) + 0.5) end
@@ -4461,7 +4448,7 @@ function UI.ShowScoreboard(run, opts)
             -- downtime track, boss portraits at their kill times, gravestones for deaths, the keystone
             -- +1/+2/+3 time targets, and your best time for this key.
             if timelineOK then
-                y = renderRunTimeline(b, C, x, y, rowW, run)
+                renderRunTimeline(b, C, x, y, rowW, run)   -- last block in this cell; its returned y isn't reused
             end
         end,
     })

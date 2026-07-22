@@ -84,11 +84,6 @@ if theme then for k, slug in pairs(KIND_ICON) do KIND_ICON_TEX[k] = theme:GetIco
 local editorId
 local editorTab   -- which editor tab is showing (per the tab set below)
 local listTab = "alerts"   -- active list page in the docked top-nav: alerts | profiles | settings
-local TAB_TIPS = {
-    alerts   = "Your alerts - create, edit, enable, duplicate, or delete them.",
-    profiles = "Which alert set this character uses, and copy alerts between profiles.",
-    settings = "Sound channel, check rate, import / export, and the minimap button.",
-}
 
 local function softApply()
     if TCC.RebuildEngine then TCC.RebuildEngine() end
@@ -433,7 +428,7 @@ end
 
 -- One condition inside an advanced group: type dropdown + remove X + its params. Returns new y.
 local function renderCondition(P, group, cond, index, y)
-    local b, C = P.b, P.C
+    local b = P.b
     local dd = b:Dropdown(P.x, y); dd:SetChoices(180, CTYPE_CHOICES, function() return cond.type end,
         function(v)
             local fresh = TCC.NewCondition(v)

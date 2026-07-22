@@ -79,15 +79,6 @@ local PALETTE_WHERE = {
 }
 local PALETTE_ROTATE = { { "horizontal", "Horizontal" }, { "vertical", "Vertical" } }
 
--- Active settings page (docked top-nav): macros | palette | announce | settings.
-local uiTab = "macros"
-local TAB_TIPS = {
-    macros   = "Ready-made Focus + Mark, Interrupt, and Stun macros for your spec.",
-    palette  = "The on-screen marker bar: click a marker to focus + mark, live.",
-    announce = "Call out your focus to chat.",
-    settings = "Module options, including the minimap button.",
-}
-
 ----------------------------------------------------------------------
 -- Settings page (rebuilt on the Builder).
 ----------------------------------------------------------------------

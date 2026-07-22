@@ -94,7 +94,7 @@ end
 ----------------------------------------------------------------------
 function Mixin:Stepper(parent, opts)
     opts = opts or {}
-    local theme, C = self, self.C
+    local theme = self
     local w, h = opts.width or 120, opts.height or 24
     local f = CreateFrame("Frame", nil, parent); f:SetSize(w, h)
     f.value = opts.value or 0; f.min = opts.min; f.max = opts.max; f.step = opts.step or 1

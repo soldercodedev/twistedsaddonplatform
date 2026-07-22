@@ -244,7 +244,6 @@ local function pagePickers(b, win)
 end
 
 local function pageType(b, win)
-    local C = theme.C
     local x, y = 24, -18
     y = b:Section("HEADING ROLES", x, y); y = y - 30
     for _, r in ipairs({ "display", "h1", "h2", "h3", "h4", "h5", "h6", "subtitle", "overline", "caption" }) do
@@ -285,7 +284,6 @@ local function pageForms(b, win)
 end
 
 local function pageDisplay(b, win)
-    local C = theme.C
     local x, y = 24, -18
     y = b:Section("BADGES  (square, pill, rounded)", x, y); y = y - 30
     local bx = x
@@ -412,7 +410,6 @@ local function pageIcons(b, win)
 end
 
 local function pageButtons(b, win)
-    local C = theme.C
     local x, y = 24, -18
     local noop = function() end
     y = b:Section("KINDS", x, y); y = y - 32
@@ -522,7 +519,6 @@ local function pageTooltips(b, win)
 end
 
 local function pageCards(b, win)
-    local C = theme.C
     local x, y = 24, -18
     y = b:Section("CARD VARIANTS", x, y); y = y - 30
 

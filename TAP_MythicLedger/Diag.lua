@@ -13,7 +13,6 @@ ML.Diag = Diag
 
 local OK   = "|cff33ff33OK|r"
 local MISS = "|cffff5555MISSING|r"
-local NA   = "|cff888888n/a|r"
 
 local function has(ns, fn) return type(ns) == "table" and type(ns[fn]) == "function" end
 

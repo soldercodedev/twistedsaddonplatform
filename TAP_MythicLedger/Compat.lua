@@ -285,7 +285,7 @@ function API.GetMapInfo(mapId)
     if not mapId then return nil end
     if mapInfoCache[mapId] then return mapInfoCache[mapId] end
     if not (C_CM and C_CM.GetMapUIInfo) then return nil end
-    local name, id, timeLimit, texture = safe("GetMapUIInfo", C_CM.GetMapUIInfo, mapId)
+    local name, _, timeLimit, texture = safe("GetMapUIInfo", C_CM.GetMapUIInfo, mapId)
     local info = {
         name      = ML.ReadStr(name) or ("Dungeon " .. mapId),
         timeLimit = ML.ReadNum(timeLimit),   -- seconds
@@ -400,7 +400,7 @@ function API.MemberFor(unit)
     if not name then return nil end
     local guid = ML.ReadStr(UnitGUID(unit))
     local realm = realmOf(unit)
-    local locClass, classFile, classId = UnitClass(unit)
+    local _, classFile, classId = UnitClass(unit)
     local role = UnitGroupRolesAssigned(unit)
     if role == "NONE" or role == nil then role = nil end
     local guild = GetGuildInfo(unit)
@@ -464,7 +464,7 @@ end
 function API.PlayerContext()
     local name = ML.ReadStr(UnitName("player")) or "?"
     local realm = realmOf("player")
-    local locClass, classFile, classId = UnitClass("player")
+    local _, classFile, classId = UnitClass("player")
     local specId = API.UnitSpec("player")
     local specName, role
     if specId then
