@@ -169,16 +169,24 @@ local function build(win)
     end)
     nthumb:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
 
-    -- A clickable, collapsible category header (chevron + overline label).
+    -- A clickable, collapsible category header. Drawn as a distinct group BAND (accent overline label,
+    -- an accent chevron on the right, and a hairline divider beneath) so groups are clearly illustrated
+    -- and the collapse affordance is obvious - it doesn't read like just another nav row.
     local function makeCategoryHeader(text, collapsible)
-        local hb = CreateFrame("Button", nil, navChild); hb:SetHeight(18)
+        local hb = CreateFrame("Button", nil, navChild); hb:SetHeight(20)
+        local labelCol = collapsible ~= false and C.accent or C.subtext
         hb.fs = theme:Heading(hb, { text = text, role = "overline" }); hb.fs:SetPoint("LEFT", 6, 0)
+        hb.fs:SetTextColor(unpack(labelCol))
+        -- Hairline divider under the label so each group reads as a banded section.
+        hb.rule = hb:CreateTexture(nil, "ARTWORK")
+        hb.rule:SetColorTexture(C.border[1], C.border[2], C.border[3], 0.55); hb.rule:SetHeight(1)
+        hb.rule:SetPoint("BOTTOMLEFT", 6, 0); hb.rule:SetPoint("BOTTOMRIGHT", -4, 0)
         if collapsible ~= false then
             local ct = theme:GetIcon("chevron-down")
-            if ct then hb.chev = hb:CreateTexture(nil, "ARTWORK"); hb.chev:SetSize(10, 10); hb.chev:SetPoint("RIGHT", -4, 0)
-                hb.chev:SetTexture(ct); hb.chev:SetVertexColor(unpack(theme.C.subtext)) end
-            hb:SetScript("OnEnter", function(self) self.fs:SetTextColor(unpack(theme.C.text)) end)
-            hb:SetScript("OnLeave", function(self) self.fs:SetTextColor(unpack(theme.C.subtext)) end)
+            if ct then hb.chev = hb:CreateTexture(nil, "ARTWORK"); hb.chev:SetSize(11, 11); hb.chev:SetPoint("RIGHT", -4, 1)
+                hb.chev:SetTexture(ct); hb.chev:SetVertexColor(unpack(C.accent)) end
+            hb:SetScript("OnEnter", function(self) self.fs:SetTextColor(unpack(C.text)); if self.chev then self.chev:SetVertexColor(unpack(C.text)) end end)
+            hb:SetScript("OnLeave", function(self) self.fs:SetTextColor(unpack(C.accent)); if self.chev then self.chev:SetVertexColor(unpack(C.accent)) end end)
         else hb:EnableMouse(false) end
         function hb:SetChevron(collapsed) if self.chev then self.chev:SetRotation(collapsed and -math.rad(90) or 0) end end
         return hb
@@ -229,10 +237,10 @@ local function build(win)
                 item.header:Hide()
                 if i > 1 then ty = ty - 12 end   -- slim gap between groups in place of the header
             else
-                if i > 1 then ty = ty - 8 end
+                if i > 1 then ty = ty - 12 end   -- extra gap above a group band so sections read apart
                 item.header:ClearAllPoints(); item.header:SetPoint("TOPLEFT", 8, ty); item.header:SetPoint("RIGHT", navChild, "RIGHT", -6, 0); item.header:Show()
                 item.header:SetChevron(item.header._collapsed)
-                ty = ty - 22
+                ty = ty - 24
             end
         end
         navChild:SetHeight(math.max(1, -ty + 6))
@@ -635,10 +643,16 @@ function WindowMixin:ExpandCategoryForView(view)
     for _, r in ipairs(self.navRows or {}) do
         if r._page and r._page.view == view then activeHeader = r._header; break end
     end
+    -- On a page that isn't inside any accordion group (Platform Overview/Settings, Help), keep the FIRST
+    -- addon group expanded as a fallback - so the sidebar always shows a group's pages instead of a wall
+    -- of collapsed headers, which reads as "the groups aren't working".
+    if not activeHeader then
+        for _, hb in ipairs(self.navHeaders) do if hb._accordion then activeHeader = hb; break end end
+    end
     local changed = false
     for _, hb in ipairs(self.navHeaders) do
         if hb._accordion then
-            local want = (hb ~= activeHeader)   -- collapse everything except the active category
+            local want = (hb ~= activeHeader)   -- collapse everything except the active (or fallback) category
             if hb._collapsed ~= want then hb._collapsed = want; changed = true end
         end
     end
