@@ -27,10 +27,6 @@ ignore = {
   "211/_.*",       -- underscore-prefixed locals are intentional discards (`_id`, `_n`, `_P`, ...)
 }
 
--- WoW frame globals whose FIELDS we set (e.g. GameTooltip._tapmlKey). Listed so a field write isn't
--- mis-read as namespace pollution; the authoritative pollution gate remains check-globals.sh.
-read_globals = { "GameTooltip" }
-
 -- Scoring engine: left byte-for-byte untouched (its logic/knobs are change-controlled), so its two
 -- benign lint nits are silenced here rather than by editing the source.
 files["TAP_MythicLedger/Scoring/Score.lua"] = { ignore = { "211/Cap" } }  -- unused module handle
@@ -45,6 +41,10 @@ globals = {
   "TAP_GameDB_Spells", "TAP_GameDB_Items",
   -- SavedVariables (declared in the TOCs; the client populates these as globals)
   "TAPDB", "TAP_CombatAlertsDB", "TAP_CombatAlertsCharDB", "TAP_MythicLedgerDB",
+  -- WoW frame we stash private fields on (GameTooltip._tapmlKey/_tapmlOwned); marked writable so the
+  -- field writes aren't flagged. Not namespace pollution - it's Blizzard's frame, not a new global -
+  -- and the bytecode gate (check-globals.sh) only flags actual global-name writes, not field sets.
+  "GameTooltip",
   -- WoW slash-command contract
   "SlashCmdList",
   "SLASH_TAP1",

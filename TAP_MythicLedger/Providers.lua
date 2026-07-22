@@ -6,7 +6,6 @@
 -- "unavailable" (never zero).
 
 local ADDON, ML = ...
-local API = ML.API
 local Providers = {}
 ML.Providers = Providers
 
