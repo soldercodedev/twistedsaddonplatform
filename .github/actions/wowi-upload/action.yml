@@ -1,0 +1,69 @@
+name: "Upload to WoWInterface"
+description: "Upload a built ZIP to WoWInterface via its official author API. Skips cleanly when the token or addon id is missing."
+
+# API contract (per WoWInterface's author API docs):
+#   upload      : POST https://api.wowinterface.com/addons/update
+#   auth header : x-api-token: <token>
+#   fields      : id, version, compatible (comma-delimited patch numbers, e.g. 12.0.7), updatefile=@zip
+#   success     : HTTP 202 Accepted
+#   (GET https://api.wowinterface.com/addons/update returns the full list of valid POST fields.)
+
+inputs:
+  token:
+    description: "WoWInterface API token (WOWI_API_TOKEN secret). Empty = skip WoWInterface."
+    required: false
+    default: ""
+  addon-id:
+    description: "WoWInterface numeric addon id. Empty = read it from ## X-WoWI-ID in TAP/TAP.toc."
+    required: false
+    default: ""
+  version:
+    description: "Version string."
+    required: true
+  zip:
+    description: "Path to the ZIP to upload."
+    required: true
+  patch:
+    description: "Retail patch(es) to mark compatible, comma-delimited, e.g. 12.0.7."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        WOWI_API_TOKEN: ${{ inputs.token }}
+        WOWI_ID:        ${{ inputs.addon-id }}
+        VER:            ${{ inputs.version }}
+        ZIP:            ${{ inputs.zip }}
+        COMPATIBLE:     ${{ inputs.patch }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "${WOWI_ID:-}" ]; then
+          WOWI_ID="$(grep -m1 'X-WoWI-ID' TAP/TAP.toc | sed -E 's/.*X-WoWI-ID:[[:space:]]*//' | tr -d '[:space:]' || true)"
+        fi
+
+        if [ -z "${WOWI_API_TOKEN:-}" ] || [ -z "${WOWI_ID:-}" ]; then
+          echo "::notice::WoWInterface upload skipped (set the WOWI_API_TOKEN secret and ## X-WoWI-ID in TAP/TAP.toc to enable)."
+          exit 0
+        fi
+
+        # Changelog = latest section of the root CHANGELOG.md (fallback to a one-liner).
+        CHANGELOG="$(awk '/^## /{c++} c==1' CHANGELOG.md 2>/dev/null || true)"
+        [ -n "$CHANGELOG" ] || CHANGELOG="Twisteds Addon Platform ${VER}"
+
+        echo "Uploading $ZIP to WoWInterface addon $WOWI_ID (compatible=$COMPATIBLE)..."
+        HTTP="$(curl -sS -o /tmp/wowi_resp.json -w '%{http_code}' -X POST \
+                  -H "x-api-token: $WOWI_API_TOKEN" \
+                  -F "id=${WOWI_ID}" \
+                  -F "version=${VER}" \
+                  -F "compatible=${COMPATIBLE}" \
+                  -F "changelog=${CHANGELOG}" \
+                  -F "updatefile=@${ZIP}" \
+                  "https://api.wowinterface.com/addons/update")"
+        echo "HTTP $HTTP"; cat /tmp/wowi_resp.json 2>/dev/null; echo
+        case "$HTTP" in
+          2*) echo "WoWInterface upload accepted." ;;
+          *)  echo "::error::WoWInterface upload failed (HTTP $HTTP). GET https://api.wowinterface.com/addons/update lists the valid POST fields."; exit 1 ;;
+        esac

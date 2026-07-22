@@ -3,9 +3,14 @@ name: Package and release
 # Manual release. Run it from the Actions tab (Run workflow), enter a version, and it builds the
 # single multi-folder ZIP and uploads it to CurseForge via the CurseForge Upload API.
 #
-# Repo secret (Settings > Secrets and variables > Actions):
+# The same built ZIP is also mirrored to Wago Addons and WoWInterface when those are configured;
+# both mirror steps skip cleanly (and never fail the release) until their token + id are set.
+#
+# Repo secrets (Settings > Secrets and variables > Actions):
 #   CF_API_TOKEN    - CurseForge API token (authors.curseforge.com > API Tokens)
 #   CF_PROJECT_ID   - optional; if unset, the id is read from ## X-Curse-Project-ID in TAP/TAP.toc
+#   WAGO_API_TOKEN  - optional; enables the Wago mirror (id from ## X-Wago-ID in TAP/TAP.toc)
+#   WOWI_API_TOKEN  - optional; enables the WoWInterface mirror (id from ## X-WoWI-ID in TAP/TAP.toc)
 
 on:
   workflow_dispatch:
@@ -36,3 +41,24 @@ jobs:
           reltype:    ${{ steps.build.outputs.reltype }}
           zip:        ${{ steps.build.outputs.zip }}
           patch:      ${{ steps.build.outputs.patch }}
+
+      # Secondary hosts: best-effort mirrors of the same ZIP. continue-on-error so a hiccup on a
+      # mirror never fails a release that already published to CurseForge. Both skip when unconfigured.
+      - name: Mirror to Wago Addons
+        continue-on-error: true
+        uses: ./.github/actions/wago-upload
+        with:
+          token:   ${{ secrets.WAGO_API_TOKEN }}   # empty = skip
+          version: ${{ steps.build.outputs.version }}
+          reltype: ${{ steps.build.outputs.reltype }}
+          zip:     ${{ steps.build.outputs.zip }}
+          patch:   ${{ steps.build.outputs.patch }}
+
+      - name: Mirror to WoWInterface
+        continue-on-error: true
+        uses: ./.github/actions/wowi-upload
+        with:
+          token:   ${{ secrets.WOWI_API_TOKEN }}   # empty = skip
+          version: ${{ steps.build.outputs.version }}
+          zip:     ${{ steps.build.outputs.zip }}
+          patch:   ${{ steps.build.outputs.patch }}

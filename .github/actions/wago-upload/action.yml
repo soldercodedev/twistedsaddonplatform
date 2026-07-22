@@ -1,0 +1,76 @@
+name: "Upload to Wago Addons"
+description: "Upload a built ZIP to Wago Addons via its multipart API. Skips cleanly when the token or project id is missing, so CurseForge-only releases keep working."
+
+inputs:
+  token:
+    description: "Wago API token (WAGO_API_TOKEN secret). Empty = skip Wago."
+    required: false
+    default: ""
+  project-id:
+    description: "Wago project id. Empty = read it from ## X-Wago-ID in TAP/TAP.toc (also skip if that is blank)."
+    required: false
+    default: ""
+  version:
+    description: "Version string (release label)."
+    required: true
+  reltype:
+    description: "release | beta | alpha (mapped to Wago stability)."
+    required: true
+  zip:
+    description: "Path to the ZIP to upload."
+    required: true
+  patch:
+    description: "Retail patch to publish for, e.g. 12.0.7."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        WAGO_API_TOKEN: ${{ inputs.token }}
+        WAGO_ID:        ${{ inputs.project-id }}
+        VER:            ${{ inputs.version }}
+        RELTYPE:        ${{ inputs.reltype }}
+        ZIP:            ${{ inputs.zip }}
+        GAMEVER:        ${{ inputs.patch }}
+      run: |
+        set -euo pipefail
+
+        # Project id: explicit input, else the hub TOC (single source of truth).
+        if [ -z "${WAGO_ID:-}" ]; then
+          WAGO_ID="$(grep -m1 'X-Wago-ID' TAP/TAP.toc | sed -E 's/.*X-Wago-ID:[[:space:]]*//' | tr -d '[:space:]' || true)"
+        fi
+
+        # Skip cleanly when unconfigured - this keeps CurseForge-only releases green.
+        if [ -z "${WAGO_API_TOKEN:-}" ] || [ -z "${WAGO_ID:-}" ]; then
+          echo "::notice::Wago upload skipped (set the WAGO_API_TOKEN secret and ## X-Wago-ID in TAP/TAP.toc to enable)."
+          exit 0
+        fi
+
+        # Wago stability vocabulary matches ours 1:1 (release->stable? no - Wago uses stable/beta/alpha).
+        case "$RELTYPE" in
+          alpha) STABILITY=alpha ;;
+          beta)  STABILITY=beta ;;
+          *)     STABILITY=stable ;;
+        esac
+
+        # Changelog = latest section of the root CHANGELOG.md (fallback to a one-liner).
+        CHANGELOG="$(awk '/^## /{c++} c==1' CHANGELOG.md 2>/dev/null || true)"
+        [ -n "$CHANGELOG" ] || CHANGELOG="Twisteds Addon Platform ${VER}"
+
+        META="$(jq -nc --arg lbl "$VER" --arg st "$STABILITY" --arg cl "$CHANGELOG" --arg p "$GAMEVER" \
+          '{label:$lbl, stability:$st, changelog:$cl, supported_retail_patch:$p}')"
+
+        echo "Uploading $ZIP to Wago project $WAGO_ID (stability=$STABILITY, retail $GAMEVER)..."
+        HTTP="$(curl -sS -o /tmp/wago_resp.json -w '%{http_code}' -X POST \
+                  -H "authorization: Bearer $WAGO_API_TOKEN" \
+                  -H "accept: application/json" \
+                  --form-string "metadata=$META" \
+                  -F "file=@${ZIP}" \
+                  "https://addons.wago.io/api/projects/${WAGO_ID}/version")"
+        echo "HTTP $HTTP"; cat /tmp/wago_resp.json 2>/dev/null; echo
+        case "$HTTP" in
+          2*) echo "Wago upload OK." ;;
+          *)  echo "::error::Wago upload failed (HTTP $HTTP)"; exit 1 ;;
+        esac

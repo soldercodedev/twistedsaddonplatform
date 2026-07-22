@@ -7,6 +7,11 @@
 ## Category: Twisted's Addon Platform
 ## X-Website: shared UI foundation + plugin hub for the tool suite
 ## X-Curse-Project-ID: 1609931
+# Cross-host distribution ids. Fill each in once its listing exists, then add the matching API
+# token as a repo secret (WAGO_API_TOKEN / WOWI_API_TOKEN). Empty = that host is skipped by the
+# release workflow, so leaving these blank keeps CurseForge-only releases working unchanged.
+## X-Wago-ID: jK8gJ56y
+## X-WoWI-ID: 27168
 ## DefaultState: enabled
 ## LoadOnDemand: 0
 ## SavedVariables: TAPDB
