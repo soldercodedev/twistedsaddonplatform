@@ -56,6 +56,7 @@ Builder.lua
 Window.lua
 
 # Suite Manager window (/tap): browse, enable/disable, and configure sidecar plugins.
+Changelog.lua
 SuiteManager.lua
 
 # Optional self-test / component gallery (no slash command). Remove this line to ship lib-only.

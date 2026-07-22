@@ -252,6 +252,41 @@ local function whatsNewLink(b, spec, x, y)
     return y - 28
 end
 
+-- Render parsed changelog blocks INLINE onto a page's Builder (the same styling as the modal viewer
+-- above, but flowing in the scrolling page body). Used by the Help > Changelog page. Returns the y
+-- below the last block.
+local function renderChangelogInline(b, x, y, w, blocks)
+    local C = theme.C
+    for _, blk in ipairs(blocks) do
+        local txt = (blk.text or ""):gsub("%*%*", "")   -- strip leftover bold markers
+        if blk.kind == "version" then
+            y = y - 12
+            b:Label("Version " .. txt, x, y - 2, C.accent, 15)
+            y = y - 26
+        elseif blk.kind == "sub" then
+            y = y - 6
+            b:Label(txt:upper(), x + 2, y - 2, C.subtext, 11)
+            y = y - 20
+        elseif blk.kind == "bullet" then
+            local tag = blk.tag and blk.tag:upper()
+            local prefix, color = "|cff888888-|r  ", C.text
+            if tag == "NOTE" then
+                color = C.accent
+            elseif tag then
+                local c = TAG_COLOR[tag] or C.subtext
+                prefix = prefix .. string.format("|cff%02x%02x%02x[%s]|r  ",
+                    math.floor(c[1] * 255), math.floor(c[2] * 255), math.floor(c[3] * 255), tag)
+            end
+            local _, hh = b:Wrap(prefix .. txt, x + 12, y, w - 12, color, 12)
+            y = y - (hh + 6)
+        else
+            local _, hh = b:Wrap(txt, x, y, w, C.text, 12)
+            y = y - (hh + 6)
+        end
+    end
+    return y
+end
+
 -- Overview lists one row per ADDON (not per module): pick each addon's lead module (lowest groupOrder),
 -- so e.g. Mythic Ledger + Dungeon Guide (same addon) show as a single "Mythic Ledger" entry.
 local function addonLeads()
@@ -746,6 +781,26 @@ local function pageCommands(b, win)
 end
 
 ----------------------------------------------------------------------
+-- Page: Changelog. The platform's own release notes (Suite.CHANGELOG, mirrored from CHANGELOG.md),
+-- rendered inline in the scrolling body - the global counterpart to each module's What's New.
+----------------------------------------------------------------------
+local function pageChangelog(b, win)
+    local C = theme.C
+    local w = b.contentWidth
+    local x = 24
+    local y = b:PageHeading(x, -18, "Changelog",
+        "Platform-level release notes for the Twisteds Addon Platform. Each module also keeps its own "
+        .. "What's New (open a module from the sidebar, then What's New).", w - 44)
+    local blocks = parseChangelog(Suite.CHANGELOG or "")
+    if #blocks == 0 then
+        b:Wrap("No changelog available.", x, y, w - 44, C.subtext, 12)
+        return y - 30
+    end
+    y = renderChangelogInline(b, x, y, w - 44, blocks)
+    return y - 16
+end
+
+----------------------------------------------------------------------
 -- Window construction (dynamic - one nav entry per module).
 ----------------------------------------------------------------------
 local win
@@ -924,6 +979,7 @@ local function buildPages()
     pages[#pages + 1] = { view = "getinvolved", label = "Get Involved", icon = theme:GetIcon("heart"),
         render = pageGetInvolved, pulse = getInvolvedShouldPulse(), onSelect = function(w) markGetInvolvedEngaged(w) end }
     pages[#pages + 1] = { view = "commands", label = "Commands", icon = theme:GetIcon("chevron-right"), render = pageCommands }
+    pages[#pages + 1] = { view = "changelog", label = "Changelog", icon = theme:GetIcon("file-text"), render = pageChangelog }
     pages[#pages + 1] = { view = "about", label = "About", icon = theme:GetIcon("sparkles"), render = pageAbout }
     return pages
 end

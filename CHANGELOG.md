@@ -14,6 +14,7 @@ A ground-up **navigation overhaul**. Each installed add-on now gets its own **ca
 - **[CHANGE]** **Every module's tabs moved to the sidebar.** Combat Alerts (Alerts / Profiles / Settings), Focus Target Interrupt (Macros / Marker Palette / Announce / Settings), and Rotation Assistant (Behavior / Indicators / Appearance / Settings) now list their pages in the sidebar. Drill-downs (a run's details, a rule's editor) still open in-body over the page they came from. Deep links, minimap buttons and slash commands are unchanged.
 - **[CHANGE]** **Overview is now one row per add-on** with its version as a **badge** (green for a stable release, blue for a beta), a colored **What's New** button, and a red **Disable** button. The old **Installed** page is gone - **enable/disable (live toggle) and Unload** now live on Overview, and the redundant enable toggle was removed from each module's own Settings.
 - **[CHANGE]** **Consistent page headings everywhere.** Every page now carries the same title/description **Page Heading** style; the Platform *Appearance* page is renamed **Settings** and rebuilt on the **two-column grid**.
+- **[NEW]** **Changelog page.** The platform's release notes now live in-game under **Help → Changelog** - the global counterpart to each module's *What's New*.
 
 ### Mythic Ledger (1.0.0-beta.9)
 
