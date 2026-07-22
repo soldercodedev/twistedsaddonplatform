@@ -2293,17 +2293,25 @@ local function renderSettings(b, C, x, y, w, win)
     local function secDeathReport()
         local dr = s.deathReport
         if type(dr) ~= "table" then dr = {}; s.deathReport = dr end
+        local fullW, baseX = COLW, x
+        local halfW = math.floor((COLW - 28) / 2)
         b:Sub("DEATH REPORT", x, y); y = y - 30
         toggle("On-screen death report after each pull", function() return dr.enabled end,
-            function(v) dr.enabled = v end,
+            function(v) dr.enabled = v; win:Refresh() end,
             "After combat drops (or at the run's end), flash a short overlay listing who died since the last "
             .. "report and why - time in the key, the killing blow, and the cause (including a missed kick's "
             .. "cast). Repost the last one to party chat with /ledger deathreport.")
         if dr.enabled then
+            local refreshPrev = function() if ML.DeathReport and ML.DeathReport.RefreshPreview then ML.DeathReport.RefreshPreview() end end
+            local rowTop = y
+
+            -- LEFT column: behavior (when / dismiss / limits).
+            x, COLW = baseX, halfW
+            b:Label("BEHAVIOR", x, y - 2, C.subtext, 10); y = y - 22
             b:Label("When", x, y - 2, C.subtext)
             T(b, b:Dropdown(x + 90, y), "When to show the report",
                 "As soon as combat drops = a report after every pull (that pull's new deaths only). At the end "
-                .. "of the run = one report of every death, when the key finishes."):SetChoices(210, {
+                .. "of the run = one report of every death, when the key finishes."):SetChoices(220, {
                 { "COMBAT", "As soon as combat drops" }, { "RUN_END", "At the end of the run" },
             }, function() return dr.trigger or "COMBAT" end, function(v) dr.trigger = v end)
             y = y - 40
@@ -2311,22 +2319,25 @@ local function renderSettings(b, C, x, y, w, win)
             T(b, b:Dropdown(x + 90, y), "How the report goes away",
                 "Auto = it fades on its own after the time below. Click to dismiss = it stays until you "
                 .. "click it (it captures the mouse while shown). Both = it fades after the time below OR "
-                .. "when you click it, whichever happens first."):SetChoices(210, {
+                .. "when you click it, whichever happens first."):SetChoices(220, {
                 { "AUTO", "Auto (fade after time)" }, { "CLICK", "Click to dismiss" }, { "BOTH", "Both (fade or click)" },
             }, function() return dr.dismiss or "AUTO" end, function(v) dr.dismiss = v; win:Refresh() end)
             y = y - 40
             toggle("Only report my own deaths", function() return dr.onlyMe end, function(v) dr.onlyMe = v end,
                 "Show only your deaths, not the whole party's.")
             if (dr.dismiss or "AUTO") ~= "CLICK" then   -- AUTO and BOTH both auto-fade after this time
-                slider("On screen for", 130, 170,2, 20, 1, "%.0fs",
+                slider("On screen for", 130, 170, 2, 20, 1, "%.0fs",
                     function() return dr.duration or 6 end, function(v) dr.duration = v end,
                     "How long the overlay stays before it fades out (also applies to Both).")
             end
-            slider("Max deaths shown", 130, 170,3, 20, 1, "%.0f",
+            slider("Max deaths shown", 130, 170, 3, 20, 1, "%.0f",
                 function() return dr.maxLines or 8 end, function(v) dr.maxLines = v end,
                 "Cap how many deaths are listed at once.")
+            local lb = y
 
-            local function refreshPrev() if ML.DeathReport and ML.DeathReport.RefreshPreview then ML.DeathReport.RefreshPreview() end end
+            -- RIGHT column: appearance (font / size / colors / panel).
+            x, y, COLW = baseX + halfW + 28, rowTop, halfW
+            b:Label("APPEARANCE", x, y - 2, C.subtext, 10); y = y - 22
             b:Label("Font", x, y - 2, C.subtext)
             b:FontSelect(x + 90, y, { width = 200, value = (dr.font ~= "" and dr.font) or "UBUNTU",
                 onChange = function(key) dr.font = key; win:Refresh() end })
@@ -2334,15 +2345,13 @@ local function renderSettings(b, C, x, y, w, win)
             T(b, b:Button(x, y, 120, "Use UI font", "default", function() dr.font = ""; win:Refresh() end),
                 "Use UI font", "Use the same font as the rest of the UI.")
             y = y - 38
-            slider("Text size", 130, 170,10, 30, 1, "%.0f",
+            slider("Text size", 130, 170, 10, 30, 1, "%.0f",
                 function() return dr.fontSize or 15 end, function(v) dr.fontSize = v; win:Refresh() end, "Overlay text size.")
-
             b:Label("Header color", x, y - 2, C.subtext)
             b:Swatch(x + 100, y - 2, dr.titleColor or { 1, 0.82, 0.2 }, refreshPrev, "Header color", "The report's header line.")
             b:Label("Line color", x + 150, y - 2, C.subtext)
             b:Swatch(x + 230, y - 2, dr.textColor or { 0.94, 0.95, 0.98 }, refreshPrev, "Line color", "The per-death lines.")
             y = y - 34
-
             toggle("Draw a background panel", function() return dr.background end, function(v) dr.background = v end,
                 "Draw a translucent panel behind the report text.")
             if dr.background then
@@ -2350,17 +2359,18 @@ local function renderSettings(b, C, x, y, w, win)
                 b:Swatch(x + 110, y - 2, dr.bgColor or { 0.03, 0.04, 0.06, 0.82 }, refreshPrev,
                     "Panel color", "The backing panel color (opacity is the slider below).")
                 y = y - 30
-                slider("Panel opacity", 130, 170,0, 1, 0.05, "%.2f",
+                slider("Panel opacity", 130, 170, 0, 1, 0.05, "%.2f",
                     function() return (dr.bgColor and dr.bgColor[4]) or 0.82 end,
                     function(v) dr.bgColor = dr.bgColor or { 0.03, 0.04, 0.06, 0.82 }; dr.bgColor[4] = v; refreshPrev() end,
                     "How opaque the background panel is (0 = invisible).")
             end
+            local rb = y
 
-            -- Live preview - all four causes, styled with the settings above; updates as you tweak them.
+            -- Full width below both columns: live preview (all four causes) + Test / Move.
+            x, y, COLW = baseX, math.min(lb, rb) - 12, fullW
             b:Label("Preview", x, y - 2, C.subtext); y = y - 24
             local ph = (ML.DeathReport and ML.DeathReport.RenderPreview and ML.DeathReport.RenderPreview(b, x, y)) or 40
             y = y - ph - 14
-
             T(b, b:Button(x, y, 90, "Test", "default", function() if ML.DeathReport then ML.DeathReport.Test() end end,
                 { icon = "eye", iconSize = 13 }), "Test", "Flash a sample death report (one of every cause) with your settings.")
             T(b, b:Button(x + 100, y, 140, "Move on screen", "default", function()
@@ -2389,49 +2399,61 @@ local function renderSettings(b, C, x, y, w, win)
     end
 
     local function secRecap()
+    local fullW, baseX = COLW, x
+    local halfW = math.floor((COLW - 28) / 2)
     b:Sub("RETURNING-PLAYER RECAP", x, y); y = y - 26
     b:Label("Local only - never posted to group.", x, y - 2, C.subtext, 10); y = y - 22
     toggle("Show previous-player recaps", function() return rc.enabled end, function(v) rc.enabled = v end,
         "When you group with someone you've keyed with, print a short local-only reminder.")
+    local rowTop = y
+
+    -- LEFT column: when it fires + what it counts.
+    x, COLW = baseX, halfW
+    b:Label("TRIGGERS", x, y - 2, C.subtext, 10); y = y - 22
     b:Label("Display", x, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 90, y), "Recap display", "Where recaps appear. Local chat is only visible to you."):SetChoices(160, {
+    T(b, b:Dropdown(x + 90, y), "Recap display", "Where recaps appear. Local chat is only visible to you."):SetChoices(180, {
         { "CHAT", "Local chat" }, { "TOAST", "Toast" }, { "BOTH", "Both" }, { "OFF", "Off" },
     }, function() return rc.display end, function(v) rc.display = v end)
     y = y - 34
     b:Label("Detail", x, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 90, y), "Recap detail", "How much a recap shows."):SetChoices(160, {
+    T(b, b:Dropdown(x + 90, y), "Recap detail", "How much a recap shows."):SetChoices(180, {
         { "COMPACT", "Compact" }, { "DETAILED", "Detailed" }, { "OFF", "Off" },
     }, function() return rc.detail end, function(v) rc.detail = v end)
     y = y - 34
     b:Label("History", x, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 90, y), "Recap history", "Count shared runs from the current season only, or all seasons."):SetChoices(160, {
+    T(b, b:Dropdown(x + 90, y), "Recap history", "Count shared runs from the current season only, or all seasons."):SetChoices(180, {
         { "SEASON", "Current season" }, { "ALL", "All seasons" },
     }, function() return rc.history end, function(v) rc.history = v end)
     y = y - 34
     b:Label("Fires on", x, y - 2, C.subtext)
     T(b, b:Dropdown(x + 90, y), "Recap trigger",
         "When a recap fires. On join = as soon as a returning player is in your group; On ready check "
-        .. "= only when a ready check starts; Both = either. (It never fires on zoning in/out.)"):SetChoices(160, {
+        .. "= only when a ready check starts; Both = either. (It never fires on zoning in/out.)"):SetChoices(180, {
         { "JOIN", "On join" }, { "READY", "On ready check" }, { "BOTH", "Both" },
     }, function() return rc.trigger or "JOIN" end, function(v) rc.trigger = v end)
     y = y - 34
     slider("Minimum shared runs", 160, 130, 1, 10, 1, "%d",
         function() return rc.minShared or 1 end, function(v) rc.minShared = v end,
         "Only recap someone once you've done at least this many keys together.")
-    toggle("Include performance averages", function() return rc.includeAverages end, function(v) rc.includeAverages = v end,
+    local lb = y
+
+    -- RIGHT column: what a recap includes + its sound.
+    x, y, COLW = baseX + halfW + 28, rowTop, halfW
+    b:Label("INCLUDE", x, y - 2, C.subtext, 10); y = y - 22
+    toggle("Performance averages", function() return rc.includeAverages end, function(v) rc.includeAverages = v end,
         "Add role-relevant averages (e.g. DPS/HPS, deaths) to the recap line.")
-    toggle("Include last-run result", function() return rc.includeLastResult end, function(v) rc.includeLastResult = v end,
+    toggle("Last-run result", function() return rc.includeLastResult end, function(v) rc.includeLastResult = v end,
         "Append the outcome of your most recent run with that player.")
-    toggle("Include personal notes (off by default)", function() return rc.includeNotes end, function(v) rc.includeNotes = v end,
+    toggle("Personal notes (off by default)", function() return rc.includeNotes end, function(v) rc.includeNotes = v end,
         "Your private notes are NEVER shown automatically unless you turn this on.")
-    toggle("Play a sound when returning players are found", function() return rc.sound end, function(v) rc.sound = v; win:Refresh() end,
+    toggle("Play a sound when found", function() return rc.sound end, function(v) rc.sound = v; win:Refresh() end,
         "Play a sound once per group (a single sound even if several returning players are found).")
     if rc.sound then
         b:Label("Sound", x, y - 2, C.subtext)
-        T(b, b:SoundSelect(x + 90, y, { width = 140, value = rc.soundKey or "Applause",
+        T(b, b:SoundSelect(x + 90, y, { width = 150, value = rc.soundKey or "Applause",
             channel = rc.soundChannel or "Master",
             onChange = function(v) rc.soundKey = v end }), "Recap sound", "The sound played when a returning player is detected.")
-        T(b, b:Button(x + 238, y, 58, "Test", "default", function()
+        T(b, b:Button(x + 248, y, 58, "Test", "default", function()
             local theme = _G.TAP and _G.TAP.uiTheme
             if theme and theme.PlaySound then theme:PlaySound(rc.soundKey or "Applause", rc.soundChannel or "Master") end
         end, { icon = "volume", iconSize = 13 }), "Test sound", "Preview the selected recap sound.")
@@ -2442,6 +2464,10 @@ local function renderSettings(b, C, x, y, w, win)
             function() return rc.soundChannel or "Master" end, function(v) rc.soundChannel = v end)
         y = y - 34
     end
+    local rb = y
+
+    -- Full width below both columns: action buttons + a live preview spanning both cells.
+    x, y, COLW = baseX, math.min(lb, rb) - 12, fullW
     T(b, b:Button(x, y, 190, "Preview for current group", "default", function() ML.Recap.PreviewCurrentGroup() end),
         "Preview recaps", "Print a sample recap for everyone in your current group (ignores the once-per-session guard).")
     T(b, b:Button(x + 200, y, 150, "Test toast/message", "primary", function()
@@ -2449,7 +2475,6 @@ local function renderSettings(b, C, x, y, w, win)
     end, { icon = "eye", iconSize = 13 }), "Test toast/message",
         "Fire a sample recap exactly as configured (toast and/or local chat), using players from your saved history.")
     y = y - 34
-    -- In-window preview: a sample recap rendered with your current display / detail / averages settings.
     do
         b:Label("Preview:", x, y - 2, C.subtext, 11); y = y - 18
         local nameLine, lines = ML.Recap.PreviewLines(rc)
