@@ -174,7 +174,7 @@ local function scheduleRefresh(win)
 end
 
 local TABS = {
-    { "overview", "Overview", "layout-grid" }, { "runs", "Runs", "list" }, { "dungeons", "Dungeons", "map" },
+    { "overview", "Summary", "layout-grid" }, { "runs", "Runs", "list" }, { "dungeons", "Dungeons", "map" },
     { "characters", "Characters", "users" }, { "players", "Players", "user" }, { "bests", "Bests", "trophy" },
     { "settings", "Settings", "settings" }, { "debug", "Debug", "tools" },
 }
@@ -1032,10 +1032,10 @@ local GU_TILE_H = 104  -- tile height (room for the value + the larger effect-ic
 -- interrupts have no per-spell list, so their tip explains how the estimate is formed.
 local function guTileTip(key)
     if key == "purge" then
-        return { title = "Target buffs — purge / soothe", minWidth = 240, lines = {
+        return { title = "Target buffs - purge / soothe", minWidth = 240, lines = {
             { text = "Enemy buffs the group could strip here. Hover an icon for its spell tooltip.", color = "subtext" } } }
     elseif key == "cleanse" then
-        return { title = "Debuffs — cleanse", minWidth = 240, lines = {
+        return { title = "Debuffs - cleanse", minWidth = 240, lines = {
             { text = "Player debuffs the group could cleanse here. Hover an icon for its spell tooltip.", color = "subtext" } } }
     elseif key == "interrupts" then
         return { title = "Group interrupts", minWidth = 240, lines = {
@@ -1661,13 +1661,13 @@ local function playerRunRow(b, C, x, yTop, rowW, r, key, i, win)
     if m.specId or m.specIcon then specGlyph(b, x + 8, yTop - 5, 18, m.specId, m.specIcon)
     else classGlyph(b, x + 8, yTop - 5, 18, m.classFile) end
     b:Label(Util.dateShort(r.completedAt), x + 34, yTop - 10, C.subtext, 11)
-    dungeonGlyph(b, x + 106, yTop - 5, 18, r.mapId)
-    b:Label(r.dungeonName or "?", x + 130, yTop - 10, C.text, 11)
-    b:Label(Util.keyLabel(r.level), x + 300, yTop - 10, C.accent, 12)
-    b:Label(statusText(r.status), x + 344, yTop - 10, b.theme:Color(STATUS_HEX[r.status] or "cccccc", C.text), 11)
-    b:Label(Util.duration(r.duration), x + 438, yTop - 10, C.text, 11)
-    b:Label(Util.numOr(m.stats and m.stats.deaths, "%d"), x + 506, yTop - 10, C.subtext, 11)
-    b:Label(primaryMetric(m.role, m.stats), x + 552, yTop - 10, C.text, 11)
+    dungeonGlyph(b, x + 140, yTop - 5, 18, r.mapId)
+    b:Label(r.dungeonName or "?", x + 164, yTop - 10, C.text, 11)
+    b:Label(Util.keyLabel(r.level), x + 334, yTop - 10, C.accent, 12)
+    b:Label(statusText(r.status), x + 378, yTop - 10, b.theme:Color(STATUS_HEX[r.status] or "cccccc", C.text), 11)
+    b:Label(Util.duration(r.duration), x + 472, yTop - 10, C.text, 11)
+    b:Label(Util.numOr(m.stats and m.stats.deaths, "%d"), x + 540, yTop - 10, C.subtext, 11)
+    b:Label(primaryMetric(m.role, m.stats), x + 586, yTop - 10, C.text, 11)
 end
 
 local function renderPlayerDetails(b, C, x, y, w, win)
@@ -1863,12 +1863,12 @@ local function renderPlayerDetails(b, C, x, y, w, win)
         b:Label("No shared runs recorded yet.", x + 4, y - 2, C.subtext, 11); y = y - 26
     else
         b:Label("DATE", x + 34, y - 2, C.subtext, 10)
-        b:Label("DUNGEON", x + 130, y - 2, C.subtext, 10)
-        b:Label("KEY", x + 300, y - 2, C.subtext, 10)
-        b:Label("RESULT", x + 344, y - 2, C.subtext, 10)
-        b:Label("TIME", x + 438, y - 2, C.subtext, 10)
-        b:Label("DEATHS", x + 500, y - 2, C.subtext, 10)
-        b:Label("DPS / HPS", x + 552, y - 2, C.subtext, 10)
+        b:Label("DUNGEON", x + 164, y - 2, C.subtext, 10)
+        b:Label("KEY", x + 334, y - 2, C.subtext, 10)
+        b:Label("RESULT", x + 378, y - 2, C.subtext, 10)
+        b:Label("TIME", x + 472, y - 2, C.subtext, 10)
+        b:Label("DEATHS", x + 534, y - 2, C.subtext, 10)
+        b:Label("DPS / HPS", x + 586, y - 2, C.subtext, 10)
         y = y - 18
         local first, last = pagerBar(b, C, x, y, rowW, #runs, "playerRuns", win); y = y - 42
         b:Box(x, y + 6, rowW, (last - first + 1) * 28 + 6, 0.03, 0, C.card)
@@ -2783,13 +2783,13 @@ local function dungeonRunRow(b, C, x, yTop, rowW, r, i, win)
         onClick = function() view.detailRun = r.id; win:Refresh() end })
     b:Label(Util.dateShort(r.completedAt), x + 10, yTop - 9, C.subtext, 11)
     b:Label(classColorText(r.character and r.character.classFile, r.character and r.character.name or "?"),
-        x + 100, yTop - 9, C.text, 11)
-    if r.bestOfKind then b:Tex(x + 236, yTop - 9, 12, 12, "crown", nil, { 1, 0.82, 0.2 }) end
-    b:Label(Util.keyLabel(r.level), x + 252, yTop - 9, C.accent, 12)
-    b:Badge(x + 294, yTop - 8, { text = statusText(r.status), variant = statusBadgeVariant(r.status) })
-    b:Label(Util.duration(r.duration), x + 386, yTop - 9, C.text, 11)
-    b:Label(Util.numOr(r.deaths, "%d"), x + 460, yTop - 9, C.text, 11)
-    b:Label(primaryMetric(role, r.playerStats), x + 508, yTop - 9, C.text, 11)
+        x + 116, yTop - 9, C.text, 11)
+    if r.bestOfKind then b:Tex(x + 252, yTop - 9, 12, 12, "crown", nil, { 1, 0.82, 0.2 }) end
+    b:Label(Util.keyLabel(r.level), x + 268, yTop - 9, C.accent, 12)
+    b:Badge(x + 310, yTop - 8, { text = statusText(r.status), variant = statusBadgeVariant(r.status) })
+    b:Label(Util.duration(r.duration), x + 402, yTop - 9, C.text, 11)
+    b:Label(Util.numOr(r.deaths, "%d"), x + 476, yTop - 9, C.text, 11)
+    b:Label(primaryMetric(role, r.playerStats), x + 524, yTop - 9, C.text, 11)
 end
 
 -- Rich tooltip for a boss row: pulls / kills / wipes / kill rate / deaths, kill-time and your DPS spread.
@@ -3108,7 +3108,7 @@ local TAB_RENDER = {
 -- Title + description for the standard page heading drawn on each list page (Settings draws its own;
 -- the record drill-downs use their own Back header, so they're not listed here).
 local PAGE_META = {
-    overview   = { "Overview",       "Your account-wide Mythic+ summary - season stats, recent runs, and quick links into any of them." },
+    overview   = { "Summary",        "Your account-wide Mythic+ summary - season stats, recent runs, and quick links into any of them." },
     runs       = { "Runs",           "Every timed, depleted, or abandoned key you've recorded, newest first. Click a run for its full details." },
     dungeons   = { "Dungeons",       "Per-dungeon stats across your recorded runs - best time, timed %, and averages. Click one to drill in." },
     characters = { "Characters",     "Every character you've recorded runs on, with their season stats. Click one for its full history." },
@@ -3610,7 +3610,10 @@ function renderPlayerReview(b, C, x, y, w, win)
                 bar(LX + 120, yy - 3, 190, c.score)
                 b:Label(tostring(rnd(c.score)), LX + 322, yy, theme:Color(catScoreHex(c.score)), 12)
                 local vs = c.requirementModel and "required" or "expected"
-                b:Label(hlNums(string.format("%s vs %s %s (%.2fx)", Util.shortNum(c.value), Util.shortNum(c.expected), vs, c.ratio or 0)),
+                -- Clean-run bonus (v42): a timed, no-death healer's Healing half is lifted to full marks; tag
+                -- it so the score doesn't look inconsistent with the raw ratio.
+                local tag = c.outcomeFloorRaw and "  · clean-run bonus" or ""
+                b:Label(hlNums(string.format("%s vs %s %s (%.2fx)%s", Util.shortNum(c.value), Util.shortNum(c.expected), vs, c.ratio or 0, tag)),
                     LX + 372, yy, C.subtext, 10)
             end
             subBar("Damage", det.dps, y - 52)
@@ -3883,6 +3886,22 @@ function renderPlayerReview(b, C, x, y, w, win)
         y = y - H - 8
     end
 
+    -- TANK AWARENESS (v42): teammate deaths that came from a mob the tank lost or never had threat on (a
+    -- party "Threat" death). Shown for awareness on the tank's review only - NOT part of the score for now.
+    local gltd = de and de.groupLooseThreatDeaths
+    if sc.role == "TANK" and type(gltd) == "number" and gltd > 0 then
+        local H = 54
+        b:Box(LX, y, CW, H, 0.45, 0, C.card)
+        b:Box(LX, y, 3, H, 0.95, 2, theme:Color("e0a030"))
+        b:Label("Loose-Mob Deaths (party)", LX + 16, y - 16, C.text, 13)
+        b:Label(hlNums(string.format("%d teammate death%s from a mob %s lost or never had threat on  ·  shown for awareness, not scored",
+            gltd, gltd == 1 and "" or "s", m.isPlayer and "you" or "they")), LX + 16, y - 36, C.subtext, 10)
+        b:Label(tostring(gltd), LX + CW - 76, y - 22, theme:Color("e0a030"), 20)
+        if b.theme.SetTipData then b.theme:SetTipData(b:Hit(LX, y, CW, H),
+            { title = "Loose-mob deaths", lines = { { text = "Teammates who died to melee from a mob that wasn't tanked - lost aggro, or the tank never grabbed it. It reflects on pickup/threat, but is NOT part of the score for now; it's here to help spot threat problems.", color = "subtext" } } }) end
+        y = y - H - 8
+    end
+
     y = y - 10
 
     -- (HOW TARGETS WERE SET now renders AFTER the coaching sections below - see the end of this function.)
@@ -3931,7 +3950,7 @@ function renderPlayerReview(b, C, x, y, w, win)
     end
     if t and t.detail and t.detail.dps then
         local d = t.detail.dps
-        expl(string.format("Damage — %s DPS target  (%s %s, %.2fx)",
+        expl(string.format("Damage - %s DPS target  (%s %s, %.2fx)",
                 Util.shortNum(d.expected), didV, Util.shortNum(d.value), d.ratio or 0),
             string.format("You're measured against a fair slice of the group's damage this run, not a fixed number - so a slow key and a fast key are judged the same. Meeting your slice is full marks; going over never hurts. Example: %s did %s against a %s target, about %.0f%% of it.",
                 youW, Util.shortNum(d.value), Util.shortNum(d.expected), (d.ratio or 0) * 100))
@@ -3945,10 +3964,10 @@ function renderPlayerReview(b, C, x, y, w, win)
                     math.floor((rd.selfCoverage or 0) * 100 + 0.5), youW, Util.shortNum(h.value), Util.shortNum(h.expected), (h.ratio or 0) * 100)
                 or string.format("Your target is the damage the group couldn't self-cover - the tank's leftover plus most of the group's unavoidable damage. Someone standing in avoidable stuff hits their own Survival, not your target, and absorbs count as healing. Example: %s healed %s of the %s asked, about %.0f%%.",
                     youW, Util.shortNum(h.value), Util.shortNum(h.expected), (h.ratio or 0) * 100)
-            expl(string.format("Healing — %s required  (%s %s, %.2fx)",
+            expl(string.format("Healing - %s required  (%s %s, %.2fx)",
                     Util.shortNum(h.expected), didV, Util.shortNum(h.value), h.ratio or 0), why)
         else
-            expl(string.format("Healing — %s HPS target  (%s %s, %.2fx)",
+            expl(string.format("Healing - %s HPS target  (%s %s, %.2fx)",
                     Util.shortNum(h.expected), didV, Util.shortNum(h.value), h.ratio or 0),
                 string.format("A fair slice of the group's healing this run, group-relative like damage. Tanks are expected to self-sustain some of it. Example: %s did %s against a %s target, about %.0f%%.",
                     youW, Util.shortNum(h.value), Util.shortNum(h.expected), (h.ratio or 0) * 100))
@@ -3958,14 +3977,14 @@ function renderPlayerReview(b, C, x, y, w, win)
     if iC and iC.applicable and iC.expected then
         local kit = iC.interruptSpell and string.format("%s (%ds CD)%s", iC.interruptSpell, iC.interruptCD or 0,
             iC.interruptExtras and (" + " .. iC.interruptExtras) or "") or (iC.profile or "?")
-        expl(string.format("Interrupts — ~%.1f target  (%s %s)", iC.expected, landedV, iC.actual and tostring(iC.actual) or "-"),
+        expl(string.format("Interrupts - ~%.1f target  (%s %s)", iC.expected, landedV, iC.actual and tostring(iC.actual) or "-"),
             string.format("Your fair share of the kicks in reach. %s had about %.0f kickable casts (trash + the bosses you killed), split by each spec's kick cooldown - %s draws roughly %.0f%% of them, so ~%.1f is your share. Landing that is full marks and extra never hurts; a teammate over-kicking lowers their share, not yours. Example: %s landed %s of ~%.1f.",
                 r.dungeonName or "This dungeon", iC.supply or 0, kit, (iC.share or 0) * 100, iC.expected,
                 youW, iC.actual and tostring(iC.actual) or "-", iC.expected))
     end
     local dC = cats.dispels
     if dC and dC.applicable and dC.expected then
-        expl(string.format("Dispels — ~%.1f target  (%s %s)", dC.expected, didV, dC.actual and tostring(dC.actual) or "-"),
+        expl(string.format("Dispels - ~%.1f target  (%s %s)", dC.expected, didV, dC.actual and tostring(dC.actual) or "-"),
             string.format("Your fair share of the dispels a %s kit can actually handle. Each school's cleanses (from this run's trash + bosses) are split only among teammates who can touch that school, so anything only you can clear falls entirely to you. Example: %s cleared %s of ~%.1f asked.",
                 dC.profile or "?", youW, dC.actual and tostring(dC.actual) or "-", dC.expected))
     end
@@ -3981,19 +4000,19 @@ function renderPlayerReview(b, C, x, y, w, win)
             body = string.format("Only damage %s could have dodged counts, as a share of all the damage %s took - scale-free, so key level and health pools don't matter. %.1f%% or less scores 100; %.0f%%+ scores 0.",
                 youW, youW, grace, zero)
         end
-        expl(string.format("Survival — %.1f%% avoidable or less = 100, %.0f%%+ = 0", grace, zero), body)
+        expl(string.format("Survival - %.1f%% avoidable or less = 100, %.0f%%+ = 0", grace, zero), body)
     end
     if Cfg and Cfg.deaths then
         local n = de and de.deaths
         if n == nil then
-            expl("Deaths — no death data recorded",
+            expl("Deaths - no death data recorded",
                 "No death information was captured for this run, so the Death score is left neutral rather than guessed.")
         elseif n == 0 then
-            expl(string.format("Deaths — no deaths, scored %d", (de and de.score) or 100),
+            expl(string.format("Deaths - no deaths, scored %d", (de and de.score) or 100),
                 string.format("%s didn't die - a perfect Death score. Dying is the single most expensive thing that can happen in a run, so a clean key really counts.", YouW))
         else
             local weighted = dcz and dczTotal > 0
-            expl(string.format("Deaths — %d death%s, -%d, scored %d", n, n == 1 and "" or "s", de.penalty or 0, de.score or 0),
+            expl(string.format("Deaths - %d death%s, -%d, scored %d", n, n == 1 and "" or "s", de.penalty or 0, de.score or 0),
                 string.format("Dying costs more than anything else in a run%s. %s died %d time%s for a %d-point hit, leaving %d.%s",
                     weighted and ", and not every death costs the same: an avoidable-mechanic death hurts most, a missed-kick or unavoidable death less, and a pulled-aggro death least (see Death Causes above)" or "",
                     YouW, n, n == 1 and "" or "s", de.penalty or 0, de.score or 0,

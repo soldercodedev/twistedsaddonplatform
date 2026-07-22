@@ -29,19 +29,26 @@ local function pct(v) return round((v or 0) * 100) end
 -- share denominators); `groupTotals` = { interrupts, dispels, dps, hps } summed across the party.
 -- `dist` (optional) = { interrupt = <this player's distributed kick expected or nil>, dispel = <...> }
 -- from Distribute over the whole party; when present it supersedes the standalone interrupt/dispel target.
-function Score.ScoreNormalized(norm, summary, groupTotals, dist, healModel)
+function Score.ScoreNormalized(norm, summary, groupTotals, dist, healModel, runCtx)
     groupTotals = groupTotals or {}
     local role = norm.role or "DAMAGER"
     local baseline = Base.Throughput(norm, summary, groupTotals)
     local healReq = healModel and healModel.byGuid and healModel.byGuid[norm.playerGUID]
 
     local cats = {}
-    cats.throughput = Cat.Throughput(norm, baseline, healReq)
+    cats.throughput = Cat.Throughput(norm, baseline, healReq, runCtx)
     cats.interrupts = Cat.Interrupt(norm, summary, groupTotals.interrupts, dist and dist.interrupt)
     cats.dispels    = Cat.Dispel(norm, summary, groupTotals.dispels, dist and dist.dispel)
     cats.survival   = Cat.Survival(norm)
     cats.deaths     = Cat.Deaths(norm)
     cats.roleContribution = Cat.RoleContribution(norm, cats)
+
+    -- Tank awareness (v42): surface how many teammate deaths came from a mob that wasn't tanked (a "threat"
+    -- death = a non-tank killed by melee after losing/never having aggro). Shown on the tank's review for
+    -- awareness; NOT scored for now (weight 0). The healer outcome floor now lives in Cat.Throughput.
+    if role == "TANK" and runCtx and (runCtx.partyThreatDeaths or 0) > 0 and cats.deaths then
+        cats.deaths.groupLooseThreatDeaths = runCtx.partyThreatDeaths
+    end
 
     local applicable = { interrupts = cats.interrupts.applicable, dispels = cats.dispels.applicable }
     local weights, redistLog = Weights.Resolve(role, applicable)
@@ -96,6 +103,9 @@ function Score.Explain(score)
         if det and det.dps then
             segs[#segs + 1] = string.format("DPS %s vs %s expected (%.2fx)",
                 Scoring._short(det.dps.value), Scoring._short(det.dps.expected), det.dps.ratio or 0)
+            if det.dps.ilvlFactor and math.abs(det.dps.ilvlFactor - 1) > 0.001 then
+                segs[#segs] = segs[#segs] .. string.format(" [ilvl x%.2f vs group]", det.dps.ilvlFactor)
+            end
         end
         if det and det.hps then
             if det.hps.requirementModel then
@@ -112,6 +122,9 @@ function Score.Explain(score)
         else
             d[#d + 1] = string.format("Throughput: %d  (%s)", round(t.score), t.note or "estimate")
         end
+        if det and det.hps and det.hps.outcomeFloorRaw then
+            d[#d] = d[#d] .. string.format("  Healing lifted from %d toward full marks - you timed the key with few/no deaths, so your healing was enough by definition.", round(det.hps.outcomeFloorRaw))
+        end
     end
 
     -- Interrupts
@@ -127,6 +140,9 @@ function Score.Explain(score)
                 "Interrupt Contribution: %d  (actual %d vs expected %.1f; profile %s; fair share %.0f%% of ~%.0f-kick supply; confidence %d%%; weight %d%%)",
                 round(i.score), i.actual, i.expected or 0, i.profile or "?", (i.share or 0) * 100, i.supply or 0,
                 pct(i.confidence), pct(i.weight))
+            if i.missedLifeSavingKick then
+                d[#d] = d[#d] .. "  You landed no interrupts and a teammate died to a kickable cast - pressing your interrupt could have prevented it."
+            end
         end
     end
 
@@ -164,6 +180,11 @@ function Score.Explain(score)
             d[#d + 1] = string.format("Death Impact: %d  (%d death(s), -%d penalty; weight %d%%)",
                 round(de.score), de.deaths, de.penalty, pct(de.weight))
         end
+        -- Tank awareness (v42): teammate deaths from a mob that wasn't tanked. Shown, not scored.
+        if score.role == "TANK" and (de.groupLooseThreatDeaths or 0) > 0 then
+            d[#d + 1] = string.format("Loose-mob deaths: %d teammate death(s) came from a mob you lost or never had threat on - shown for awareness, not scored.",
+                de.groupLooseThreatDeaths)
+        end
     end
 
     -- Role contribution (only mention when it carries weight).
@@ -185,6 +206,30 @@ function Scoring._short(n)
     if a >= 1e6 then return string.format("%.2fM", n / 1e6) end
     if a >= 1e3 then return string.format("%.1fK", n / 1e3) end
     return string.format("%d", round(n))
+end
+
+-- Run-level context shared by every player's score (v40): the run outcome + party deaths (for the healer
+-- outcome floor) and the group's AVERAGE item level + how much of the party we could read it for (for the
+-- throughput ilvl adjustment). groupAvgIlvl includes every member with a known ilvl (the player too).
+function Score.RunContext(players, run)
+    local partyDeaths, ilvlSum, ilvlN, n = 0, 0, 0, 0
+    for _, p in ipairs(players or {}) do
+        n = n + 1
+        if type(p.deaths) == "number" then partyDeaths = partyDeaths + p.deaths end
+        if type(p.itemLevel) == "number" then ilvlSum = ilvlSum + p.itemLevel; ilvlN = ilvlN + 1 end
+    end
+    local partyThreatDeaths = 0
+    for _, p in ipairs(players or {}) do
+        local dc = p.deathCauses
+        if type(dc) == "table" and type(dc.threat) == "number" then partyThreatDeaths = partyThreatDeaths + dc.threat end
+    end
+    return {
+        onTime = run and run.onTime and true or false,
+        partyDeaths = partyDeaths,
+        partyThreatDeaths = partyThreatDeaths,   -- teammate deaths from loose/lost threat (tank awareness)
+        groupAvgIlvl = (ilvlN > 0) and (ilvlSum / ilvlN) or nil,
+        ilvlCoverage = (n > 0) and (ilvlN / n) or 0,
+    }
 end
 
 ----------------------------------------------------------------------
@@ -209,10 +254,11 @@ function Score.ScoreRun(run)
     local kickDist = Scoring.Distribute.Interrupts(players, run)
     local dispelDist = Scoring.Distribute.Dispels(players, run)
     local healModel = Scoring.Healing and Scoring.Healing.Compute(players)
+    local runCtx = Score.RunContext(players, run)
     local out = { list = {}, byGuid = {}, summary = summary, version = Cfg.version }
     for _, p in ipairs(players) do
         local dist = { interrupt = kickDist[p.playerGUID], dispel = dispelDist[p.playerGUID] }
-        local sc = Score.ScoreNormalized(p, summary, groupTotals, dist, healModel)
+        local sc = Score.ScoreNormalized(p, summary, groupTotals, dist, healModel, runCtx)
         out.list[#out.list + 1] = sc
         if sc.playerGUID then out.byGuid[sc.playerGUID] = sc end
     end
@@ -236,9 +282,10 @@ function Score.ScorePlayer(run)
             local kickDist = Scoring.Distribute.Interrupts(players, run)
             local dispelDist = Scoring.Distribute.Dispels(players, run)
             local healModel = Scoring.Healing and Scoring.Healing.Compute(players)
+            local runCtx = Score.RunContext(players, run)
             local pn = Norm.Player(run, m)
             local dist = { interrupt = kickDist[pn.playerGUID], dispel = dispelDist[pn.playerGUID] }
-            return Score.ScoreNormalized(pn, summary, totals, dist, healModel)
+            return Score.ScoreNormalized(pn, summary, totals, dist, healModel, runCtx)
         end
     end
     return nil

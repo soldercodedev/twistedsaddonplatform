@@ -3,7 +3,7 @@
 ## Notes: Account-wide Mythic+ run, party, and performance history. A module of the Twisteds Addon Platform - configure with /tap.
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
 ## Author: Twistedfury-Zul'jin
-## Version: 1.0.0-beta.9
+## Version: 1.1.0
 ## Category: Combat
 ## Dependencies: TAP
 ## SavedVariables: TAP_MythicLedgerDB
@@ -74,6 +74,9 @@ UI.lua
 
 # Read-only "dungeon journal": per-season interrupt/dispel priorities, its own left-menu entry.
 DungeonGuide.lua
+
+# Read-only "how scoring works" reference (plain-language explainer of the live scoring model), own entry.
+ScoringGuide.lua
 
 # On-screen post-pull death report (overlay + party-chat post).
 DeathReport.lua

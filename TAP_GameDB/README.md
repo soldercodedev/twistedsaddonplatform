@@ -1,7 +1,7 @@
 # TAP&#95;GameDB
 
 A small, **optional** support add-on for the **[Twisteds Addon Platform](../README.md)**. You don't
-open or configure it — it just makes searches better.
+open or configure it - it just makes searches better.
 
 ## What it does
 
@@ -13,7 +13,7 @@ it.
 Any module can reach it centrally through the hub (`TAP:GetSpellDB()` / `TAP:GetItemDB()`); no module
 touches the addon directly.
 
-Without it, searches still work — they just fall back to your **spellbook, auras, gear and bags**.
+Without it, searches still work - they just fall back to your **spellbook, auras, gear and bags**.
 
 ## Data source
 
@@ -22,4 +22,4 @@ Blizzard game data. See the platform [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_N
 
 ## License
 
-GPL v2 — see the platform [`LICENSE`](../LICENSE).
+GPL v2 - see the platform [`LICENSE`](../LICENSE).

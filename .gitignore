@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Twisteds Addon Platform — repo hygiene
+# Twisteds Addon Platform - repo hygiene
 # Keep dev tooling, scripts, and reference material OUT of what we push/ship.
 # Only the addon folders (TAP, TAP_*) + docs (README/CHANGELOG/CURSE/LICENSE/
 # THIRD_PARTY_NOTICES) belong in the repo.

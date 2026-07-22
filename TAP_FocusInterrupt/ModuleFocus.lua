@@ -373,6 +373,7 @@ Suite:RegisterModule({
     addon   = "TAP_FocusInterrupt",
     default = true,
     group   = "Focus Target Interrupt",   -- single-module addon: its own sidebar category
+    groupColor = "5f8dff",                -- signature tint for this add-on's sidebar category
     rendersWhenDisabled = true,   -- keep our pages (and the Settings page) reachable while disabled
     changelog = CHANGELOG,
     OnEnable = function()

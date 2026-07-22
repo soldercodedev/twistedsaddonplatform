@@ -1,13 +1,13 @@
 # UIFoundry
 
-A self-skinned, **dependency-free** UI kit for World of Warcraft addons — extracted from
+A self-skinned, **dependency-free** UI kit for World of Warcraft addons - extracted from
 *Twisteds Combat Cues* so a whole suite of tools can share one look.
 
 Flat dark theme with a configurable accent. No external textures or libraries: solid-color
 textures + built-in (or your own bundled) fonts. Careful about Midnight's "secret value"
 API (safe scroll math, no comparing protected values).
 
-Add it as a **dependency addon** and each of your tools gets a full component library — from
+Add it as a **dependency addon** and each of your tools gets a full component library - from
 typography and buttons to progress bars, form controls, cards, tabs, social buttons, toasts,
 pickers, dialogs, a pooled content builder, and a complete application window shell.
 
@@ -41,20 +41,20 @@ component code.
 
 | option | meaning |
 |--------|---------|
-| `name` | prefixes the library's global frame names — give a **unique** value per addon |
+| `name` | prefixes the library's global frame names - give a **unique** value per addon |
 | `accent` | `{ r, g, b }` accent color |
 | `palette` | override base palette entries (`bg`,`sidebar`,`panel`,`card`,`hover`,`border`,`text`,`subtext`,`accent`) |
 | `font` | UI font path (probed; falls back to the game font) |
 | `fonts` | `{ { key=, label=, path= }, ... }` registry for font dropdowns / Preview |
-| `iconDir` | folder of bundled TGA icons (brand + UI glyphs) — see **ICONS.md** |
+| `iconDir` | folder of bundled TGA icons (brand + UI glyphs) - see **ICONS.md** |
 | `iconInset` | default `SetTexCoord` crop for game icons |
-| `onAccent` | `function(theme)` after `ApplyAccent` — retheme any live widgets you keep |
+| `onAccent` | `function(theme)` after `ApplyAccent` - retheme any live widgets you keep |
 
 ---
 
 ## Skins (color + shape)
 
-A **skin** is a named preset that changes both the palette/accent **and the shape** — corner
+A **skin** is a named preset that changes both the palette/accent **and the shape** - corner
 radius, border weight, and font. Pick one at creation or swap it live.
 
 ```lua
@@ -66,7 +66,7 @@ Built-in skins (`UIFoundry.SKIN_ORDER`): **flat** (default, square) · **rounded
 **modern** (teal, deep palette, 12px) · **blizzard** (dark gold, square, heavy border) ·
 **neon** (magenta, 10px), plus a preset per **WoW expansion** (`classic`, `tbc`, `wrath`,
 `cataclysm`, `mop`, `wod`, `legion`, `bfa`, `shadowlands`, `dragonflight`, `warwithin`,
-`midnight`) — each
+`midnight`) - each
 its signature accent over a subtly tinted palette. `theme:SkinLabel(name)` gives a display
 label. Add your own to `UIFoundry.SKINS`.
 
@@ -78,7 +78,7 @@ swap restyles the entire window. The showcase's **Appearance → Skins** page sw
 ## Restyle anything at draw time
 
 Almost every component accepts an **`opts` table** so you can override how it looks *when you
-draw it* — no theme edits needed. Colors may be `{ r, g, b }` **or** a `"RRGGBB"` hex string
+draw it* - no theme edits needed. Colors may be `{ r, g, b }` **or** a `"RRGGBB"` hex string
 anywhere.
 
 Standard style keys (a component ignores keys that don't apply):
@@ -104,7 +104,7 @@ theme:Badge(p, { text = "NEW", variant = "success", pill = true, shadow = true }
 theme:Card(p, { title = "Stats", shadow = { spread = 8, alpha = 0.5 } })
 ```
 
-`font` can be a bundled key (`"UBUNTU"`, `"POPPINS"`, …) or a path — the ~17 fonts packed
+`font` can be a bundled key (`"UBUNTU"`, `"POPPINS"`, …) or a path - the ~17 fonts packed
 in `assets/fonts` are registered by default, and **Ubuntu is the default UI font** (falls
 back to the game font if it isn't loadable yet).
 
@@ -165,7 +165,7 @@ Everything below is a `theme:` method. Rich components take an `opts` table; the
 |-----------|-------|
 | **RadioGroup** | single-select, vertical or horizontal |
 | **SegmentedControl** | connected buttons, single-select (iOS-style) |
-| **Stepper** | number field with − / + buttons, min/max/step |
+| **Stepper** | number field with - / + buttons, min/max/step |
 | **SearchBox** | input with search glyph, placeholder, live `onChange`, clear (×) |
 | **TextArea** | multi-line, scroll-clipped input |
 | **ComboBox** | a select that opens a **searchable, icon-capable** list popup |
@@ -181,7 +181,7 @@ Everything below is a `theme:` method. Rich components take an `opts` table; the
 ### Sound
 | API | notes |
 |-----|-------|
-| **PlaySound** | `theme:PlaySound(key, channel)` — plays a bundled `.ogg`/`.mp3` (Sounds/, ~64 from TCC) or a Blizzard `SOUNDKIT` sound, with fallback |
+| **PlaySound** | `theme:PlaySound(key, channel)` - plays a bundled `.ogg`/`.mp3` (Sounds/, ~64 from TCC) or a Blizzard `SOUNDKIT` sound, with fallback |
 | **SoundSelect** | dropdown of all sounds (grouped), **previews on pick** |
 | **SoundList / SoundLabel / ResolveSound** | catalog access |
 
@@ -244,8 +244,8 @@ theme:Button(p):Configure("Attack", 100, 26, "primary", cb, { icon = "sword", ic
 
 Portraits and models take a **`background`** (scene behind the character): a bundled scene
 name (`dusk · ember · arcane · verdant · steel · void`), a `{r,g,b}`/hex color, an
-`"atlas:Name"`, a texture path, or — for a truly **animated** backdrop — `"model:<fileID>"`
-(a live 3D M2). Named presets exist (`"model:illidan"`, `"model:arthas"` — verified fileIDs
+`"atlas:Name"`, a texture path, or - for a truly **animated** backdrop - `"model:<fileID>"`
+(a live 3D M2). Named presets exist (`"model:illidan"`, `"model:arthas"` - verified fileIDs
 in `UIF.MODEL_BACKDROPS`); pass a raw number for any other (find them on wago.tools DB2
 *ModelFileData*). Static scenes also take `animated = true` for a gentle breathing accent
 glow. `:SetBackground(spec, animated)` swaps it live.
@@ -287,7 +287,7 @@ theme:SocialBar(parent, {
 | **Modal** | centered dialog; variants, icon, custom content, footer buttons, stacking; `dim = false` (no darken), `closeOnClickOutside = false` (non-modal / floating) |
 | **Alert / Confirm / Prompt** | ready-made modals (message + OK / Confirm-Cancel / text input) |
 
-Copy/link dialogs take options: `theme:ShowLinkDialog(title, url, { autoClose = true })` — a
+Copy/link dialogs take options: `theme:ShowLinkDialog(title, url, { autoClose = true })` - a
 **single-line** box that **auto-closes** once you copy and click away / press Escape (WoW can't
 detect the copy itself). `ShowCopyDialog(title, text, info, { singleLine =, autoClose = })`.
 
@@ -303,7 +303,7 @@ local m = theme:Modal({ title = "Settings", width = 460, height = 300,
 
 ### Tooltips
 
-Any frame: `theme:SetTip(frame, "Title", "Body with a |cffffffffhighlighted|r word")` —
+Any frame: `theme:SetTip(frame, "Title", "Body with a |cffffffffhighlighted|r word")` -
 `|cffffffff…|r` becomes the live accent color. For multi-line, colored tooltips:
 
 ```lua

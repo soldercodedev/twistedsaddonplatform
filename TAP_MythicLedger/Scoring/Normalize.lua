@@ -39,6 +39,9 @@ function Norm.Player(run, member)
         playerGUID = member.guid, name = member.name or member.fullName, fullName = member.fullName,
         classID = member.classId or member.classID, classFile = member.classFile,
         specID = specID, role = role, isPlayer = member.isPlayer and true or false,
+        -- Item level (beta.6 start-of-run inspection). Drives the throughput ilvl adjustment (v40): a
+        -- player's DPS expectation is nudged by their ilvl vs the group average. nil when not inspected.
+        itemLevel = num(member.itemLevel),
         dungeonName = run.dungeonName,   -- for the dungeon dispel-type gate (mapId is set below)
         -- Live talent-inspection verdict for a TALENT-GATED dispel (true/false/nil = has/not/unknown).
         -- Lets Categories.Dispel avoid docking a player for a dispel they never talented.

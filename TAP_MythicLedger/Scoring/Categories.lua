@@ -97,12 +97,34 @@ function Cat.Interrupt(norm, summary, groupInterruptTotal, distExpected)
     -- implicit in the season supply), so a genuine 0 stays a 0. Surfaced purely as sample context.
     local confidence = Cfg.clamp((groupInterruptTotal or 0) / cconf.minGroupSample, 0, 1)
 
+    -- LONG_CD "pass" (v39): a long-cooldown interrupt is reasonably banked when the group already covered the
+    -- run's kicks. If this LONG_CD spec under-kicked its share (scored below neutral) but the group landed the
+    -- kick supply and NObody died to a kickable cast, pass the category to N/A (weight redistributed) with a
+    -- note that pressing it is still recommended. REVOKE the pass - keep the low score and flag it - when the
+    -- player landed 0 kicks and a kickable death occurred (they could have stopped a lethal cast).
+    local missedLifeSavingKick = false
+    if profileKey == "LONG_CD" then
+        local cov = distExpected.groupCoverage
+        local kickDeaths = distExpected.partyKickableDeaths or 0
+        if actual == 0 and kickDeaths > 0 then
+            missedLifeSavingKick = true
+        elseif capped < neutral and cov and cov >= (Cfg.interrupt.longCdPassCoverage or 1.0) and kickDeaths == 0 then
+            return { applicable = false, profile = profileKey, longCdCovered = true, recommendPress = true,
+                     interrupt = prof.interrupt, interruptSpell = irSpell, interruptCD = irCD, interruptExtras = extras,
+                     expected = expected, actual = actual, groupCoverage = cov,
+                     reason = "The group covered the run's kicks and nobody died to a missed interrupt, so your "
+                         .. "long-cooldown " .. (irSpell or "interrupt") .. " wasn't required here - still worth pressing it when you can." }
+        end
+    end
+
     return { applicable = true, profile = profileKey, score = capped, rawScore = raw, cappedScore = capped,
              confidence = confidence, confidenceApplied = false, expected = expected, actual = actual, ratio = ratio,
              share = share, supply = supply, capacity = distExpected.capacity,
              dungeonSupply = distExpected.dungeonSupply, groupCapacity = distExpected.groupCapacity,
              interruptSpell = irSpell, interruptCD = irCD, interruptExtras = extras,
-             neutral = neutral, groupTotal = groupInterruptTotal }
+             neutral = neutral, groupTotal = groupInterruptTotal,
+             missedLifeSavingKick = missedLifeSavingKick or nil,
+             groupCoverage = distExpected.groupCoverage, partyKickableDeaths = distExpected.partyKickableDeaths }
 end
 
 ----------------------------------------------------------------------
@@ -173,6 +195,21 @@ function Cat.Dispel(norm, summary, groupDispelTotal, distExpected)
     end
 
     local actual = norm.dispels
+
+    -- Group-covered escape (v39): a small personal share on a low-volume dispel mechanic that the GROUP
+    -- covered shouldn't score 0. If this player dispelled nothing, their fair share was under shareMax, and
+    -- the group handled at least groupMin of the demand ON THE AXES THIS SPEC CAN ADDRESS (see
+    -- Distribute.Dispels groupCoverage), treat it as covered-by-team: N/A, weight redistributed - not a 0.
+    -- Shares >= shareMax are a real workload and still scored normally below.
+    local dcov = Cfg.dispelCoverage
+    if actual == 0 and dcov and expected < (dcov.shareMax or 1.25)
+       and distExpected.groupCoverage and distExpected.groupCoverage >= (dcov.groupMin or 0.9) then
+        return { applicable = false, profile = profileKey, coveredByTeam = true, groupCovered = true,
+                 dispel = prof.dispel, dispelTargets = dispelTargets, expected = expected,
+                 groupCoverage = distExpected.groupCoverage,
+                 reason = "Teammates covered the few dispels here - no fair share fell to you." }
+    end
+
     local ratio = (expected > 0) and (actual / expected) or (actual > 0 and 2.0 or 0)
     local raw = curveScore(ratio)
     local capped = math.min(raw, Cfg.contributionCurve.categoryCap)
@@ -205,7 +242,22 @@ local function componentScore(value, expected, role, isHeal)
     return s, ratio
 end
 
-function Cat.Throughput(norm, baseline, healReq)
+-- Item-level factor for the DPS expectation (v40): bounded nudge by a player's ilvl vs the group average,
+-- so under-gearing the group isn't punished and out-gearing it doesn't read as skill. Returns 1.0 (no
+-- change) unless the adjustment is enabled, we know this player's ilvl, and enough of the party's ilvl is
+-- known (runCtx.groupAvgIlvl / ilvlCoverage, computed once per run in Score.ScoreRun).
+local function ilvlDpsFactor(norm, runCtx)
+    local ia = Cfg.throughput and Cfg.throughput.ilvlAdjust
+    if not (ia and ia.enabled and runCtx and type(norm.itemLevel) == "number"
+            and type(runCtx.groupAvgIlvl) == "number" and runCtx.groupAvgIlvl > 0
+            and (runCtx.ilvlCoverage or 0) >= (ia.minCoverage or 0.8)) then
+        return 1.0
+    end
+    return Cfg.clamp(1 + (ia.perIlvl or 0.01) * (norm.itemLevel - runCtx.groupAvgIlvl),
+                     ia.clampLo or 0.80, ia.clampHi or 1.20)
+end
+
+function Cat.Throughput(norm, baseline, healReq, runCtx)
     baseline = baseline or Base.Throughput(norm)
     local role = norm.role or "DAMAGER"
     local mix = baseline.mix or Cfg.ThroughputMix(role, norm.specID)
@@ -214,10 +266,15 @@ function Cat.Throughput(norm, baseline, healReq)
     local detail = {}
 
     if (mix.dps or 0) > 0 then
-        local s, r = componentScore(norm.dps, baseline.dps, role, false)
+        -- Scale the DPS expectation by gear (vs group average) before comparing - the only category where
+        -- item level structurally changes what a player can output.
+        local ilvlF = ilvlDpsFactor(norm, runCtx)
+        local dpsExpected = baseline.dps and (baseline.dps * ilvlF) or baseline.dps
+        local s, r = componentScore(norm.dps, dpsExpected, role, false)
         if s then
             parts = parts + s * mix.dps; wsum = wsum + mix.dps
-            detail.dps = { value = norm.dps, expected = baseline.dps, ratio = r, score = s, weight = mix.dps }
+            detail.dps = { value = norm.dps, expected = dpsExpected, baseExpected = baseline.dps,
+                           ilvlFactor = ilvlF, ratio = r, score = s, weight = mix.dps }
         end
     end
     if (mix.hps or 0) > 0 then
@@ -230,9 +287,19 @@ function Cat.Throughput(norm, baseline, healReq)
         end
         local s, r = componentScore(value, expected, role, true)
         if s then
+            -- Outcome floor (v42): on a TIMED run, the HEALING HALF is lifted toward a perfect 100 by how
+            -- clean the run was - a healer who timed the key with no deaths healed enough by definition, so
+            -- full marks on healing. HPS component only (their damage half is still graded), death-gated,
+            -- never lowers. See Config.throughput.outcomeFloor.
+            local of, floorRaw = Cfg.throughput.outcomeFloor, nil
+            if of and of.enabled and runCtx and runCtx.onTime and of.roles and of.roles[role] then
+                local clean = Cfg.clamp(1 - (runCtx.partyDeaths or 0) / (of.deathK or 3), 0, 1)
+                local lifted = s + clean * (of.strength or 1) * ((of.target or 100) - s)
+                if lifted > s then floorRaw = s; s = lifted end
+            end
             parts = parts + s * mix.hps; wsum = wsum + mix.hps
             detail.hps = { value = value, expected = expected, ratio = r, score = s, weight = mix.hps,
-                           requirementModel = model, hpsRaw = norm.hps,
+                           requirementModel = model, hpsRaw = norm.hps, outcomeFloorRaw = floorRaw,
                            reqDetail = model and healReq.detail or nil }
         end
     end

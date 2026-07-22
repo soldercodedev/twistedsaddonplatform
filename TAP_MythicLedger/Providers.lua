@@ -491,9 +491,10 @@ end
 local function normRecapEvent(ev)
     local evt = ML.ReadStr(ev.event)
     local nm  = ML.ReadStr(ev.spellName)
-    if not nm or nm == "" then   -- melee / heal events carry no spellName - label them like the game does
+    if not nm or nm == "" then   -- melee / heal / environmental events carry no spellName - label like the game
         if evt == "SWING_DAMAGE" then nm = "Melee"
-        elseif evt == "SPELL_HEAL" or evt == "SPELL_PERIODIC_HEAL" then nm = "Heal" end
+        elseif evt == "SPELL_HEAL" or evt == "SPELL_PERIODIC_HEAL" then nm = "Heal"
+        elseif evt == "ENVIRONMENTAL_DAMAGE" then nm = "Environmental" end   -- fall / lava / fire / slime
     end
     return {
         id   = ML.ReadNum(ev.spellId),
@@ -575,6 +576,8 @@ function Providers.ClassifyDeaths(attribution, recaps, role, deathCount, kickSet
     end
     local function isAvoid(e) return (e.id and avoidSet[e.id]) and true or false end
     local function isKick(e)  return (e.id and kickSet[e.id]) and true or false end
+    -- Environmental damage (fall / lava / fire / slime) is the player's OWN fault - treated as avoidable.
+    local function isEnviro(e) return e.ev == "ENVIRONMENTAL_DAMAGE" end
 
     local b = { avoidable = 0, threat = 0, kickable = 0, other = 0, fatal = {} }
     if type(recaps) == "table" and #recaps > 0 then
@@ -599,19 +602,38 @@ function Providers.ClassifyDeaths(attribution, recaps, role, deathCount, kickSet
             local avShare = dTot > 0 and (dAvoid / dTot) or 0
             local meShare = dTot > 0 and (dMelee / dTot) or 0
             local kkShare = dTot > 0 and (dKick / dTot) or 0
-            -- Keep the EXACT avoidable/threat decision; a missed kick only claims deaths that would
-            -- otherwise be "other". So it's a pure carve-out of "other" - no existing classification (or
-            -- score) moves, which matches "missed-kick weighted the same as other".
-            local cause = "other"
-            if avShare >= DEATH_CAUSE_SHARE or meShare >= DEATH_CAUSE_SHARE then
-                cause = (avShare >= meShare) and "avoidable" or "threat"
-            elseif kkShare >= DEATH_CAUSE_SHARE then
-                cause = "kickable"
+            -- KILLING-BLOW PRECEDENCE (v41): the FATAL hit's own nature decides the cause first, before the
+            -- whole-recap share math. If the finishing blow was avoidable - or ENVIRONMENTAL (fall / lava /
+            -- fire = the player's own fault) - it's an avoidable death even when earlier chip damage was
+            -- threat/other. If the finishing blow was a melee auto on a non-tank, it's a threat death. Only
+            -- when the killing blow is none of these do we fall back to the dominant-share classification.
+            local cause
+            if killer then
+                if isEnviro(killer) or isAvoid(killer) then cause = "avoidable"
+                elseif isMelee(killer) and nonTank then cause = "threat"
+                elseif isKick(killer) then cause = "kickable" end   -- fatal blow was an un-kicked cast
+            end
+            if not cause then
+                -- Dominant share over the whole recap; a missed kick only carves out of "other".
+                if avShare >= DEATH_CAUSE_SHARE or meShare >= DEATH_CAUSE_SHARE then
+                    cause = (avShare >= meShare) and "avoidable" or "threat"
+                elseif kkShare >= DEATH_CAUSE_SHARE then
+                    cause = "kickable"
+                else
+                    cause = "other"
+                end
             end
             b[cause] = b[cause] + 1
+            -- Display name for the fatal blow. Recaps captured before v41 stored a nil name for
+            -- environmental/melee hits, so fall back to an event-type label so the review never shows blank.
+            local killerName = killer and killer.name
+            if killer and not killerName then
+                if killer.ev == "ENVIRONMENTAL_DAMAGE" then killerName = "Environmental"
+                elseif killer.ev == "SWING_DAMAGE" then killerName = "Melee" end
+            end
             b.fatal[#b.fatal + 1] = {
                 cause = cause,
-                killer = killer and killer.name, killerId = killer and killer.id, killerEvent = killer and killer.ev,
+                killer = killerName, killerId = killer and killer.id, killerEvent = killer and killer.ev,
                 avoidPct = math.floor(avShare * 100 + 0.5), meleePct = math.floor(meShare * 100 + 0.5),
                 kickPct = math.floor(kkShare * 100 + 0.5),
             }

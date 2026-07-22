@@ -1,4 +1,4 @@
-# Mythic Ledger — Manual Test Checklist
+# Mythic Ledger - Manual Test Checklist
 
 `[LOCAL]` = testable without a real key (mock data / UI / disable-enable).
 `[M+]` = requires a real Mythic+ group/run to verify end-to-end.
@@ -36,14 +36,14 @@
 24. `[LOCAL]` Old/corrupt DB (hand-edit SavedVariables) → loads without wiping; migration logged.
 25. `[LOCAL]` Same name on different realms → kept as two separate players (GUID/Name-Realm keyed).
 26. `[LOCAL]` Player aggregation separates roles (no healer HPS blended with DPS damage).
-27. `[LOCAL]` Unavailable metrics render as "—" everywhere (never a fake 0).
+27. `[LOCAL]` Unavailable metrics render as "-" everywhere (never a fake 0).
 
 ## Recap
 28. `[M+]` Group with a returning player → recap appears once, in local chat only.
 29. `[M+]` Repeated `GROUP_ROSTER_UPDATE` → no recap spam (once per person per group session).
 30. `[LOCAL]` Recap "Preview for current group" button in Settings prints a sample.
 31. `[LOCAL]` Recap respects season scope (current vs all) and min-shared-runs.
-32. `[LOCAL]` Notes stay private — never in a recap unless "Include personal notes" is enabled.
+32. `[LOCAL]` Notes stay private - never in a recap unless "Include personal notes" is enabled.
 
 ## Packaging
 33. `[LOCAL]` `deploy.ps1` mirrors `TAP_MythicLedger`; `/reload` loads it with no errors.
@@ -54,5 +54,5 @@ Run this once in-game (not shipped) to exercise the UI without real keys:
 ```lua
 /run for i=1,40 do local ML=select(2,...) end   -- (use TAP_MythicLedger's own dev generator if added)
 ```
-A developer-only mock generator may be added under `TAP_MythicLedger/tools/` — that folder is
+A developer-only mock generator may be added under `TAP_MythicLedger/tools/` - that folder is
 pruned from the release ZIP by the build action.

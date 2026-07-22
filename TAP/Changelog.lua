@@ -8,27 +8,37 @@ local Suite = _G.TAP
 Suite.CHANGELOG = [==[
 # Twisteds Addon Platform - Changelog
 
-## 1.5.0-beta.1
+## 1.5.0
 
-A ground-up navigation overhaul. Each installed add-on now gets its own category in the left sidebar, and its pages live there as sub-items - so a feature-rich module's pages are discoverable at a glance instead of crammed into an in-body tab strip. Freeing that in-body top-nav lets a page carry its own sub-tabs (the Mythic Ledger Settings page is the first to use them). (Beta: please report any navigation or rendering quirks.)
+A ground-up navigation overhaul. Each installed add-on now gets its own category in the left sidebar, and its pages live there as sub-items - so a feature-rich module's pages are discoverable at a glance instead of crammed into an in-body tab strip. Freeing that in-body top-nav lets a page carry its own sub-tabs (the Mythic Ledger Settings page is the first to use them).
 
 **Platform**
 
-- **[NEW]** **Two-tier sidebar navigation.** The old single "Modules" list is replaced by one collapsible category per add-on (Mythic Ledger, Combat Alerts, Focus Target Interrupt, Rotation Assistant), with each module's pages as sub-rows. Only the add-on you're in stays expanded (accordion), so the list stays tidy. The Dungeon Guide now sits inside the Mythic Ledger category, directly under Overview.
+- **[NEW]** **Two-tier sidebar navigation.** The old single "Modules" list is replaced by one collapsible category per add-on (Mythic Ledger, Combat Alerts, Focus Target Interrupt, Rotation Assistant), with each module's pages as sub-rows. Only the add-on you're in stays expanded (accordion), so the list stays tidy. The Dungeon Guide now sits inside the Mythic Ledger category, directly under Summary.
+- **[NEW]** **Color-coded sidebar.** Each add-on's category carries its own signature color, so you can spot Mythic Ledger, Combat Alerts, Focus Target Interrupt and Rotation Assistant at a glance.
 - **[NEW]** **Page-level sub-tabs.** With top-level nav in the sidebar, the in-body top-nav is free for a page's own tabs.
 - **[CHANGE]** **Every module's tabs moved to the sidebar.** Combat Alerts (Alerts / Profiles / Settings), Focus Target Interrupt (Macros / Marker Palette / Announce / Settings), and Rotation Assistant (Behavior / Indicators / Appearance / Settings) now list their pages in the sidebar. Drill-downs (a run's details, a rule's editor) still open in-body over the page they came from. Deep links, minimap buttons and slash commands are unchanged.
 - **[CHANGE]** **Overview is now one row per add-on** with its version as a badge (green for a stable release, blue for a beta), a colored What's New button, and a red Disable button. The old Installed page is gone - enable/disable (live toggle) and Unload now live on Overview, and the redundant enable toggle was removed from each module's own Settings.
 - **[CHANGE]** **Consistent page headings everywhere.** Every page now carries the same title/description Page Heading style; the Platform Appearance page is renamed Settings and rebuilt on the two-column grid.
 - **[NEW]** **This Changelog page.** The platform's release notes now live under Help, right here.
 
-### Mythic Ledger (1.0.0-beta.9)
+### Mythic Ledger (1.1.0)
 
-- **[NEW]** **All eight pages in the sidebar.** Overview, Runs, Dungeons, Characters, Players, Bests, Settings and Debug are now sidebar sub-rows under the Mythic Ledger category. Clicking a run/player/dungeon still opens its detail view in place, with Back returning where you came from.
-- **[NEW]** **Runs list filters & sortable DPS/HPS columns.** Filter by Season, Result, Character, Dungeon, Key level and Role, with DPS and HPS in their own sortable columns and the result shown inline with the season.
-- **[NEW]** **Players filters for Class and Spec**, beside the existing Role and Favorites filters.
-- **[CHANGE]** **Settings, reorganized into sub-tabs.** The cramped two-column Settings grid is replaced by in-body sub-tabs - Appearance, Tooltips, Scoreboard, Death Report, Tracking, Regroup and Misc - each with its own heading below the tab bar and full-width, better described. The Recap tab is renamed Regroup (its unused Detail dropdown removed), and the death report's on switch is now Enable Death Report under Behavior.
+A big scoring pass alongside the navigation move. Every scoring change below re-scores your existing runs automatically on login.
 
-### Focus Target Interrupt (1.1.0-beta.1)
+- **[NEW]** **Scoring Guide - how every run is graded.** A new read-only Scoring Guide page lays out the whole model in plain language: the 5 metrics and their weights, the real-world factors (your gear, spec, the dungeon, and your group), the guardrails that stop a teammate over-performing from hurting your score, and the grade ladder - all pulled live from the engine.
+- **[CHANGE]** **Item level now shapes your damage bar.** Your expected damage is nudged by your item level versus the group average (bounded, about 1% per item level), so the lowest-geared player isn't punished for output their gear can't reach, and out-gearing the group no longer reads as skill. Applies only when most of the party's item level is known.
+- **[CHANGE]** **Healers get full credit on a clean key.** Time the key with no deaths and the healing half of your throughput is lifted to full marks instead of being marked down when the group self-covered. Death-gated, and it never lowers a score.
+- **[NEW]** **New S+ grade** for a flawless run (every applicable metric a perfect 100).
+- **[CHANGE]** **Smarter death causes.** The killing blow decides the cause: avoidable, environmental (fall / lava / fire - now your own fault), a non-tank melee hit (lost threat), or an un-kicked cast (missed kick), even when earlier chip damage was something else.
+- **[CHANGE]** **Fairer dispels.** A tiny fair share the group already covered no longer scores a zero; Skyreach stops expecting a healer to cleanse a debuff that isn't there, and Restoration Druids are credited for Soothe.
+- **[CHANGE]** **Long-cooldown interrupts get a pass** when the group covered the kicks and nobody died to a missed one (still worth pressing).
+- **[NEW]** **Tanks see loose-mob deaths** - teammate deaths from a mob the tank lost or never had threat on, shown for awareness (not scored).
+- **[NEW]** **All eight pages in the sidebar** (Summary, Runs, Dungeons, Characters, Players, Bests, Settings, Debug) with the Dungeon Guide and Scoring Guide, plus Runs filters + sortable DPS/HPS columns and Players filters for Class and Spec. Clicking a run/player/dungeon still opens in place.
+- **[CHANGE]** **"Overview" is now "Summary"** (so it doesn't clash with the platform Overview), and Settings is reorganized into sub-tabs (Appearance, Tooltips, Scoreboard, Death Report, Tracking, Regroup - formerly Recap - and Misc).
+- **[BUG FIX]** **Run-history date column** widened so the date/time stamp no longer runs under the dungeon icon.
+
+### Focus Target Interrupt (1.1.0)
 
 - **[NEW]** **Announce by class/spec.** The Announce page adds a Class / Spec picker so focus and ready-check call-outs fire only while you're playing one of the chosen specs - leave it empty to announce on every character.
 

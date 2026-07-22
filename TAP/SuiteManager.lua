@@ -932,12 +932,16 @@ local function buildModuleCategories(pages)
     for _, g in ipairs(order) do
         table.sort(g.modules, function(a, bb) return (a.spec.groupOrder or 50) < (bb.spec.groupOrder or 50) end)
         local lead = g.modules[1]
-        local label
-        for _, mod in ipairs(g.modules) do if mod.spec.group then label = mod.spec.group; break end end
+        local label, gcolor
+        for _, mod in ipairs(g.modules) do
+            if mod.spec.group and not label then label = mod.spec.group end
+            if mod.spec.groupColor and not gcolor then gcolor = mod.spec.groupColor end
+        end
         label = label or (lead and (lead.spec.title or lead.spec.id)) or g.key
         local isActive = false
         for _, mod in ipairs(g.modules) do if mod.spec.id == activeMod then isActive = true; break end end
-        pages[#pages + 1] = { header = label, collapsible = true, collapsed = not isActive, accordion = true }
+        pages[#pages + 1] = { header = label, collapsible = true, collapsed = not isActive, accordion = true,
+            color = gcolor and theme:Color(gcolor) or nil }   -- per-add-on signature tint for the nav category
         -- Flatten every page of every module in this addon into one ordered list. A page sorts by its
         -- own `navOrder` when set, else by (module groupOrder, page index) - so a companion module (e.g.
         -- Dungeon Guide) can slot its page next to a specific host page (right under Overview) instead of

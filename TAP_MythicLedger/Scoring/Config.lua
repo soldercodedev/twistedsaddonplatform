@@ -139,7 +139,40 @@ Scoring.Config = Config
 --      -30 (avoidable), -10 (other), -5 (threat: melee while not tanking) off the 0-100 Death category
 --      (Config.deaths.causePenalties), capped at maxPenalty. Runs WITHOUT the breakdown (pre-v38 saves)
 --      keep the flat -25/death calc. Deaths category weight (0.20) unchanged. Retroactive rescore.
-Config.version = 38
+-- v39: two accuracy fixes from beta run-log analysis (see SCORING_TUNING_IDEAS.md). (1) DISPELS: a small
+--      personal dispel share on a low-volume mechanic that the GROUP actually covered no longer scores 0 -
+--      it becomes N/A ("teammates covered", weight redistributed) via Config.dispelCoverage. Plus Skyreach's
+--      phantom defensive magic supply was removed (its dispellable content is all offensive enemy buffs -
+--      Seasons/MidnightS1), and Restoration Druid gained its baseline Soothe (offensive enrage) in
+--      Capability. (2) INTERRUPTS: a LONG_CD interrupt is passed to N/A (still "recommended to press") when
+--      the group already covered the run's kick supply AND nobody died to a kickable cast; the pass is
+--      SUPPRESSED and flagged when the player landed 0 kicks and a kickable death occurred
+--      (Config.interrupt.longCdPassCoverage). Retroactive rescore.
+-- v40: two throughput fairness changes (see SCORING_TUNING_IDEAS.md finding 4 + idea 3). (1) ITEM LEVEL:
+--      the DPS expectation is now scaled by a player's ilvl vs the GROUP AVERAGE - the lowest-geared
+--      member isn't docked for output their gear can't reach, and out-gearing the group doesn't read as
+--      skill. Bounded (+/-20%), ~1%/ilvl, DPS component only (HPS uses the damage-taken requirement), and
+--      only when >=80% of the party's ilvl is known (Config.throughput.ilvlAdjust). (2) HEALER OUTCOME
+--      FLOOR: a healer who TIMED the key with few deaths has demonstrably done the job, so a sub-neutral
+--      throughput (the group self-covered its own damage, leaving little to heal) is lifted toward neutral
+--      in proportion to how clean the run was - death-gated so a disaster run keeps its low score, and it
+--      NEVER lowers a score (Config.throughput.outcomeFloor). Retroactive rescore.
+-- v41: death classification (Providers.ClassifyDeaths) now gives the KILLING BLOW precedence over the
+--      whole-recap damage share. If the fatal hit was avoidable - or ENVIRONMENTAL (fall / lava / fire =
+--      the player's own fault, now classed avoidable) - the death is Avoidable even if earlier chip damage
+--      was threat/other; a fatal melee auto on a non-tank is a Threat death. Only when the killing blow is
+--      none of these does it fall back to the dominant-share classification. Affects the cause-weighted
+--      Death penalty on runs that captured death recaps. Retroactive rescore.
+-- v42: (1) HEALER OUTCOME FLOOR now lifts the HEALING HALF to a PERFECT 100 (was neutral 75) on a timed,
+--      no-death run - moved into Cat.Throughput, applied to the HPS component only (their damage is still
+--      graded). (2) New top grade "S+" for a flawless 100 (every applicable category perfect). (3) TANK
+--      review now surfaces `groupLooseThreatDeaths` - teammate deaths from a mob the tank lost/never had
+--      threat on - for awareness only (NOT scored, weight 0). Retroactive rescore.
+-- v43: death killing-blow precedence extended to MISSED KICK - if the fatal blow was a catalogued
+--      interruptible cast, the death is Kickable even when earlier avoidable/other chip damage held the
+--      dominant share (completes the v41 killing-blow rule; from a reviewed reclassification). Retroactive
+--      rescore.
+Config.version = 43
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -223,6 +256,13 @@ Config.interrupt = {
     kickUtil = 0.15,    -- fraction of raw interrupt AVAILABILITY that becomes an actual kick in M+
     stopLikelihood = { HIGH = 0.60, MEDIUM = 0.30, LOW = 0.10 },   -- how often a rotational extra stop is spent interrupting
     countedStopTypes = { INTERRUPT = true, SILENCE = true },        -- a STUN doesn't lock a school like a kick -> not counted
+    -- LONG_CD "pass" (v39): a long-cooldown interrupt is reasonably banked when the group already covered
+    -- the run's kicks. When a LONG_CD spec scored BELOW neutral (it under-kicked its share) AND the group
+    -- landed at least this fraction of the kick supply AND no party death was attributed to a kickable cast,
+    -- the interrupt category is passed to N/A (weight redistributed) instead of docking them - with a note
+    -- that pressing it is still recommended. The pass is REVOKED (kept low + flagged) when the player landed
+    -- ZERO kicks and a kickable death occurred (they could have stopped a lethal cast).
+    longCdPassCoverage = 1.0,
 }
 -- CALIBRATION: per-source scale on the supply pools. TRASH frequencies are a PER-MINUTE density and are
 -- multiplied by run length in Distribute.accumulate, so trashKick/trashDispel are 1.0 (the density is used
@@ -238,6 +278,15 @@ Config.supplyScale = { trashKick = 1.0, bossKick = 1.5, trashDispel = 1.0, bossD
 -- their full capability share). 0.5 is the middle ground: a genuinely-sniped player still isn't docked
 -- hard, but someone who plainly didn't push their button is no longer excused to a perfect score.
 Config.snipeForgiveness = 0.5
+
+-- Group-covered dispel escape (v39). On a low-volume dispel mechanic, a player whose fair share was small
+-- and who dispelled nothing should NOT score 0 when the GROUP still covered the demand (a teammate handled
+-- the one or two dispels that came up). When actual == 0 AND the player's expected share < shareMax AND the
+-- group covered >= groupMin of the demand ON THE AXES THIS SPEC CAN ADDRESS (defensive cleanse and/or
+-- offensive purge/soothe - so a DPS's offensive purge can't "cover" a healer's defensive cleanse), the
+-- dispel category becomes N/A (coveredByTeam, weight redistributed) instead of a 0. Shares >= shareMax are a
+-- real workload and still scored. Mirrors the interrupt sniping idea but as a clean N/A on tiny shares.
+Config.dispelCoverage = { shareMax = 1.25, groupMin = 0.90 }
 
 -- The season utility profile for the current M+ pool (registered from Scoring/Seasons/*.lua into
 -- ML.Scoring.SeasonData), and a per-dungeon lookup within it. Season selection matches
@@ -546,6 +595,22 @@ Config.throughput = {
     -- Healer HPS soft cap: above softCapRatio of baseline, extra HPS yields sharply less (excess
     -- healing usually = avoidable damage taken, which is penalized under survival instead).
     healerSoftCapRatio = 1.15,
+
+    -- Item-level adjustment (v40). Throughput is the ONE category where gear genuinely changes output, so
+    -- we nudge the DPS EXPECTATION by a player's item level vs the GROUP AVERAGE: the lowest-geared member
+    -- isn't punished for output their gear can't reach, and out-gearing the group doesn't read as skill.
+    -- factor = clamp(1 + perIlvl*(ilvl - groupAvg), clampLo, clampHi), applied to the DPS baseline only
+    -- (HPS uses the damage-taken requirement, which gear affects far less). Bounded & small - it never
+    -- dominates. Applied ONLY when we know at least minCoverage of the party's ilvl (else factor = 1).
+    -- perIlvl 0.01 ~= WoW's real ~1%/ilvl gear scaling (measured 1.18%/ilvl on full-inspect beta runs).
+    ilvlAdjust = { enabled = true, perIlvl = 0.01, clampLo = 0.80, clampHi = 1.20, minCoverage = 0.8 },
+
+    -- Outcome floor (v40; v42 → full marks). A HEALER who TIMED the key with no deaths healed enough BY
+    -- DEFINITION - the group lived and the key was made - so the HEALING HALF of throughput is lifted toward
+    -- a PERFECT 100 (not a neutral 75) in proportion to how clean the run was. Applied to the HPS component
+    -- ONLY (their damage is still graded normally); death-gated (clean = clamp(1 - partyDeaths/deathK, 0, 1))
+    -- so a disaster run keeps its low score; NEVER lowers a score. lifted = raw + clean*strength*(target-raw).
+    outcomeFloor = { enabled = true, roles = { HEALER = true }, target = 100, deathK = 3, strength = 1.0 },
     -- Support / buff DPS (e.g. Augmentation Evoker) do less PERSONAL damage because they inflate
     -- everyone else's. We drop their throughput bar to `selfShare` of a normal DPS and hand the freed
     -- share to the teammates they're pumping - so the aug isn't punished for buffing, and the buffed
@@ -703,6 +768,7 @@ Config.review = {
 -- Grades. First threshold whose min <= overall wins (evaluated high -> low).
 ----------------------------------------------------------------------
 Config.grades = {
+    { min = 100, grade = "S+" },   -- a flawless run: every applicable category scored a perfect 100
     { min = 97, grade = "S"  }, { min = 93, grade = "A+" }, { min = 89, grade = "A"  },
     { min = 85, grade = "A-" }, { min = 80, grade = "B+" }, { min = 75, grade = "B"  },
     { min = 70, grade = "B-" }, { min = 65, grade = "C+" }, { min = 60, grade = "C"  },

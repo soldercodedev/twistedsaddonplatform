@@ -137,15 +137,23 @@ function Distribute.Interrupts(players, run)
     end
     redistribute(entries)
 
-    for _, e in ipairs(entries) do
-        out[e.guid] = { expected = e.expected, baseExpected = e.base, share = e.share, capacity = e.capacity,
-                        supply = supply, dungeonSupply = dungeonSupply, groupCapacity = totalCap }
-    end
-    -- Group summary (for the run-details / scoreboard highlight): every kick the party landed vs the
-    -- run's kick supply (what it offered, capped by the group's cooldown capacity - same value scoring uses).
-    local groupActual = 0
+    -- Group summary (for the run-details / scoreboard highlight AND the LONG_CD pass): every kick the party
+    -- landed vs the run's kick supply (what it offered, capped by group cooldown capacity - the same value
+    -- scoring uses), plus how many party deaths were attributed to a KICKABLE cast (v38 death causes). Both
+    -- are surfaced per-player so Cat.Interrupt can pass a LONG_CD kicker the group covered - unless someone
+    -- died to a cast that could have been kicked.
+    local groupActual, partyKickDeaths = 0, 0
     for _, p in ipairs(players) do
         if type(p.interrupts) == "number" then groupActual = groupActual + p.interrupts end
+        local dc = p.deathCauses
+        if type(dc) == "table" and type(dc.kickable) == "number" then partyKickDeaths = partyKickDeaths + dc.kickable end
+    end
+    local groupCoverage = (supply > 0) and (groupActual / supply) or nil
+
+    for _, e in ipairs(entries) do
+        out[e.guid] = { expected = e.expected, baseExpected = e.base, share = e.share, capacity = e.capacity,
+                        supply = supply, dungeonSupply = dungeonSupply, groupCapacity = totalCap,
+                        groupActual = groupActual, groupCoverage = groupCoverage, partyKickableDeaths = partyKickDeaths }
     end
     return out, { actual = groupActual, expected = supply, dungeonSupply = dungeonSupply, groupCapacity = totalCap }
 end
@@ -262,6 +270,18 @@ function Distribute.Dispels(players, run)
             offActual = offActual + a * (1 - defShare)
         elseif canDef then defActual = defActual + a
         elseif canOff then offActual = offActual + a
+        end
+    end
+
+    -- Per-player group coverage, restricted to the AXES this spec can address (v39, for Cat.Dispel's
+    -- group-covered escape). A defensive-only healer is judged on how much of the defensive demand the group
+    -- cleansed; a purge-only DPS on the offensive demand - so one axis can't "cover" the other.
+    for guid, pl in pairs(pool) do
+        if out[guid] then
+            local canDef, canOff = next(pl.def) ~= nil, next(pl.off) ~= nil
+            local relExp = (canDef and defExpected or 0) + (canOff and offExpected or 0)
+            local relAct = (canDef and defActual or 0) + (canOff and offActual or 0)
+            out[guid].groupCoverage = (relExp > 0) and (relAct / relExp) or nil
         end
     end
     return out, { defExpected = defExpected, offExpected = offExpected, defActual = defActual, offActual = offActual }

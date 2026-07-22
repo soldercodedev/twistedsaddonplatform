@@ -172,9 +172,10 @@ local function build(win)
     -- A clickable, collapsible category header. Drawn as a distinct group BAND (accent overline label,
     -- an accent chevron on the right, and a hairline divider beneath) so groups are clearly illustrated
     -- and the collapse affordance is obvious - it doesn't read like just another nav row.
-    local function makeCategoryHeader(text, collapsible)
+    -- `color` (optional {r,g,b}) overrides the accent so each add-on category shows its signature tint.
+    local function makeCategoryHeader(text, collapsible, color)
         local hb = CreateFrame("Button", nil, navChild); hb:SetHeight(20)
-        local labelCol = collapsible ~= false and C.accent or C.subtext
+        local labelCol = color or (collapsible ~= false and C.accent or C.subtext)
         hb.fs = theme:Heading(hb, { text = text, role = "overline" }); hb.fs:SetPoint("LEFT", 6, 0)
         hb.fs:SetTextColor(unpack(labelCol))
         -- Hairline divider under the label so each group reads as a banded section.
@@ -184,9 +185,9 @@ local function build(win)
         if collapsible ~= false then
             local ct = theme:GetIcon("chevron-down")
             if ct then hb.chev = hb:CreateTexture(nil, "ARTWORK"); hb.chev:SetSize(11, 11); hb.chev:SetPoint("RIGHT", -4, 1)
-                hb.chev:SetTexture(ct); hb.chev:SetVertexColor(unpack(C.accent)) end
+                hb.chev:SetTexture(ct); hb.chev:SetVertexColor(unpack(labelCol)) end
             hb:SetScript("OnEnter", function(self) self.fs:SetTextColor(unpack(C.text)); if self.chev then self.chev:SetVertexColor(unpack(C.text)) end end)
-            hb:SetScript("OnLeave", function(self) self.fs:SetTextColor(unpack(C.accent)); if self.chev then self.chev:SetVertexColor(unpack(C.accent)) end end)
+            hb:SetScript("OnLeave", function(self) self.fs:SetTextColor(unpack(labelCol)); if self.chev then self.chev:SetVertexColor(unpack(labelCol)) end end)
         else hb:EnableMouse(false) end
         function hb:SetChevron(collapsed) if self.chev then self.chev:SetRotation(collapsed and -math.rad(90) or 0) end end
         return hb
@@ -199,7 +200,7 @@ local function build(win)
     local order, curHeader = {}, nil
     for _, page in ipairs(o.pages or {}) do
         if page.header then
-            local hb = makeCategoryHeader(page.header, page.collapsible)
+            local hb = makeCategoryHeader(page.header, page.collapsible, page.color)
             hb._rows, hb._collapsed, hb._collapsible = {}, page.collapsed or false, page.collapsible ~= false
             -- `accordion` categories auto-collapse to just the active one (see ExpandCategoryForView).
             hb._accordion = page.accordion and true or false

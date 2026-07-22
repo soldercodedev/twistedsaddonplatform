@@ -76,7 +76,7 @@ spec(103, "DRUID", "Feral",        "DAMAGER", { interrupt = ir(106839, "Skull Ba
 spec(104, "DRUID", "Guardian",     "TANK",    { interrupt = ir(106839, "Skull Bash", 15, "MELEE", "SHORT_CD"),
     dispel = dp("LIMITED", 2782, "Remove Corruption", { curse = true, poison = true }, { enrage = true }, { talentDependent = true }) })   -- + Soothe (2908) enrage
 spec(105, "DRUID", "Restoration",  "HEALER",  { interrupt = IR_NONE,
-    dispel = dp("STANDARD", 88423, "Nature's Cure", { magic = true, curse = true, poison = true }, {}) })
+    dispel = dp("STANDARD", 88423, "Nature's Cure", { magic = true, curse = true, poison = true }, { enrage = true }) })   -- + Soothe (2908) enrage (all druids; v39 - was missing on Resto)
 
 ----------------------------------------------------------------------
 -- Evoker - Quell (40s) for Devastation/Augmentation. Preservation LOST Quell in Midnight (healer

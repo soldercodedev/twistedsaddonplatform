@@ -5,15 +5,30 @@ local ADDON, ML = ...
 ML.CHANGELOG = [==[
 # Mythic Ledger - What's New
 
-## 1.0.0-beta.9
+## 1.1.0
 
-Part of the platform's new **two-tier navigation** (TAP 1.5.0-beta.1).
+The platform's new **two-tier navigation** plus a big **scoring pass**: item level now factors into throughput, healers get full credit on a clean key, death causes are smarter, and a new **Scoring Guide** explains the whole model. Every scoring change below **re-scores your existing runs automatically** on login.
 
-- **[NEW]** **Every page is now a sidebar row.** Overview, Runs, Dungeons, Characters, Players, Bests, Settings and Debug live in the left sidebar under the **Mythic Ledger** category (with the Dungeon Guide) instead of an in-body tab strip. Opening a run, player, dungeon or the player review still happens in place, and Back returns where you came from.
+### Scoring
+
+- **[NEW]** **Scoring Guide - how every run is graded.** A new read-only **Scoring Guide** page (under Mythic Ledger) lays out the whole model in plain language: the 5 metrics and their weights, the real-world factors (your gear, spec, the dungeon, and your group), the guardrails that stop a teammate over-performing from hurting your score, and the grade ladder - all pulled live from the engine, so it always matches your real scores.
+- **[CHANGE]** **Item level now shapes your damage bar.** Throughput is the one place gear genuinely changes output, so your expected damage is nudged by your item level versus the group average (bounded, about 1% per item level). The **lowest-geared player isn't punished** for output their gear can't reach, and out-gearing the group no longer reads as skill. Applies only when most of the party's item level is known.
+- **[CHANGE]** **Healers get full credit on a clean key.** Time the key with no deaths and your healing was enough by definition, so the **healing half** of your throughput is lifted to full marks instead of being marked down when the group self-covered its own damage. It scales with deaths (a messy run earns less of the lift) and **never lowers** a score.
+- **[NEW]** **New S+ grade.** A flawless run - every metric that applied to you a perfect 100 - now earns an **S+**, one tier above S.
+- **[CHANGE]** **Smarter death causes.** The **killing blow** now decides why you died: a fatal hit that was avoidable, **environmental** (fall / lava / fire - now counted as your own fault), a **melee** hit taken as a non-tank (lost threat), or an **un-kicked cast** (missed kick) is labelled by that hit, even when earlier chip damage was something else.
+- **[CHANGE]** **Fairer dispels.** When the group already handled the one or two dispels a fight offered, a spec with only a tiny fair share is no longer scored a zero for it. Skyreach no longer expects a healer to cleanse a debuff that isn't there (its dispellable content is enemy buffs), and **Restoration Druids** are now credited for **Soothe**.
+- **[CHANGE]** **Long-cooldown interrupts get a pass.** A spec with a long-cooldown kick (Solar Beam, Quell, Shadow's Silence...) is no longer docked when the group already covered the run's kicks and nobody died to a missed one - with a note that it's still worth pressing when you can.
+- **[NEW]** **Tanks see loose-mob deaths.** A tank's review now flags teammate deaths that came from a mob it lost or never had threat on - shown for awareness, **not** part of the score.
+
+### Navigation & pages
+
+- **[NEW]** **Every page is now a sidebar row.** Summary, Runs, Dungeons, Characters, Players, Bests, Settings and Debug live in the left sidebar under the **Mythic Ledger** category (with the Dungeon Guide and Scoring Guide) instead of an in-body tab strip. Opening a run, player, dungeon or the player review still happens in place, and Back returns where you came from.
+- **[CHANGE]** **"Overview" is now "Summary."** The Mythic Ledger landing page is renamed so it no longer clashes with the platform's own Overview.
 - **[NEW]** **Filter and sort the Runs list.** New filter toolbar - **Season, Result, Character, Dungeon, Key level** and **Role** - plus **DPS and HPS in their own sortable columns**, with the result shown inline with the season.
 - **[NEW]** **Filter Players by class and spec.** The Players page adds **Class** and **Spec** dropdowns beside the Role and Favorites filters.
-- **[CHANGE]** **Settings, reorganized into sub-tabs.** The two-column Settings grid is replaced by in-body sub-tabs - **Appearance, Tooltips, Scoreboard, Death Report, Tracking, Regroup** and **Misc** - each with its own heading below the tab bar and shown full-width. Tooltips gets a **Hover Me** preview, Scoreboard column pickers expand to fit, and Death Report / Regroup use two columns with proper section headers (Death Report: **Behavior / Appearance / Preview**; Regroup: **Triggers / Include**). *(Beta: please report any navigation quirks.)*
-- **[CHANGE]** **"Recap" renamed to "Regroup"** - it's about grouping up again with a past teammate, not a run summary. Its unused **Detail** dropdown is removed (use the *Include* toggles), and the death report's on switch is now **Enable Death Report** under **Behavior**.
+- **[CHANGE]** **Settings, reorganized into sub-tabs.** The two-column Settings grid is replaced by in-body sub-tabs - **Appearance, Tooltips, Scoreboard, Death Report, Tracking, Regroup** and **Misc** - each full-width with its own heading. Tooltips gets a **Hover Me** preview, Scoreboard column pickers expand to fit, and Death Report / Regroup use two columns with proper section headers.
+- **[CHANGE]** **"Recap" is now "Regroup."** The returning-player tab is renamed (it's about grouping up again, not a run summary); its unused **Detail** dropdown is gone, and the death report's on switch is now **Enable Death Report** under **Behavior**.
+- **[BUG FIX]** **Run-history date column.** Widened the date column on the run-history tables so the date/time stamp no longer runs under the dungeon icon.
 
 ## 1.0.0-beta.8
 

@@ -110128,9 +110128,9 @@ TAP_GameDB_Spells = [==[
 314544	MOP Alliance Ship Land - Replay
 314545	MOP Horde Ship Landing - Replay
 314547	Lordaeron Throne Room Confrontation - Alliance
-314549	Lordaeron Throne Room Confrontation – Horde
+314549	Lordaeron Throne Room Confrontation - Horde
 314550	The Siege of Lordaeron: Turn the Tide
-314551	Arrival at Zandalar – Horde
+314551	Arrival at Zandalar - Horde
 314552	Rastakhan's Deal with Bwonsamdi
 314553	Dog Eats Worms
 314554	Arrival at Kul Tiras
@@ -110138,7 +110138,7 @@ TAP_GameDB_Spells = [==[
 314556	Realm of Torment
 314557	Terror of Darkshore
 314560	An Unexpected Reunion
-314562	Rise of Azshara Intro – Alliance
+314562	Rise of Azshara Intro - Alliance
 314563	Rise of Azshara Intro - Horde
 314564	Azshara's Eternal Palace Finale
 314572	Gladiator's Breach

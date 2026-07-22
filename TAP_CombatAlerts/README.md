@@ -3,7 +3,7 @@
 A module of the **[Twisteds Addon Platform](../README.md)**. Configure it with **`/tap`** →
 *Combat Alerts*.
 
-Build your own **combat-safe cues** — sounds, big on-screen text, and icons — that fire on the
+Build your own **combat-safe cues** - sounds, big on-screen text, and icons - that fire on the
 situations you care about.
 
 ## What it does
@@ -12,10 +12,10 @@ situations you care about.
 - **Advanced alerts** with an **AND / OR** condition builder for anything custom.
 - Per-alert **actions**: play a sound, flash on-screen text (font, size, color, position, pulse),
   show and place an **icon**, and/or print a chat message.
-- **Load rules** so an alert only runs where it should — by class/spec, in/out of combat, group
+- **Load rules** so an alert only runs where it should - by class/spec, in/out of combat, group
   state, or content type.
 - A **spell/item search** (the **Find** button) that looks through your spellbook, auras, gear and
-  bags — and, if the optional `TAP_GameDB` add-on is present, the full game database.
+  bags - and, if the optional `TAP_GameDB` add-on is present, the full game database.
 - **Export / Import** your alert set as a text string to back up or share.
 
 ## Notes
@@ -28,8 +28,8 @@ situations you care about.
 ## Requires
 
 The **`TAP`** hub (bundled with the platform download). The spell/item database (`TAP_GameDB`) is
-**optional** — search still works from your spellbook/bags without it.
+**optional** - search still works from your spellbook/bags without it.
 
 ## License
 
-GPL v2 — see the platform [`LICENSE`](../LICENSE) and [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).
+GPL v2 - see the platform [`LICENSE`](../LICENSE) and [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).

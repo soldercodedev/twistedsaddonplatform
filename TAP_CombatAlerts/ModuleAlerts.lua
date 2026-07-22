@@ -1098,6 +1098,7 @@ mod = Suite:RegisterModule({
     addon   = "TAP_CombatAlerts",
     default = true,
     group   = "Combat Alerts",   -- single-module addon: its own sidebar category
+    groupColor = "e0655a",       -- signature tint for this add-on's sidebar category
     rendersWhenDisabled = true,   -- keep our pages (and the Settings page) reachable while disabled
     changelog = TCC.CHANGELOG,
     OnEnable  = function() pushToEngine(true) end,

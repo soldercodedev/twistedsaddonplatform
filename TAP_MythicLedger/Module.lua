@@ -49,6 +49,7 @@ mod = Suite:RegisterModule({
     default = true,
     group      = "Mythic Ledger",   -- addon category (shared with the Dungeon Guide module)
     groupIcon  = "book",
+    groupColor = "a06cf0",          -- signature tint for this add-on's sidebar category
     groupOrder = 1,                 -- our pages sort before the Dungeon Guide's within the category
     rendersWhenDisabled = true,     -- keep our pages (and the Settings page) reachable while disabled
     changelog = ML.CHANGELOG,

@@ -7,8 +7,8 @@ The addon's license does not extend to any of it, and no ownership is claimed ov
 Entertainment assets or any third-party file.
 
 The platform ships as one download containing several add-on folders (`TAP`, `TAP_CombatAlerts`,
-`TAP_FocusInterrupt`, `TAP_RotationAssistant`, `TAP_GameDB`). Shared assets — the icon set, fonts,
-and sounds — live in the parent `TAP` folder; the search databases live in `TAP_GameDB`.
+`TAP_FocusInterrupt`, `TAP_RotationAssistant`, `TAP_GameDB`). Shared assets - the icon set, fonts,
+and sounds - live in the parent `TAP` folder; the search databases live in `TAP_GameDB`.
 
 ---
 

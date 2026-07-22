@@ -84,7 +84,12 @@ S.SeasonData["MidnightS1"] = {
             -- <<< CATALOG <<<
             dispelDemandScale = 1.0,   -- only high/must dispels expected
             trash = { interruptFrequency = 1.15,     -- per-min (obs: ~1.25 trash kicks/min, n=2 real +2/+11; held slightly under; was 0.335 est)
-                partyDebuffFrequencies = { magic = 0.08 },
+                -- No DEFENSIVE cleanse demand here (v39): every counts=true dispel in the catalog is an
+                -- OFFENSIVE enemy buff - Solar Barrier (purge) and Rushing Winds (soothe). The old
+                -- partyDebuffFrequencies { magic = 0.08 } was a leftover estimate with no party-debuff content
+                -- behind it, so it handed defensive-only healers (Holy Paladin, Resto Druid...) a phantom
+                -- cleanse target and scored them 0 for nothing to dispel. Offensive purge/soothe only until a
+                -- real party magic debuff is observed here (re-derive from logs via tools/logparse).
                 targetBuffFrequencies  = { purge = 0.17, enrage = 0.18 } },   -- Solar Barrier/Rushing Winds purge, Wrathful Wind soothe
             bosses = {
                 [1698] = K(0),     -- Ranjit (Fan of Blades = Bleed, not dispellable)
