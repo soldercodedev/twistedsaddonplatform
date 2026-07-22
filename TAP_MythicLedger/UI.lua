@@ -2110,10 +2110,9 @@ local SETTINGS_TABS = {
     { "tooltips",    "Tooltips",     "message" },
     { "scoreboard",  "Scoreboard",   "award" },
     { "deathreport", "Death Report", "skull" },
-    { "tracking",    "Tracking",     "activity" },
+    { "tracking",    "Tracking",     "activity" },   -- Tracking + Data retention (2-column)
     { "recap",       "Recap",        "users" },
-    { "retention",   "Data",         "database" },
-    { "debug",       "Debug",        "tools" },
+    { "misc",        "Misc",         "tools" },       -- Debug logging + minimap
 }
 
 local function renderSettings(b, C, x, y, w, win)
@@ -2176,10 +2175,28 @@ local function renderSettings(b, C, x, y, w, win)
         end
         y = y - 4
     end
+
+    -- Preview: hover the chip to see a sample of the shared-history tooltip.
+    b:Label("Preview", x, y - 2, C.subtext); y = y - 24
+    local hb = b:Button(x, y, 120, "Hover me", "default", function() end, { icon = "eye", iconSize = 12, height = 26 })
+    if b.theme.SetTipData then
+        b.theme:SetTipData(hb, { title = "|cfff58cbaAshbringer|r-Illidan", minWidth = 260, lines = {
+            { text = "Mythic Ledger - your shared history", color = "accent" },
+            { text = "Keys together: 7      Timed: 86%" },
+            { text = "Best together: Ara-Kara +18" },
+            { text = "Avg score: 112      Deaths/run: 1.3" },
+            { text = "Note: \"solid CC, brings lust\"", color = "subtext" },
+        } })
+    end
+    y = y - 34
     end
 
     local function secStatTiles()
     b:Sub("STAT TILES", x, y); y = y - 30
+    local _, swh = b:Wrap("The compact metric tiles shown on the end-of-run scoreboard, the run / player / "
+        .. "character detail pages, and the season Overview. This sets their visual style.",
+        x, y, COLW - 20, C.subtext, 10)
+    y = y - (swh + 8)
     b:Label("Tile style", x, y - 2, C.subtext)
     T(b, b:Dropdown(x + 90, y), "Stat tile style",
         "How the stat tiles on the run scoreboard and detail pages look. Clean = flat dashboard tiles; "
@@ -2205,6 +2222,7 @@ local function renderSettings(b, C, x, y, w, win)
     end
 
     local function secDateTime()
+    y = y - 12   -- breathing room below the Stat Tiles preview frame
     b:Sub("DATE & TIME", x, y); y = y - 30
     b:Label("Date format", x, y - 2, C.subtext)
     T(b, b:Dropdown(x + 100, y), "Date format",
@@ -2228,11 +2246,12 @@ local function renderSettings(b, C, x, y, w, win)
     slider("Scale", 90, 180, 0.5, 3.0, 0.05, "%.2fx",
         function() return s.scoreboardScale or 1.5 end, function(v) s.scoreboardScale = v end,
         "How big the end-of-run scoreboard opens (still capped to fit your screen). Also: /ledger scale <n>.")
+    -- The tab is full-width, so the controls get generous widths (no wrapped dropdown menus).
+    local ddW = math.max(220, math.min(340, COLW - 220))
     b:Label("Font", x, y - 2, C.subtext)
-    b:FontSelect(x + 90, y, { width = 200, value = (s.scoreboardFont ~= "" and s.scoreboardFont) or "UBUNTU",
+    b:FontSelect(x + 90, y, { width = ddW, value = (s.scoreboardFont ~= "" and s.scoreboardFont) or "UBUNTU",
         onChange = function(key) s.scoreboardFont = key end })
-    y = y - 30
-    T(b, b:Button(x, y, 130, "Use UI font", "default", function() s.scoreboardFont = ""; win:Refresh() end),
+    T(b, b:Button(x + 90 + ddW + 12, y, 130, "Use UI font", "default", function() s.scoreboardFont = ""; win:Refresh() end),
         "Use UI font", "Reset the scoreboard to use the same font as the rest of the UI.")
     y = y - 38
 
@@ -2241,10 +2260,10 @@ local function renderSettings(b, C, x, y, w, win)
         "Play a sound (default: FFVII Victory Fanfare) when the scoreboard appears.")
     if s.scoreboardSound then
         b:Label("Sound", x, y - 2, C.subtext)
-        T(b, b:SoundSelect(x + 90, y, { width = 140, value = s.scoreboardSoundKey or "VictoryFanfare",
+        T(b, b:SoundSelect(x + 90, y, { width = ddW, value = s.scoreboardSoundKey or "VictoryFanfare",
             channel = s.scoreboardSoundChannel or "Master",
             onChange = function(v) s.scoreboardSoundKey = v end }), "Scoreboard sound", "The sound played when the scoreboard opens.")
-        T(b, b:Button(x + 238, y, 58, "Test", "default", function()
+        T(b, b:Button(x + 90 + ddW + 12, y, 64, "Test", "default", function()
             local theme = _G.TAP and _G.TAP.uiTheme
             if theme and theme.PlaySound then theme:PlaySound(s.scoreboardSoundKey or "VictoryFanfare", s.scoreboardSoundChannel or "Master") end
         end, { icon = "volume", iconSize = 13 }), "Test sound", "Preview the selected scoreboard sound.")
@@ -2252,13 +2271,13 @@ local function renderSettings(b, C, x, y, w, win)
         b:Label("Channel", x, y - 2, C.subtext)
         T(b, b:Dropdown(x + 90, y), "Scoreboard sound channel",
             "Which audio channel the scoreboard sound plays on (e.g. Master, or Sound FX so it follows that "
-            .. "volume slider)."):SetChoices(150, CHANNEL_CHOICES,
+            .. "volume slider)."):SetChoices(ddW, CHANNEL_CHOICES,
             function() return s.scoreboardSoundChannel or "Master" end, function(v) s.scoreboardSoundChannel = v end)
         y = y - 34
         b:Label("Play sound", x, y - 2, C.subtext)
         T(b, b:Dropdown(x + 90, y), "When to play the scoreboard sound",
             "End of run only = just the automatic post-run popup; Every view = also when you re-open a "
-            .. "scoreboard from history."):SetChoices(180, {
+            .. "scoreboard from history."):SetChoices(ddW, {
             { "END", "End of run only" }, { "ALWAYS", "Every time it's viewed" },
         }, function() return s.scoreboardSoundWhen or "END" end, function(v) s.scoreboardSoundWhen = v end)
         y = y - 36
@@ -2367,9 +2386,6 @@ local function renderSettings(b, C, x, y, w, win)
         .. "pops. 0 = instantly.")
     toggle("Confirm before saving a recovered abandoned run", function() return s.confirmAbandonSave end, function(v) s.confirmAbandonSave = v end,
         "After a reload/disconnect with an unfinished key, ask before saving it as abandoned.")
-    toggle("Show minimap icon", function() return _G.TAP and _G.TAP.IsMinimapButtonShown and _G.TAP:IsMinimapButtonShown(ML.MODULE_ID) end,
-        function(v) if _G.TAP and _G.TAP.SetMinimapButtonShown then _G.TAP:SetMinimapButtonShown(ML.MODULE_ID, v) end end,
-        "Show a Mythic Ledger button on the minimap (left-click opens the ledger).")
     end
 
     local function secRecap()
@@ -2428,6 +2444,10 @@ local function renderSettings(b, C, x, y, w, win)
     end
     T(b, b:Button(x, y, 190, "Preview for current group", "default", function() ML.Recap.PreviewCurrentGroup() end),
         "Preview recaps", "Print a sample recap for everyone in your current group (ignores the once-per-session guard).")
+    T(b, b:Button(x + 200, y, 150, "Test toast/message", "primary", function()
+        if ML.Recap and ML.Recap.Simulate then ML.Recap.Simulate(2) end
+    end, { icon = "eye", iconSize = 13 }), "Test toast/message",
+        "Fire a sample recap exactly as configured (toast and/or local chat), using players from your saved history.")
     y = y - 34
     -- In-window preview: a sample recap rendered with your current display / detail / averages settings.
     do
@@ -2506,23 +2526,54 @@ local function renderSettings(b, C, x, y, w, win)
     local function secDebug()
     b:Sub("DEBUG", x, y); y = y - 30
     toggle("Debug logging", function() return s.debug end, function(v) s.debug = v; ML._debugEcho = v end,
-        "Echo internal diagnostics to chat and the Debug page.")
+        "Echo internal diagnostics to chat and the Debug page. Also unlocks the sidebar Debug page.")
     end
 
-    -- Render the active sub-tab's section(s), single-column full-width. Appearance groups the two small
-    -- display sections (Stat Tiles + Date & Time) so no sub-tab is nearly empty.
+    local function secMinimap()
+    b:Sub("MINIMAP", x, y); y = y - 30
+    toggle("Show minimap icon", function() return _G.TAP and _G.TAP.IsMinimapButtonShown and _G.TAP:IsMinimapButtonShown(ML.MODULE_ID) end,
+        function(v) if _G.TAP and _G.TAP.SetMinimapButtonShown then _G.TAP:SetMinimapButtonShown(ML.MODULE_ID, v) end end,
+        "Show a Mythic Ledger button on the minimap. Left-click opens the ledger; drag to move it; right-click hides it.")
+    end
+
+    -- Each sub-tab is either { single = {...} } (one column, full width) or { cols = { {left}, {right} },
+    -- span = {...} } (two columns, then optional full-width sections below). The 2-col renderer reuses the
+    -- section closures with COLW set to a half-width and x pointed at each column.
+    local COLGAP = 28
+    local HALF = math.floor((w - COLGAP) / 2)
+    local leftX, rightX = x, x + HALF + COLGAP
     local SUBTABS = {
-        appearance  = { secStatTiles, secDateTime },
-        tooltips    = { secTooltips },
-        scoreboard  = { secScoreboard },
-        deathreport = { secDeathReport },
-        tracking    = { secTracking },
-        recap       = { secRecap },
-        retention   = { secRetention },
-        debug       = { secDebug },
+        appearance  = { single = { secStatTiles, secDateTime } },
+        tooltips    = { single = { secTooltips } },
+        scoreboard  = { single = { secScoreboard } },
+        deathreport = { single = { secDeathReport } },
+        tracking    = { cols   = { { secTracking }, { secRetention } } },
+        recap       = { single = { secRecap } },
+        misc        = { single = { secDebug, secMinimap } },
     }
-    for _, fn in ipairs(SUBTABS[settingsTab] or SUBTABS.appearance) do fn() end
-    return y - 14
+    local spec = SUBTABS[settingsTab] or SUBTABS.appearance
+    local bottom = y
+    if spec.cols then
+        local rowTop = y
+        for _, fn in ipairs(spec.cols[1] or {}) do x, y = leftX, y; COLW = HALF; fn() end
+        local lb = y
+        y = rowTop
+        for _, fn in ipairs(spec.cols[2] or {}) do x, y = rightX, y; COLW = HALF; fn() end
+        local rb = y
+        x, COLW = leftX, w
+        bottom = math.min(lb, rb)
+    end
+    if spec.single then
+        x, y, COLW = leftX, bottom, w
+        for _, fn in ipairs(spec.single) do fn() end
+        bottom = y
+    end
+    if spec.span then
+        x, y, COLW = leftX, bottom, w
+        for _, fn in ipairs(spec.span) do fn() end
+        bottom = y
+    end
+    return bottom - 14
 end
 
 ----------------------------------------------------------------------
@@ -2934,6 +2985,18 @@ local TAB_RENDER = {
     settings = renderSettings, debug = renderDebug,
 }
 
+-- Title + description for the standard page heading drawn on each list page (Settings draws its own;
+-- the record drill-downs use their own Back header, so they're not listed here).
+local PAGE_META = {
+    overview   = { "Overview",       "Your account-wide Mythic+ summary - season stats, recent runs, and quick links into any of them." },
+    runs       = { "Runs",           "Every timed, depleted, or abandoned key you've recorded, newest first. Click a run for its full details." },
+    dungeons   = { "Dungeons",       "Per-dungeon stats across your recorded runs - best time, timed %, and averages. Click one to drill in." },
+    characters = { "Characters",     "Every character you've recorded runs on, with their season stats. Click one for its full history." },
+    players    = { "Players",        "Everyone you've keyed with - shared history, best run together, averages, and your private notes." },
+    bests      = { "Personal Bests", "Your best recorded run for each dungeon this season, by keystone level and time." },
+    debug      = { "Debug",          "Diagnostics and the recent activity log - handy when reporting an issue." },
+}
+
 -- View id for one of this module's sidebar pages ("mod:<moduleId>:<pageId>").
 local function pageViewId(pid) return "mod:" .. ML.MODULE_ID .. ":" .. pid end
 
@@ -2987,6 +3050,10 @@ function UI.RenderPage(pageId, m, b, x, y, win)
     if view.detailPlayer then return renderPlayerDetails(b, C, x, y, w, win) end
     if view.detailCharacter then return renderCharacterDetails(b, C, x, y, w, win) end
 
+    -- Standard page heading (title + description) on each list page, matching the platform pages. The
+    -- Settings page draws its own heading alongside its sub-tab bar; drill-downs use their Back header.
+    local meta = (pageId ~= "settings") and PAGE_META[pageId]
+    if meta then y = b:PageHeading(x, y, meta[1], meta[2]) end
     local fn = TAB_RENDER[pageId] or renderOverview
     return fn(b, C, x, y, w, win)
 end
