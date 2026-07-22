@@ -10,6 +10,13 @@ if not Suite then return end
 local CHANGELOG = [==[
 # Focus Target Interrupt - What's New
 
+## 1.1.0-beta.1
+
+Part of the platform's new **two-tier navigation** (TAP 1.5.0-beta.1).
+
+- **[NEW]** **Announce by class/spec.** The **Announce** page adds a **Class / Spec** picker: focus and ready-check call-outs now fire only while you're playing one of the chosen specs. Leave it empty to announce on every character.
+- **[CHANGE]** **Pages moved to the sidebar.** Macros, Marker Palette, Announce and Settings are now sub-rows under the **Focus Target Interrupt** category in the `/tap` sidebar, each full-width. The enable toggle moved to the platform **Overview**.
+
 ## 1.0.0
 
 - **[CHANGE]** Out of beta - Focus Target Interrupt is now a stable 1.0 release.

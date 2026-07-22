@@ -12,11 +12,19 @@ A ground-up **navigation overhaul**. Each installed add-on now gets its own **ca
 - **[NEW]** **Two-tier sidebar navigation.** The old single "Modules" list is replaced by one **collapsible category per add-on** (Mythic Ledger, Combat Alerts, Focus Target Interrupt, Rotation Assistant), with each module's pages as sub-rows. Only the add-on you're in stays expanded (accordion), so the list stays tidy. The Dungeon Guide now sits inside the Mythic Ledger category.
 - **[NEW]** **Page-level sub-tabs.** With top-level nav in the sidebar, the in-body top-nav is free for a page's own tabs.
 - **[CHANGE]** **Every module's tabs moved to the sidebar.** Combat Alerts (Alerts / Profiles / Settings), Focus Target Interrupt (Macros / Marker Palette / Announce / Settings), and Rotation Assistant (Behavior / Indicators / Appearance / Settings) now list their pages in the sidebar. Drill-downs (a run's details, a rule's editor) still open in-body over the page they came from. Deep links, minimap buttons and slash commands are unchanged.
+- **[CHANGE]** **Overview is now one row per add-on** with its version as a **badge**, a colored **What's New** button, and a red **Disable** button. The old **Installed** page is gone - **enable/disable (live toggle) and Unload** now live on Overview, and the redundant enable toggle was removed from each module's own Settings.
+- **[CHANGE]** **Consistent page headings everywhere.** Every page now carries the same title/description **Page Heading** style; the Platform *Appearance* page is renamed **Settings** and rebuilt on the **two-column grid**.
 
 ### Mythic Ledger (1.0.0-beta.9)
 
 - **[NEW]** **All eight pages in the sidebar.** Overview, Runs, Dungeons, Characters, Players, Bests, Settings and Debug are now sidebar sub-rows under the **Mythic Ledger** category. Clicking a run/player/dungeon still opens its detail view in place, with Back returning where you came from.
-- **[CHANGE]** **Settings, reorganized into sub-tabs.** The cramped two-column Settings grid is replaced by in-body sub-tabs - **Appearance, Tooltips, Scoreboard, Death Report, Tracking, Recap, Data, Debug** - each showing one focused area full-width.
+- **[NEW]** **Runs list filters & sortable DPS/HPS columns.** Filter by **Season, Result, Character, Dungeon, Key level** and **Role**, with **DPS and HPS in their own sortable columns** and the result shown inline with the season.
+- **[NEW]** **Players filters for Class and Spec**, beside the existing Role and Favorites filters.
+- **[CHANGE]** **Settings, reorganized into sub-tabs.** The cramped two-column Settings grid is replaced by in-body sub-tabs - **Appearance, Tooltips, Scoreboard, Death Report, Tracking, Recap** and **Misc** - each full-width and better described (Tooltips **Hover Me** preview, expanding Scoreboard pickers, two-column Death Report/Recap with a Recap **test toast**, minimap toggle moved to Misc).
+
+### Focus Target Interrupt (1.1.0-beta.1)
+
+- **[NEW]** **Announce by class/spec.** The Announce page adds a **Class / Spec** picker so focus and ready-check call-outs fire only while you're playing one of the chosen specs - leave it empty to announce on every character.
 
 ## 1.4.0
 

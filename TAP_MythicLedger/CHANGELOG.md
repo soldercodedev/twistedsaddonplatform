@@ -5,7 +5,9 @@
 Part of the platform's new **two-tier navigation** (TAP 1.5.0-beta.1).
 
 - **[NEW]** **Every page is now a sidebar row.** Overview, Runs, Dungeons, Characters, Players, Bests, Settings and Debug live in the left sidebar under the **Mythic Ledger** category (with the Dungeon Guide) instead of an in-body tab strip. Opening a run, player, dungeon or the player review still happens in place, and Back returns where you came from.
-- **[CHANGE]** **Settings, reorganized into sub-tabs.** The two-column Settings grid is replaced by in-body sub-tabs - **Appearance, Tooltips, Scoreboard, Death Report, Tracking, Recap, Data, Debug** - each showing one focused area full-width.
+- **[NEW]** **Filter and sort the Runs list.** The Runs page gains a filter toolbar - **Season, Result, Character, Dungeon, Key level** and **Role** (Tank / Healer / DPS) - and now shows **DPS and HPS in their own columns**, each sortable, alongside the result shown inline with the season.
+- **[NEW]** **Filter Players by class and spec.** The Players page adds **Class** and **Spec** dropdowns next to the existing Role and Favorites filters.
+- **[CHANGE]** **Settings, reorganized into sub-tabs.** The two-column Settings grid is replaced by in-body sub-tabs - **Appearance, Tooltips, Scoreboard, Death Report, Tracking, Recap** and **Misc** - each showing one focused area full-width, with more description on what each setting does. Highlights: Tooltips has a **Hover Me** live preview, the Scoreboard column dropdowns now expand to fit, Death Report and Recap use a two-column layout (Recap's preview spans both), Recap adds a **test toast** button, and the minimap-button toggle moved onto **Misc** (formerly Debug).
 
 ## 1.0.0-beta.8
 
