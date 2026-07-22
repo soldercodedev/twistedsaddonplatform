@@ -134,6 +134,18 @@ end
 -- red heading and a subtext line, plus an optional "Go to Settings" button (opts.onSettings). Every
 -- suite module shows the exact same block, so a disabled module reads consistently. Returns the y
 -- below the panel. opts: height (default 300), title, subtitle, icon (bundled slug), onSettings.
+-- Standard page heading used by every /tap page: an h1 title + an optional one-line description, so
+-- all pages open with a consistent header. Returns the new (negative) y below the heading.
+function BuilderMixin:PageHeading(x, y, title, desc, w)
+    local C = self.theme.C
+    self:Heading(title, x, y, "h1"); y = y - 34
+    if desc and desc ~= "" then
+        local _, hh = self:Wrap(desc, x, y, (w or self.contentWidth or 600) - 44, C.subtext, 11)
+        y = y - (hh + 16)
+    end
+    return y
+end
+
 function BuilderMixin:DisabledOverlay(x, y, w, opts)
     opts = opts or {}
     local C = self.theme.C

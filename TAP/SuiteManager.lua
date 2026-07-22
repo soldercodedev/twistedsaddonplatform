@@ -252,6 +252,37 @@ local function whatsNewLink(b, spec, x, y)
     return y - 28
 end
 
+-- Overview lists one row per ADDON (not per module): pick each addon's lead module (lowest groupOrder),
+-- so e.g. Mythic Ledger + Dungeon Guide (same addon) show as a single "Mythic Ledger" entry.
+local function addonLeads()
+    local order, seen = {}, {}
+    for _, mod in ipairs(Suite.modules) do
+        local key = mod.spec.addon or mod.spec.id
+        if not seen[key] then seen[key] = mod; order[#order + 1] = key
+        elseif (mod.spec.groupOrder or 50) < (seen[key].spec.groupOrder or 50) then seen[key] = mod end
+    end
+    local leads = {}
+    for _, key in ipairs(order) do leads[#leads + 1] = seen[key] end
+    return leads
+end
+
+-- Toggle every module belonging to an addon, so one Overview row controls the whole add-on.
+local function setAddonModulesEnabled(addon, on)
+    for _, m in ipairs(Suite.modules) do
+        if (m.spec.addon or m.spec.id) == addon then m:SetEnabled(on) end
+    end
+end
+
+-- The default page view to open for an addon's lead module.
+local function overviewDefaultView(mod)
+    local pages = mod.spec.pages
+    if type(pages) == "table" and #pages > 0 then
+        for _, p in ipairs(pages) do if p.default then return "mod:" .. mod.spec.id .. ":" .. p.id end end
+        return "mod:" .. mod.spec.id .. ":" .. pages[1].id
+    end
+    return "mod:" .. mod.spec.id
+end
+
 ----------------------------------------------------------------------
 -- Page: Overview (dashboard - stats + a quick list that links to each module's page)
 ----------------------------------------------------------------------
@@ -260,12 +291,9 @@ local function pageOverview(b, win)
     local w = b.contentWidth
     local x, y = 24, -18
 
-    b:Heading("Platform Overview", x, y, "h1"); y = y - 34
     local total, active = Suite:Stats()
-    local _, hh = b:Wrap("Each installed plugin has its own entry in the sidebar. Toggle a module "
-        .. "on or off live - no reload needed. Pick a module on the left to configure it.",
-        x, y, w - 44, C.subtext, 11)
-    y = y - (hh + 14)
+    y = b:PageHeading(x, y, "Overview", "Turn an add-on on or off, jump into any one, or fully unload it. "
+        .. "Each add-on's pages live under it in the sidebar - no reload needed for the live on/off.")
 
     b:StatTile(x, y, { label = "Modules", value = tostring(total), width = 150, height = 64 })
     b:StatTile(x + 162, y, { label = "Active", value = tostring(active), width = 150, height = 64,
@@ -283,38 +311,40 @@ local function pageOverview(b, win)
     y = b:Section("MODULES", x, y); y = y - 30
     local rowW = w - 48
     local rpad = 14   -- inset for the right-aligned controls, so they don't sit flush to the row edge
-    local seenAddons = {}   -- the "Fully disable" (hard unload) control shows once per add-on
-    for _, mod in ipairs(Suite.modules) do
-        local spec = mod.spec
+    for _, lead in ipairs(addonLeads()) do
+        local spec = lead.spec
+        local enabled = lead:IsEnabled()
+        local rowTitle = spec.group or spec.title or spec.id   -- addon-level name (Mythic Ledger, not Dungeon Guide)
         local yTop = y
         y = y - 12
-        -- Header band: every control vertically centered within a 26px-tall band (Button 26,
-        -- Glyph 20, Toggle 18, Badge 16 -> offset each by (26 - h)/2).
+        -- Header band: every control vertically centered within a 26px-tall band.
         local hy = y
-        b:Glyph(x + 12, hy - 3, { icon = spec.icon, size = 20, color = mod:IsEnabled() and C.accent or C.subtext })
-        local titleFs = b:Label(spec.title or spec.id, x + 42, hy - 5, mod:IsEnabled() and C.text or C.subtext, 13)
+        b:Glyph(x + 12, hy - 3, { icon = spec.groupIcon or spec.icon, size = 20, color = enabled and C.accent or C.subtext })
+        local titleFs = b:Label(rowTitle, x + 42, hy - 5, enabled and C.text or C.subtext, 13)
         local mver = addonVersion(spec.addon)
-        if mver then b:Label("v" .. mver, x + 42 + (titleFs:GetStringWidth() or 60) + 8, hy - 4, C.subtext, 11) end
-        statusBadge(b, mod, x + rowW - 200 - rpad, hy - 5)
-        b:Toggle(x + rowW - 112 - rpad, hy - 4, mod:IsEnabled(), function(v) mod:SetEnabled(v) end, { color = C.accent })
-        b:Button(x + rowW - 66 - rpad, hy, 66, "Open", "default", function() win:SelectView("mod:" .. spec.id) end)
+        if mver then b:Badge(x + 42 + (titleFs:GetStringWidth() or 60) + 10, hy - 4, { text = "v" .. mver, variant = "neutral" }) end
+        statusBadge(b, lead, x + rowW - 200 - rpad, hy - 5)
+        b:Toggle(x + rowW - 112 - rpad, hy - 4, enabled, function(v) setAddonModulesEnabled(spec.addon or spec.id, v) end, { color = C.accent })
+        b:Button(x + rowW - 66 - rpad, hy, 66, "Open", "default", function()
+            if lead.spec.OnSelect then pcall(lead.spec.OnSelect, lead) end   -- reset module view state, as a sidebar click would
+            win:SelectView(overviewDefaultView(lead))
+        end)
         y = y - 34   -- clear gap below the header band so the description doesn't hug the controls
         if spec.desc then
             local _, dh = b:Wrap(spec.desc, x + 42, y, rowW - 70, C.subtext, 10)
             y = y - (dh + 8)
         end
-        -- What's New + (once per add-on) a "Fully disable" that unloads the add-on's code (reload).
+        -- What's New (accent) + a red "Fully disable" (hard unload of the whole add-on).
         local wnY = y
         if spec.changelog then
-            b:Button(x + 42, wnY - 2, 116, "What's New", "default",
-                function() openWhatsNew(spec.title or spec.id, spec.changelog) end,
+            b:Button(x + 42, wnY - 2, 116, "What's New", "primary",
+                function() openWhatsNew(rowTitle, spec.changelog) end,
                 { icon = "sparkles", iconSize = 12, height = 22 })
         end
-        if spec.addon and not seenAddons[spec.addon] then
-            seenAddons[spec.addon] = true
-            local aname, atitle = spec.addon, (spec.title or spec.addon)
+        do
+            local aname, atitle = spec.addon or spec.id, rowTitle
             local fx = (spec.changelog and (x + 42 + 124)) or (x + 42)
-            theme:SetTip(b:Button(fx, wnY - 2, 150, "Fully disable", "default", function()
+            theme:SetTip(b:Button(fx, wnY - 2, 150, "Fully disable", "danger", function()
                 theme:Confirm({
                     title = "Fully disable " .. atitle .. "?",
                     message = "The on/off toggle above just pauses this add-on. Fully disabling unloads its "
@@ -329,8 +359,8 @@ local function pageOverview(b, win)
                 "Unload " .. atitle .. " entirely (reloads the UI). Different from the on/off toggle above, which just pauses it live.")
         end
         y = wnY - 30
-        b:Box(x, yTop, rowW, yTop - y, mod:IsEnabled() and 0.05 or 0.03, 0, mod:IsEnabled() and C.accent or C.card)
-        if mod:IsEnabled() then b:VRule(x, yTop - 1, y + 1, 0, C.accent) end
+        b:Box(x, yTop, rowW, yTop - y, enabled and 0.05 or 0.03, 0, enabled and C.accent or C.card)
+        if enabled then b:VRule(x, yTop - 1, y + 1, 0, C.accent) end
         y = y - 16
     end
     return y - 8
@@ -403,142 +433,136 @@ local function pageSettings(b, win)
     local a = appearanceDB()
     local x, y = 24, -18
 
-    b:Heading("Appearance", x, y, "h1"); y = y - 34
-    local _, hh = b:Wrap("Customize the look of the Platform Manager. Pick a shape for the buttons "
-        .. "and borders, choose a color scheme, and set the font. Choose |cffffffffCustom|r to set "
-        .. "every color yourself. Saved across sessions.", x, y, w - 44, C.subtext, 11)
-    y = y - (hh + 16)
+    y = b:PageHeading(x, y, "Settings", "Customize the look of the Platform Manager - shape, color scheme, "
+        .. "accent, font, menu scale, window size, and the minimap button. Choose |cffffffffCustom|r to set "
+        .. "every color yourself. Saved across sessions.")
 
-    -- SHAPE - buttons: square/sharp vs rounded corners & borders.
-    y = b:Section("SHAPE", x, y); y = y - 30
-    local sx = x
-    for _, name in ipairs(theme:ShapeList()) do
-        local active = a.shape == name
-        b:Button(sx, y, 132, theme:ShapeLabel(name), active and "primary" or "default", function()
-            theme:ApplyShape(name)
-            a.shape = name
-            win:Refresh()
-        end)
-        sx = sx + 140
-    end
-    y = y - 42
+    -- Two-column grid: each section is a closure drawing at the current (x, y); the driver pairs LEFT[i]
+    -- with RIGHT[i] on a shared row top and drops both to the taller before the next row.
+    local COLGAP = 28
+    local COLW   = math.floor((w - COLGAP) / 2)
+    local leftX, rightX = x, x + COLW + COLGAP
 
-    -- COLORS - a scheme dropdown (all palettes), plus a Custom entry.
-    y = b:Section("COLORS", x, y); y = y - 30
-    b:Label("Scheme", x, y - 2, C.subtext)
-    -- Grouped menu: Neutral / Light / Styled / Expansion sections, plus a Custom entry at the end.
-    local function schemeItems()
-        local items = {}
-        for _, g in ipairs(theme:PaletteGroups()) do
-            items[#items + 1] = { label = g.header, header = true }
-            for _, name in ipairs(g.names) do items[#items + 1] = { label = theme:PaletteLabel(name), value = name } end
+    local function secShape()
+        y = b:Section("SHAPE", x, y); y = y - 30
+        local sx = x
+        for _, name in ipairs(theme:ShapeList()) do
+            local active = a.shape == name
+            b:Button(sx, y, 128, theme:ShapeLabel(name), active and "primary" or "default", function()
+                theme:ApplyShape(name); a.shape = name; win:Refresh()
+            end)
+            sx = sx + 136
         end
-        items[#items + 1] = { label = "Custom…", value = "custom" }
-        return items
+        y = y - 42
     end
-    b:Dropdown(x + 76, y):SetMenu(230, schemeItems, function() return a.palette or DEFAULT_PALETTE_NAME end,
-        function(v)
-            if v == "custom" then
-                seedCustomPalette(a)               -- start from the currently-shown colors
-                a.palette = "custom"
-                theme:ApplyCustomPalette(a.custom)
-            else
-                a.palette = v
-                theme:ApplyPalette(v)
-                a.accent = { theme.C.accent[1], theme.C.accent[2], theme.C.accent[3] }   -- adopt the scheme's accent
+
+    local function secColors()
+        y = b:Section("COLORS", x, y); y = y - 30
+        b:Label("Scheme", x, y - 2, C.subtext)
+        local function schemeItems()
+            local items = {}
+            for _, g in ipairs(theme:PaletteGroups()) do
+                items[#items + 1] = { label = g.header, header = true }
+                for _, name in ipairs(g.names) do items[#items + 1] = { label = theme:PaletteLabel(name), value = name } end
             end
-            win:Refresh()
-        end,
-        function(v) return v == "custom" and "Custom…" or theme:PaletteLabel(v) end)
-    y = y - 40
-
-    if a.palette == "custom" then
-        -- Full palette editor: a swatch + hex for every color variable, in two columns.
-        local cust = seedCustomPalette(a)
-        b:Wrap("Click a swatch to set each color. These define the whole palette.",
-            x, y, w - 44, C.subtext, 10)
-        y = y - 20
-        local colW, rowTop = (w - 52) / 2, y
-        for i, k in ipairs(UIF.PALETTE_KEYS) do
-            local col = (i - 1) % 2
-            local ry = rowTop - math.floor((i - 1) / 2) * 30
-            local cx = x + col * colW
-            local label = PALETTE_KEY_LABELS[k] or k
-            b:Swatch(cx, ry - 2, cust[k], function()
-                theme:ApplyCustomPalette(cust)   -- cust[k] was mutated in place by the swatch
-                win:Refresh()
-            end, label, "Set the " .. label:lower() .. " color.")
-            b:Label(label .. "  ·  #" .. UIF.hexOf(cust[k][1], cust[k][2], cust[k][3]), cx + 28, ry - 4, C.text, 11)
+            items[#items + 1] = { label = "Custom…", value = "custom" }
+            return items
         end
-        y = rowTop - math.ceil(#UIF.PALETTE_KEYS / 2) * 30 - 10
-    else
-        -- Accent override, layered on top of the chosen scheme.
-        y = b:Section("ACCENT", x, y); y = y - 30
-        b:Swatch(x, y - 2, a.accent, function(r, g, b2)
-            theme:ApplyAccent({ r, g, b2 })
-            win:Refresh()
-        end, "Accent color", "The platform's highlight color, on top of the color scheme.")
-        b:Label("Accent color  ·  #" .. UIF.hexOf(a.accent[1], a.accent[2], a.accent[3]), x + 30, y - 4, C.text)
-        y = y - 34
+        b:Dropdown(x + 76, y):SetMenu(math.min(230, COLW - 90), schemeItems, function() return a.palette or DEFAULT_PALETTE_NAME end,
+            function(v)
+                if v == "custom" then
+                    seedCustomPalette(a); a.palette = "custom"; theme:ApplyCustomPalette(a.custom)
+                else
+                    a.palette = v; theme:ApplyPalette(v); a.accent = { theme.C.accent[1], theme.C.accent[2], theme.C.accent[3] }
+                end
+                win:Refresh()
+            end,
+            function(v) return v == "custom" and "Custom…" or theme:PaletteLabel(v) end)
+        y = y - 40
+        if a.palette == "custom" then
+            local cust = seedCustomPalette(a)
+            b:Wrap("Click a swatch to set each color. These define the whole palette.", x, y, COLW - 8, C.subtext, 10)
+            y = y - 20
+            local colW, rowTop = (COLW - 20) / 2, y
+            for i, k in ipairs(UIF.PALETTE_KEYS) do
+                local col = (i - 1) % 2
+                local ry = rowTop - math.floor((i - 1) / 2) * 30
+                local cx = x + col * colW
+                local label = PALETTE_KEY_LABELS[k] or k
+                b:Swatch(cx, ry - 2, cust[k], function() theme:ApplyCustomPalette(cust); win:Refresh() end,
+                    label, "Set the " .. label:lower() .. " color.")
+                b:Label(label .. "  ·  #" .. UIF.hexOf(cust[k][1], cust[k][2], cust[k][3]), cx + 28, ry - 4, C.text, 11)
+            end
+            y = rowTop - math.ceil(#UIF.PALETTE_KEYS / 2) * 30 - 10
+        else
+            y = b:Section("ACCENT", x, y); y = y - 30
+            b:Swatch(x, y - 2, a.accent, function(r, g, b2) theme:ApplyAccent({ r, g, b2 }); win:Refresh() end,
+                "Accent color", "The platform's highlight color, on top of the color scheme.")
+            b:Label("Accent  ·  #" .. UIF.hexOf(a.accent[1], a.accent[2], a.accent[3]), x + 30, y - 4, C.text)
+            y = y - 34
+        end
     end
 
-    -- Font.
-    y = b:Section("FONT", x, y); y = y - 30
-    b:FontSelect(x, y, { width = 220, value = a.font or "UBUNTU", onChange = function(key)
-        a.font = key
-        applyFont()
-        win:Refresh()
-    end })
-    y = y - 42
+    local function secDisplay()
+        y = b:Section("FONT", x, y); y = y - 30
+        b:FontSelect(x, y, { width = math.min(220, COLW - 20), value = a.font or "UBUNTU",
+            onChange = function(key) a.font = key; applyFont(); win:Refresh() end })
+        y = y - 42
+        y = b:Section("MENU SCALE", x, y); y = y - 36
+        theme:SetTip(b:Slider(x, y):Configure(math.min(300, COLW - 20), 0.8, 1.5, 0.05,
+            function() return a.menuScale or 1 end,
+            function(v) a.menuScale = v; applyMenuScaleWhenReleased(win) end, "%.2fx"),
+            "Menu scale", "Scales this platform menu (text and everything in it) up or down.")
+        y = y - 24
+        local _, mh = b:Wrap("Only affects this /tap window - the scoreboard and combat cues keep their own size.",
+            x, y, COLW - 8, C.subtext, 10)
+        y = y - (mh + 14)
+    end
 
-    -- Menu scale - its own subsection. Scales the whole /tap panel (text + chrome) proportionally.
-    -- Applied on RELEASE (not per drag tick) via applyMenuScaleWhenReleased, because the slider sits
-    -- inside the window it scales.
-    y = b:Section("MENU SCALE", x, y); y = y - 36
-    theme:SetTip(b:Slider(x, y):Configure(300, 0.8, 1.5, 0.05,
-        function() return a.menuScale or 1 end,
-        function(v) a.menuScale = v; applyMenuScaleWhenReleased(win) end, "%.2fx"),
-        "Menu scale", "Scales this platform menu (text and everything in it) up or down.")
-    y = y - 24
-    local _, mh = b:Wrap("Only affects this /tap window - the scoreboard and on-screen combat cues keep "
-        .. "their own size.", x, y, w - 44, C.subtext, 10)
-    y = y - (mh + 14)
+    local function secWindow()
+        y = b:Section("WINDOW SIZE", x, y); y = y - 36
+        local m = managerDB()
+        local sw = math.min(300, COLW - 20)
+        theme:SetTip(b:Slider(x, y):Configure(sw, 900, 1720, 10,
+            function() return m.winW or 1366 end,
+            function(v) m.winW = v; applyWindowSizeWhenReleased(win) end, "%.0f px"),
+            "Window width", "How wide the /tap window is. Release the slider to apply.")
+        y = y - 42
+        theme:SetTip(b:Slider(x, y):Configure(sw, 560, 1180, 10,
+            function() return m.winH or 768 end,
+            function(v) m.winH = v; applyWindowSizeWhenReleased(win) end, "%.0f px"),
+            "Window height", "How tall the /tap window is. Release the slider to apply.")
+        y = y - 30
+        local _, wh = b:Wrap("Tip: the |cffffffffCollapse|r button at the sidebar foot shrinks the nav to icons; "
+            .. "the title-bar maximize button goes full-screen.", x, y, COLW - 8, C.subtext, 10)
+        y = y - (wh + 6)
+        b:Button(x, y, 130, "Reset Size", "default", function()
+            local mm = managerDB(); mm.winW, mm.winH = nil, nil; win:Refresh()
+        end)
+        y = y - 40
+    end
 
-    -- Window size - width & height. Applied when you release the slider (see the helper above), so the
-    -- slider you're dragging doesn't move out from under the cursor mid-drag.
-    y = b:Section("WINDOW SIZE", x, y); y = y - 36
-    local m = managerDB()
-    theme:SetTip(b:Slider(x, y):Configure(300, 900, 1720, 10,
-        function() return m.winW or 1366 end,
-        function(v) m.winW = v; applyWindowSizeWhenReleased(win) end, "%.0f px"),
-        "Window width", "How wide the /tap window is. Release the slider to apply.")
-    y = y - 42
-    theme:SetTip(b:Slider(x, y):Configure(300, 560, 1180, 10,
-        function() return m.winH or 768 end,
-        function(v) m.winH = v; applyWindowSizeWhenReleased(win) end, "%.0f px"),
-        "Window height", "How tall the /tap window is. Release the slider to apply.")
-    y = y - 30
-    local _, wh = b:Wrap("Tip: use the |cffffffffCollapse|r button at the bottom of the sidebar to shrink "
-        .. "the navigation to icons only, or the maximize button in the title bar for a full-screen view.",
-        x, y, w - 44, C.subtext, 10)
-    y = y - (wh + 6)
-    b:Button(x, y, 150, "Reset Size", "default", function()
-        local mm = managerDB(); mm.winW, mm.winH = nil, nil
-        win:Refresh()
-    end)
-    y = y - 40
+    local function secMinimap()
+        y = b:Section("MINIMAP", x, y); y = y - 30
+        theme:SetTip(b:Toggle(x, y - 8, Suite:IsMinimapButtonShown("TAP"),
+            function(v) Suite:SetMinimapButtonShown("TAP", v) end, { color = C.accent }),
+            "Minimap button", "Show the Twisteds Addon Platform button on the minimap. Left-click opens /tap, "
+            .. "drag to move it, right-click to hide it.")
+        b:Label("Show the platform button on the minimap", x + 42, y - 12, C.text, 12)
+        y = y - 36
+    end
 
-    -- Minimap button (the platform's own; each module toggles its own icon in the module's settings).
-    y = b:Section("MINIMAP", x, y); y = y - 30
-    theme:SetTip(b:Toggle(x, y - 8, Suite:IsMinimapButtonShown("TAP"),
-        function(v) Suite:SetMinimapButtonShown("TAP", v) end, { color = C.accent }),
-        "Minimap button", "Show the Twisteds Addon Platform button on the minimap. Left-click opens /tap, "
-        .. "drag to move it around the edge, right-click to hide it.")
-    b:Label("Show the platform button on the minimap", x + 42, y - 12, C.text, 12)
-    y = y - 36
+    local LEFT, RIGHT = { secShape, secColors }, { secDisplay, secWindow, secMinimap }
+    local rowTop = y
+    for i = 1, math.max(#LEFT, #RIGHT) do
+        local lb, rb = rowTop, rowTop
+        if LEFT[i]  then x, y = leftX,  rowTop; LEFT[i]();  lb = y end
+        if RIGHT[i] then x, y = rightX, rowTop; RIGHT[i](); rb = y end
+        rowTop = math.min(lb, rb) - 12
+    end
+    x, y = leftX, rowTop
 
-    -- Reset.
-    b:Button(x, y, 150, "Reset Appearance", "danger", function()
+    b:Button(x, y, 160, "Reset Appearance", "danger", function()
         managerDB().theme = nil         -- appearanceDB() re-seeds the defaults on next read
         applySavedAppearance()          -- rounded shape + dragon-fire palette + default font
         win:Refresh()
@@ -635,11 +659,9 @@ local function pageGetInvolved(b, win)
     local w = b.contentWidth
     local x, y = 24, -18
 
-    b:Heading("Get Involved", x, y, "h1"); y = y - 34
-    local _, hh = b:Wrap("Twisted's Addon Platform is built by one person - and it gets better every "
-        .. "time |cffffffffyou|r pitch in. Bug reports, ideas, and (most of all) your real Mythic+ "
-        .. "runs make it sharper for everyone.", x, y, w - 44, C.subtext, 12)
-    y = y - (hh + 18)
+    y = b:PageHeading(x, y, "Get Involved", "Twisted's Addon Platform is built by one person - and it gets "
+        .. "better every time |cffffffffyou|r pitch in. Bug reports, ideas, and (most of all) your real "
+        .. "Mythic+ runs make it sharper for everyone.")
 
     -- Hero callout: share your runs (drawn on an accent-tinted card).
     local yTop = y
@@ -684,10 +706,8 @@ local function pageCommands(b, win)
     local w = b.contentWidth
     local x, y = 24, -18
 
-    b:Heading("Commands", x, y, "h1"); y = y - 34
-    local _, hh = b:Wrap("Every slash command across the platform and its installed modules. "
-        .. "Type |cffffffff/tap|r on its own to open this window.", x, y, w - 44, C.subtext, 11)
-    y = y - (hh + 16)
+    y = b:PageHeading(x, y, "Commands", "Every slash command across the platform and its installed modules. "
+        .. "Type |cffffffff/tap|r on its own to open this window.")
 
     -- Group by owner, preserving the order owners first appear in the registry.
     local order, byOwner = {}, {}
