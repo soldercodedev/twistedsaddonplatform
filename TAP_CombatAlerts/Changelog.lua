@@ -4,6 +4,10 @@ local _, TCC = ...
 TCC.CHANGELOG = [==[
 # Twisteds Combat Alerts - What's New
 
+## 1.0.1
+
+- **[CHANGE]** Item and add-on lookups now use the current C_Item / C_AddOns APIs directly; the deprecated GetItemInfo / GetAddOnMetadata fallbacks were removed. No functional change.
+
 ## 1.0.0
 
 - **[CHANGE]** Out of beta - Twisteds Combat Alerts is now a stable 1.0 release.

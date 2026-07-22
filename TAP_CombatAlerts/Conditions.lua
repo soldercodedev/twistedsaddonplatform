@@ -181,7 +181,6 @@ function TCC.ResolveItem(input)
         if C_Item.GetItemNameByID then name = C_Item.GetItemNameByID(id) end
         if C_Item.GetItemIconByID then icon = C_Item.GetItemIconByID(id) end
     end
-    if not name and GetItemInfo then name = GetItemInfo(id) end
     return id, name, icon
 end
 

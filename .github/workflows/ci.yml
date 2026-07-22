@@ -1,7 +1,9 @@
 name: CI
 
-# Validates every Lua file compiles (WoW runs Lua 5.1) on each push / pull request, so a syntax
-# error can never reach a release. Same check used during development.
+# On each push / pull request:
+#   lua-syntax    - every Lua file compiles (WoW runs Lua 5.1), so a syntax error can't ship.
+#   global-scope  - no global-namespace pollution (blocking; the WoWInterface/Ketho quality bar).
+#   luacheck      - unused locals / shadowing / cleanliness lint (advisory for now).
 on:
   push:
     branches: ['**']
@@ -34,3 +36,35 @@ jobs:
                         -name '*.lua' -not -path '*/tools/*' -print0)
           echo "Checked ${count} Lua file(s)."
           exit $fail
+
+  global-scope:
+    name: No global-namespace pollution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.1
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends lua5.1
+
+      - name: Check for accidental globals (compiler bytecode)
+        run: bash .github/scripts/check-globals.sh
+
+  luacheck:
+    name: Luacheck (unused locals / cleanliness)
+    runs-on: ubuntu-latest
+    # Advisory for now: reports issues without failing the build. Once the report is clean,
+    # drop this line to make cleanliness a hard gate too.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install luacheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends lua5.1 luarocks
+          sudo luarocks install luacheck
+
+      - name: Run luacheck
+        run: luacheck TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_RotationAssistant TAP_GameDB TAP_MythicLedger

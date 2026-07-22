@@ -502,7 +502,7 @@ end
 
 -- Whether Details! (the addon) is present and loaded.
 function API.IsDetailsLoaded()
-    local loaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+    local loaded = C_AddOns and C_AddOns.IsAddOnLoaded
     if not loaded then return false end
     local ok, res = pcall(loaded, "Details")
     return ok and res and true or false

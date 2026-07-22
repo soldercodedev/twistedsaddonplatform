@@ -188,13 +188,13 @@ end
 -- needed; the payload just isn't parsed until something asks for it.)
 ----------------------------------------------------------------------
 function Suite:IsDataLoaded(addonName)
-    local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+    local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded
     return isLoaded and isLoaded(addonName) and true or false
 end
 
 function Suite:LoadData(addonName)
     if self:IsDataLoaded(addonName) then return true end
-    local loader = (C_AddOns and C_AddOns.LoadAddOn) or LoadAddOn
+    local loader = C_AddOns and C_AddOns.LoadAddOn
     if not loader then return false end
     pcall(loader, addonName)
     return self:IsDataLoaded(addonName)

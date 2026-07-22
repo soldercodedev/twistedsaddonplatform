@@ -65,10 +65,6 @@ local function spellCastMS(spellID)
         local ok, ms = pcall(GetSpellCastTime, spellID)
         if ok and ms ~= nil then return ms end
     end
-    if _G.GetSpellInfo then
-        local ok, a, b, c, castTime = pcall(GetSpellInfo, spellID)
-        if ok and castTime ~= nil then return castTime end
-    end
     return nil
 end
 
@@ -480,8 +476,6 @@ local function applyGCD(f, s)
     if GetSpellCooldownT then
         local info = GetSpellCooldownT(GCD_SPELL)
         if info then start, dur = info.startTime, info.duration end
-    elseif _G.GetSpellCooldown then
-        start, dur = GetSpellCooldown(GCD_SPELL)
     end
     if start and dur and dur > 0 then
         if f._gcdStart ~= start then f.cd:SetCooldown(start, dur); f._gcdStart = start end

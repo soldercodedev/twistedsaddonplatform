@@ -10,7 +10,6 @@ TCC.PREFIX = PREFIX
 -- Version, read from the TOC so it only needs bumping in one place.
 local function metadata(field)
     if C_AddOns and C_AddOns.GetAddOnMetadata then return C_AddOns.GetAddOnMetadata(addonName, field) end
-    if GetAddOnMetadata then return GetAddOnMetadata(addonName, field) end
 end
 TCC.VERSION = metadata("Version") or "1.0.0"
 

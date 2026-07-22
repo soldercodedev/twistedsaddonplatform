@@ -159,7 +159,7 @@ function FTI.SaveMacro(name, icon, body, perCharacter)
     end
     -- CreateMacro / EditMacro / GetMacroIndexByName live in Blizzard_MacroUI, which is
     -- load-on-demand - without this they silently fail until the macro window is opened.
-    local loader = (C_AddOns and C_AddOns.LoadAddOn) or LoadAddOn
+    local loader = C_AddOns and C_AddOns.LoadAddOn
     if loader then pcall(loader, "Blizzard_MacroUI") end
     if not CreateMacro then return false, "The macro API is unavailable on this client." end
     local idx = GetMacroIndexByName and GetMacroIndexByName(name) or 0
@@ -178,7 +178,7 @@ end
 -- No-op if the macro doesn't exist or we're in combat (EditMacro is combat-protected).
 function FTI.UpdateFocusMacro()
     if InCombatLockdown and InCombatLockdown() then return false end
-    local loader = (C_AddOns and C_AddOns.LoadAddOn) or LoadAddOn
+    local loader = C_AddOns and C_AddOns.LoadAddOn
     if loader then pcall(loader, "Blizzard_MacroUI") end
     if not (GetMacroIndexByName and EditMacro) then return false end
     local idx = GetMacroIndexByName("TAP Focus")
@@ -192,7 +192,7 @@ end
 -- Open Blizzard's macro pane so the newly created/updated macro is right there to
 -- drag onto a bar. Out of combat only (SaveMacro already gates on combat).
 function FTI.OpenMacroUI()
-    local loader = (C_AddOns and C_AddOns.LoadAddOn) or LoadAddOn
+    local loader = C_AddOns and C_AddOns.LoadAddOn
     if loader then pcall(loader, "Blizzard_MacroUI") end
     if MacroFrame and not MacroFrame:IsShown() then
         if ShowUIPanel then ShowUIPanel(MacroFrame) else MacroFrame:Show() end

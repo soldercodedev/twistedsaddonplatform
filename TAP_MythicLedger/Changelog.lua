@@ -5,6 +5,12 @@ local ADDON, ML = ...
 ML.CHANGELOG = [==[
 # Mythic Ledger - What's New
 
+## 1.1.1
+
+A quiet maintenance release - no changes to scoring or to how anything looks. Under the hood, add-on presence checks (Details!, the Encounter Journal) now use the current C_AddOns API directly instead of a legacy fallback.
+
+- **[CHANGE]** Uses the modern C_AddOns API directly for add-on checks. No functional change.
+
 ## 1.1.0
 
 The platform's new **two-tier navigation** plus a big **scoring pass**: item level now factors into throughput, healers get full credit on a clean key, death causes are smarter, and a new **Scoring Guide** explains the whole model. Every scoring change below **re-scores your existing runs automatically** on login.

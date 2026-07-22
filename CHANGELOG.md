@@ -3,6 +3,31 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
+## 1.5.1
+
+A quiet maintenance release. Every module now talks to the game through the **current WoW APIs** directly - the old compatibility shims kept around for pre-Midnight clients are gone - and the project gained automated **code-quality gates** that keep it free of accidental globals and deprecated calls. Nothing changes in how anything looks or plays.
+
+**Platform**
+
+- **[CHANGE]** **Modern APIs only.** Load-on-demand data handling now uses the current `C_AddOns` API directly; the legacy `IsAddOnLoaded` / `LoadAddOn` fallbacks were removed. No functional change.
+- **[CHANGE]** **Code-quality gates in CI.** Every push is now checked for global-namespace pollution (compiler-verified, so an accidental global can't slip in) and linted with luacheck.
+
+### Mythic Ledger (1.1.1)
+
+- **[CHANGE]** Add-on presence checks (Details!, the Encounter Journal) now use the current `C_AddOns` API directly. No functional change.
+
+### Combat Alerts (1.0.1)
+
+- **[CHANGE]** Item and add-on lookups now use the current `C_Item` / `C_AddOns` APIs directly; the deprecated `GetItemInfo` / `GetAddOnMetadata` fallbacks were removed. No functional change.
+
+### Focus Target Interrupt (1.1.1)
+
+- **[CHANGE]** Loading Blizzard's macro UI now uses the current `C_AddOns` API directly. No functional change.
+
+### Rotation Assistant (1.0.1)
+
+- **[CHANGE]** Spell cooldown, cast, and icon lookups now use the current `C_Spell` API directly; the legacy global fallbacks were removed. No functional change.
+
 ## 1.5.0
 
 A ground-up **navigation overhaul**. Each installed add-on now gets its own **category in the left sidebar**, and its pages live there as sub-items - so a feature-rich module's pages are discoverable at a glance instead of crammed into an in-body tab strip. Freeing that in-body top-nav lets a page carry its **own sub-tabs** (the Mythic Ledger Settings page is the first to use them).
