@@ -259,6 +259,18 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
             function(v) mac.announceInstance = v; FTI.RefreshManager() end,
             "Announce where", "Only send call-outs in this kind of content.")
         y = y - 36
+        b:Label("only on", x + 4, y - 2, C.subtext)
+        tip(b:ClassSpecButton(x + 96, y, {
+            selected = mac.triggerSpecs or {},
+            title = "Announce on these specs",
+            hint = "none checked = announce on every character",
+            width = 220,
+            onChange = function(sel)
+                mac.triggerSpecs = (sel and next(sel)) and sel or nil
+                FTI.RefreshManager()
+            end,
+        }), "Trigger specs", "Only send call-outs while you're playing one of the chosen classes / specs. Leave empty to announce on every character.")
+        y = y - 36
         local canAnnounce = (mac.channel or "NONE") ~= "NONE"
         local txtCol = canAnnounce and C.text or C.subtext
         tip(b:Toggle(x, y, mac.announceFocus, function(v) mac.announceFocus = v; FTI.RefreshManager() end),

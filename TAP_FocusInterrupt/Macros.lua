@@ -274,6 +274,18 @@ local function instanceAllows(setting)
     return itype == setting
 end
 
+-- Class/spec gate: the announce only fires while YOUR current spec is one of the chosen specs.
+-- `m.triggerSpecs` is a set (specID -> true); empty/nil means every character announces.
+-- (A focus unit's spec can't be read via API, so this scopes a shared config per character.)
+local function specAllows(m)
+    local sel = m.triggerSpecs
+    if not sel or not next(sel) then return true end
+    local idx = GetSpecialization and GetSpecialization()
+    if not idx then return false end
+    local specID = GetSpecializationInfo and GetSpecializationInfo(idx)
+    return specID ~= nil and sel[specID] == true
+end
+
 local focusFrame
 function FTI.EnsureFocusWatcher()
     if focusFrame then return end
@@ -285,12 +297,12 @@ function FTI.EnsureFocusWatcher()
         local m = FTI.db and FTI.db.macro
         if not m then return end
         if event == "PLAYER_FOCUS_CHANGED" then
-            if m.announceFocus and UnitExists and UnitExists("focus") and instanceAllows(m.announceInstance) then
+            if m.announceFocus and UnitExists and UnitExists("focus") and instanceAllows(m.announceInstance) and specAllows(m) then
                 sendAnnounce(m.focusMsg, m)
             end
         elseif event == "READY_CHECK" then
             -- No target/focus is expected at a ready check, so this fires regardless.
-            if m.announceReady and instanceAllows(m.announceInstance) then sendAnnounce(m.readyMsg, m) end
+            if m.announceReady and instanceAllows(m.announceInstance) and specAllows(m) then sendAnnounce(m.readyMsg, m) end
         end
     end)
 end
