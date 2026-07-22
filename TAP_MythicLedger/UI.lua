@@ -94,7 +94,7 @@ local SB_PALETTE = {
     text    = { 0.93, 0.95, 0.98 },
     subtext = { 0.63, 0.67, 0.75 },
 }
-local runFilter    = { character = nil, mapId = nil, status = nil, playerKey = nil }
+local runFilter    = { character = nil, mapId = nil, status = nil, playerKey = nil, level = nil, role = nil }
 local runSort      = { key = "date", dir = "desc" }
 local playerFilter = { search = "", role = nil, favorite = false, minShared = 1 }
 local playerSort   = { key = "runs", dir = "desc" }
@@ -701,7 +701,8 @@ end
 local function sortedRuns()
     local runs = History.FilterRuns({
         seasonId = scopeSeason(), character = runFilter.character, mapId = runFilter.mapId,
-        status = runFilter.status, playerKey = runFilter.playerKey,
+        status = runFilter.status, playerKey = runFilter.playerKey, role = runFilter.role,
+        keyMin = runFilter.level, keyMax = runFilter.level,   -- a specific key level (nil = any)
     })
     local key, dir = runSort.key, runSort.dir
     local mult = (dir == "desc") and 1 or -1
@@ -711,11 +712,36 @@ local function sortedRuns()
         elseif key == "key" then av, bv = (a.level or 0), (bb.level or 0)
         elseif key == "duration" then av, bv = (a.duration or 0), (bb.duration or 0)
         elseif key == "deaths" then av, bv = (a.deaths or -1), (bb.deaths or -1)
+        elseif key == "dps" then av, bv = (a.playerStats and a.playerStats.dps or -1), (bb.playerStats and bb.playerStats.dps or -1)
+        elseif key == "hps" then av, bv = (a.playerStats and a.playerStats.hps or -1), (bb.playerStats and bb.playerStats.hps or -1)
         else av, bv = (a.completedAt or 0), (bb.completedAt or 0) end
         if av == bv then return (a.completedAt or 0) > (bb.completedAt or 0) end
         return (av > bv) == (mult == 1)
     end)
     return runs
+end
+
+-- Distinct dungeon choices (from runs in the current season scope), for the Runs filter.
+local function runsDungeonChoices()
+    local seen, list = {}, {}
+    for _, r in ipairs(History.FilterRuns({ seasonId = scopeSeason() })) do
+        if r.mapId and not seen[r.mapId] then seen[r.mapId] = true; list[#list + 1] = { r.mapId, r.dungeonName or ("Map " .. r.mapId) } end
+    end
+    table.sort(list, function(a, bb) return tostring(a[2]) < tostring(bb[2]) end)
+    table.insert(list, 1, { "all", "All Dungeons" })
+    return list
+end
+
+-- Distinct key levels present (descending), for the Runs filter.
+local function runsKeyChoices()
+    local seen, levels = {}, {}
+    for _, r in ipairs(History.FilterRuns({ seasonId = scopeSeason() })) do
+        if type(r.level) == "number" and not seen[r.level] then seen[r.level] = true; levels[#levels + 1] = r.level end
+    end
+    table.sort(levels, function(a, bb) return a > bb end)
+    local out = { { "all", "All Keys" } }
+    for _, lv in ipairs(levels) do out[#out + 1] = { lv, "+" .. lv } end
+    return out
 end
 
 local STATUS_HEX = { TIMED = "33dd66", DEPLETED = "e0a030", ABANDONED = "9098a8" }
@@ -757,19 +783,38 @@ local function runTipData(r)
 end
 
 local function renderRunsList(b, C, x, y, w, win)
-    y = renderSeasonSelector(b, C, x, y, w, win)
-
-    b:Label("Result", x, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 56, y), "Result filter", "Show only timed, depleted, or abandoned runs."):SetChoices(120, {
-        { "all", "All" }, { STATUS.TIMED, "Timed" }, { STATUS.DEPLETED, "Depleted" }, { STATUS.ABANDONED, "Abandoned" },
-    }, function() return runFilter.status or "all" end,
-       function(v) runFilter.status = (v ~= "all") and v or nil; win:Refresh() end)
+    -- Filter toolbar: Season, Result, Character, Dungeon, Key, Role - flowing across the width.
+    local fields = {
+        { label = "Season", build = function(fx, cy, cw)
+            b:Dropdown(fx, cy):SetChoices(cw, seasonChoices(), function() return view.season end,
+                function(v) view.season = v; win:Refresh() end) end },
+        { label = "Result", build = function(fx, cy, cw)
+            b:Dropdown(fx, cy):SetChoices(cw, {
+                { "all", "All" }, { STATUS.TIMED, "Timed" }, { STATUS.DEPLETED, "Depleted" }, { STATUS.ABANDONED, "Abandoned" },
+            }, function() return runFilter.status or "all" end,
+               function(v) runFilter.status = (v ~= "all") and v or nil; win:Refresh() end) end },
+        { label = "Character", build = function(fx, cy, cw)
+            b:Dropdown(fx, cy):SetChoices(cw, overviewCharChoices(), function() return runFilter.character or "all" end,
+                function(v) runFilter.character = (v ~= "all") and v or nil; win:Refresh() end) end },
+        { label = "Dungeon", build = function(fx, cy, cw)
+            b:Dropdown(fx, cy):SetChoices(cw, runsDungeonChoices(), function() return runFilter.mapId or "all" end,
+                function(v) runFilter.mapId = (v ~= "all") and v or nil; win:Refresh() end) end },
+        { label = "Key", build = function(fx, cy, cw)
+            b:Dropdown(fx, cy):SetChoices(cw, runsKeyChoices(), function() return runFilter.level or "all" end,
+                function(v) runFilter.level = (v ~= "all") and v or nil; win:Refresh() end) end },
+        { label = "Role", build = function(fx, cy, cw)
+            b:Dropdown(fx, cy):SetChoices(cw, {
+                { "all", "All Roles" }, { "TANK", "Tank" }, { "HEALER", "Healer" }, { "DAMAGER", "DPS" },
+            }, function() return runFilter.role or "all" end,
+               function(v) runFilter.role = (v ~= "all") and v or nil; win:Refresh() end) end },
+    }
+    y = filterBar(b, C, x, y, w - 12, fields)
     if runFilter.playerKey then
-        T(b, b:Button(x + 200, y, 150, "Clear player filter", "ghost", function()
+        T(b, b:Button(x, y, 170, "Clear player filter", "ghost", function()
             runFilter.playerKey = nil; win:Refresh()
         end), "Clear filter", "Stop filtering the list to a single party member.")
+        y = y - 32
     end
-    y = y - 34
 
     local runs = sortedRuns()
     local rowW = w - 12
@@ -781,9 +826,9 @@ local function renderRunsList(b, C, x, y, w, win)
     end
     local first, last = pagerBar(b, C, x, y, rowW, #runs, "runs", win); y = y - 42
 
-    -- Date column widened (cDate->cChar) to fit the date + time-of-day stamp without touching the name.
-    local cIcon, cDate, cChar, cDun, cKey, cRes, cDur, cDth, cPerf =
-        x + 6, x + 32, x + 140, x + 250, x + 400, x + 442, x + 532, x + 606, x + 648
+    -- Wider format: DPS and HPS get their own sortable columns.
+    local cIcon, cDate, cChar, cDun, cKey, cRes, cDur, cDth, cDps, cHps =
+        x + 6, x + 32, x + 140, x + 260, x + 420, x + 466, x + 560, x + 640, x + 700, x + 780
 
     -- Header band + clean, sortable labels (no button chrome).
     b:Box(x, y + 4, rowW, 24, 0.10, 0, C.accent)
@@ -798,14 +843,14 @@ local function renderRunsList(b, C, x, y, w, win)
         else runSort.key = "deaths"; runSort.dir = "desc" end
         win:Refresh()
     end, "Deaths", "Total party deaths - click to sort.")
-    hdr(b, C, cPerf, y - 2, "DPS/HPS")
+    sortHdr(b, C, cDps, y - 2, 40, "DPS", "dps", runSort, win)
+    sortHdr(b, C, cHps, y - 2, 40, "HPS", "hps", runSort, win)
     y = y - 26
 
     for i = first, last do
         local r = runs[i]
         local h = 30
         local yTop = y
-        local role = r.character and r.character.role
         b:Row(x, yTop, rowW, h, { index = i, tipData = runTipData(r),
             onClick = function() view.detailRun = r.id; win:Refresh() end })
         dungeonGlyph(b, cIcon, yTop - 5, 20, r.mapId)
@@ -819,7 +864,9 @@ local function renderRunsList(b, C, x, y, w, win)
         b:Badge(cRes, yTop - 9, { text = statusUpgradeText(r), variant = statusBadgeVariant(r.status) })
         b:Label(Util.duration(r.duration), cDur, yTop - 10, C.text, 11)
         b:Label(Util.numOr(r.deaths, "%d"), cDth + 4, yTop - 10, C.text, 11)
-        b:Label(primaryMetric(role, r.playerStats), cPerf, yTop - 10, C.text, 11)
+        local ps = r.playerStats
+        b:Label(Util.shortNum(ps and ps.dps), cDps, yTop - 10, C.text, 11)
+        b:Label(Util.shortNum(ps and ps.hps), cHps, yTop - 10, C.text, 11)
         y = yTop - h - 2
     end
     y = y - 6
