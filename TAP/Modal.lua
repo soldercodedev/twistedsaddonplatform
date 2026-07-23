@@ -86,7 +86,6 @@ function Mixin:Modal(opts)
         local xb = theme:Button(f); xb:Configure("X", 24, 22, "danger", function() modal:Close() end)
         xb:SetPoint("TOPRIGHT", -6, -8); xb:SetFrameLevel(hd:GetFrameLevel() + 5)
     end
-    modal._dismissable = dismissable
     -- dim (default true) darkens the screen behind; closeOnClickOutside (default = dismissable)
     -- closes when you click off the modal. Set both false for a non-modal, non-dimming dialog.
     modal._dim = opts.dim ~= false
@@ -170,7 +169,6 @@ function Mixin:Modal(opts)
         f:Hide()
         self:_syncClose()
     end
-    function modal:SetBarColor(c) UIF.paint(bar, UIF.toColor(c, accentCol)) end
 
     return modal
 end

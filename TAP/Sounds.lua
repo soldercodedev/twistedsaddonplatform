@@ -12,7 +12,6 @@
 local ADDON, UIF = ...
 local Mixin = UIF.ThemeMixin
 
-local SOUND_DIR = "Interface\\AddOns\\TAP\\Sounds\\"
 local FALLBACK_SOUND = 8959   -- SOUNDKIT.RAID_WARNING numeric id (hard fallback)
 
 -- An entry uses EITHER `kit` (a SOUNDKIT constant name) OR `file` (a bundled file name).
@@ -106,7 +105,7 @@ end
 function Mixin:ResolveSound(key)
     local entry
     for _, s in ipairs(self:SoundList()) do if s.key == key then entry = s break end end
-    if entry and entry.file then return "file", (self.soundDir or SOUND_DIR) .. entry.file end
+    if entry and entry.file then return "file", self.soundDir .. entry.file end
     if entry and entry.kit and type(SOUNDKIT) == "table" then
         local id = SOUNDKIT[entry.kit]
         if type(id) == "number" then return "kit", id end

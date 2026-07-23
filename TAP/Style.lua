@@ -38,12 +38,6 @@ function UIF.ThemeMixin:Color(spec, fallback)
     return UIF.toColor(spec, fallback)
 end
 
--- Pull a color from opts[key] (or a list of alias keys), else return the default.
-function UIF.optColor(opts, key, default)
-    if not opts then return default end
-    return toColor(opts[key], default)
-end
-
 ----------------------------------------------------------------------
 -- Font styling for a FontString.
 ----------------------------------------------------------------------

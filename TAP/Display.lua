@@ -235,7 +235,6 @@ local function styledStatTile(theme, parent, opts)
         f:SetScript("OnLeave", function() GameTooltip_Hide() end)
     end
     f.labelFS = label
-    function f:SetValue(v) self.valueFS:SetText(v) end
     return f
 end
 
@@ -332,7 +331,6 @@ function Mixin:StatTile(parent, opts)
         f:SetScript("OnLeave", function() GameTooltip_Hide() end)
     end
 
-    function f:SetValue(v) self.valueFS:SetText(v) end
     return f
 end
 

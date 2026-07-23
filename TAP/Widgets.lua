@@ -161,14 +161,13 @@ function Mixin:Button(parent)
 end
 
 ----------------------------------------------------------------------
--- Dropdown (button that opens a themed Menu). Three flavors:
+-- Dropdown (button that opens a themed Menu). Two flavors:
 --   :SetChoices(w, { {value,label}, ... }, getVal, setVal)
 --   :SetMenu(w, buildItems, getVal, onPick, labelFor)  -- fully custom item list
 ----------------------------------------------------------------------
 function Mixin:Dropdown(parent)
     local theme, C = self, self.C
     local b = CreateFrame("Button", nil, parent); theme:StylePanel(b, C.card)
-    b.iconTex = b:CreateTexture(nil, "ARTWORK"); b.iconTex:SetSize(16, 16); b.iconTex:SetPoint("LEFT", 6, 0); b.iconTex:Hide()
     b.fs = b:CreateFontString(nil, "OVERLAY"); b.fs:SetFont(theme.FONT, 12)
     b.fs:SetPoint("LEFT", 8, 0); b.fs:SetPoint("RIGHT", -20, 0); b.fs:SetJustifyH("LEFT"); b.fs:SetTextColor(unpack(C.text))
     b.caret = b:CreateFontString(nil, "OVERLAY"); b.caret:SetFont(theme.FONT, 10); b.caret:SetPoint("RIGHT", -7, -1)
@@ -181,7 +180,7 @@ function Mixin:Dropdown(parent)
         self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text color too (light themes)
         self:SetSize(w, 26)
         self.fs:SetFont(theme.FONT, 12)
-        self.iconTex:Hide(); self.fs:SetPoint("LEFT", 8, 0)   -- clear any leftover icon from pooled reuse
+        self.fs:SetPoint("LEFT", 8, 0)
         self.caret:SetTextColor(theme.C.accent[1], theme.C.accent[2], theme.C.accent[3])
         local function label() for _, c in ipairs(choices) do if c[1] == getVal() then return c[2] end end return "?" end
         self.fs:SetText(label())
@@ -199,7 +198,7 @@ function Mixin:Dropdown(parent)
         theme:StylePanel(self, C.card)   -- pooled: re-apply shape/color so a live skin swap sticks
         self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text color too (light themes)
         self:SetSize(w, 26)
-        self.iconTex:Hide(); self.fs:SetPoint("LEFT", 8, 0)
+        self.fs:SetPoint("LEFT", 8, 0)
         self.caret:SetTextColor(theme.C.accent[1], theme.C.accent[2], theme.C.accent[3])
         self.fs:SetText(labelFor and labelFor(getVal()) or "")
         self:SetScript("OnClick", function(self)
@@ -425,51 +424,8 @@ function Mixin:Checkbox(parent)
 end
 
 ----------------------------------------------------------------------
--- Preview: a framed box showing large text with an optional icon that can be dragged to
--- reposition it. Useful for "on-screen alert" style authoring. The icon offset is written
--- back into a bound data table (a.iconX / a.iconY) as you drag.
-----------------------------------------------------------------------
-function Mixin:Preview(parent)
-    local theme = self
-    local f = CreateFrame("Frame", nil, parent); theme:StylePanel(f, { 0.05, 0.05, 0.06 }, theme.C.border)
-    f.fs = f:CreateFontString(nil, "OVERLAY"); f.fs:SetPoint("CENTER")
-    local ag = f.fs:CreateAnimationGroup()
-    local p1 = ag:CreateAnimation("Alpha"); p1:SetFromAlpha(1); p1:SetToAlpha(0.3); p1:SetDuration(0.5); p1:SetOrder(1)
-    local p2 = ag:CreateAnimation("Alpha"); p2:SetFromAlpha(0.3); p2:SetToAlpha(1); p2:SetDuration(0.5); p2:SetOrder(2)
-    ag:SetLooping("REPEAT"); f.pulse = ag
-
-    local ib = CreateFrame("Button", nil, f); ib:SetSize(24, 24); ib:EnableMouse(true); ib:RegisterForDrag("LeftButton"); ib:Hide()
-    ib.tex = ib:CreateTexture(nil, "ARTWORK"); ib.tex:SetAllPoints(); ib.tex:SetTexCoord(unpack(theme.iconInset))
-    ib:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetText("Drag to position the icon", theme:AccentHeader()); GameTooltip:Show()
-    end)
-    ib:SetScript("OnLeave", GameTooltip_Hide)
-    ib:SetScript("OnDragStart", function(self)
-        self:SetScript("OnUpdate", function()
-            local pf = self:GetParent(); local a, ps = pf._action, pf._pscale or 1
-            if not a then return end
-            local s = pf:GetEffectiveScale(); local cx, cy = GetCursorPosition()
-            local fcx, fcy = pf.fs:GetCenter()
-            if fcx and s and s > 0 then
-                a.iconX = ((cx / s) - fcx) / ps; a.iconY = ((cy / s) - fcy) / ps
-                self:ClearAllPoints(); self:SetPoint("CENTER", pf.fs, "CENTER", a.iconX * ps, a.iconY * ps)
-            end
-        end)
-    end)
-    ib:SetScript("OnDragStop", function(self)
-        self:SetScript("OnUpdate", nil)
-        local pf = self:GetParent(); if pf._onMove then pf._onMove() end
-    end)
-    f.iconBtn = ib
-
-    -- Bind the data table that drag writes into (fields iconX/iconY) and an onMove hook.
-    function f:Bind(action, pscale, onMove) self._action = action; self._pscale = pscale or 1; self._onMove = onMove end
-    return f
-end
-
-----------------------------------------------------------------------
--- NavRow: a sidebar navigation row - left accent bar + selectable bg + icon + label
--- (+ optional toggle). Used by the Window shell, but exposed for custom sidebars too.
+-- NavRow: a sidebar navigation row - left accent bar + selectable bg + icon + label.
+-- Used by the Window shell, but exposed for custom sidebars too.
 ----------------------------------------------------------------------
 function Mixin:NavRow(parent, width)
     local theme, C = self, self.C
@@ -478,7 +434,6 @@ function Mixin:NavRow(parent, width)
     b.sel = b:CreateTexture(nil, "ARTWORK"); UIF.paint(b.sel, C.accent)
     b.sel:SetPoint("TOPLEFT"); b.sel:SetPoint("BOTTOMLEFT"); b.sel:SetWidth(3); b.sel:Hide()
     b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(18, 18); b.icon:SetPoint("LEFT", 12, 0)
-    b.tg = theme:Toggle(b); b.tg:SetPoint("RIGHT", -8, 0); b.tg:Hide()
     b.fs = b:CreateFontString(nil, "OVERLAY"); b.fs:SetFont(theme.FONT, 12)
     b.fs:SetPoint("LEFT", b.icon, "RIGHT", 8, 0); b.fs:SetPoint("RIGHT", -8, 0); b.fs:SetJustifyH("LEFT")
 

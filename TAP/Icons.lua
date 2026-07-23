@@ -54,18 +54,10 @@ function Mixin:IconPath(spec, variant)
     return self:GetIcon(spec, variant) or ("Interface\\ICONS\\" .. spec)
 end
 
--- Override Theme.lua's ResolveIcon so bare names prefer a bundled icon. Full paths / fileIDs
--- pass straight through, so this stays backward compatible.
+-- Resolve any icon spec for SetTexture: bare names prefer a bundled icon; full paths / fileIDs
+-- pass straight through.
 function Mixin:ResolveIcon(v, variant)
     return self:IconPath(v, variant)
-end
-
--- Names of all bundled icons (sorted) - handy to feed the icon picker.
-function Mixin:IconNames(variant)
-    local m = UIF.ICON_MANIFEST; if not m then return {} end
-    if variant == "filled" then return m.filled or {} end
-    if variant == "social" then return m.social or {} end
-    return m.outline or {}
 end
 
 ----------------------------------------------------------------------

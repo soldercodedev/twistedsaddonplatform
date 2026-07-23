@@ -40,6 +40,5 @@ function Mixin:Heading(parent, opts)
     if (opts.upper == nil and role.upper) or opts.upper then text = text:upper() end
     fs:SetText(self:HL(text))
     if opts.wrapWidth then fs:SetWordWrap(true); fs:SetWidth(opts.wrapWidth) else fs:SetWordWrap(false) end
-    fs._role = opts.role or "h3"
     return fs
 end

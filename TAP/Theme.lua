@@ -48,7 +48,6 @@ function UIF:NewTheme(opts)
     theme.C = C
 
     -- Shape tokens (default corner radius + border weight for panels/buttons/inputs).
-    theme.skin       = opts.skin
     theme.radius     = opts.radius or (skin and skin.radius) or 0
     theme.borderSize = opts.borderSize or (skin and skin.borderSize) or 1
     theme.winRadius  = opts.winRadius or (skin and skin.winRadius) or theme.radius
@@ -72,7 +71,6 @@ function UIF:NewTheme(opts)
     theme.FONT      = UIF.ResolveFontFile(theme:ResolveFont(theme._fontSpec))
     theme._onAccent = opts.onAccent
     theme._onFont   = opts.onFont
-    theme._accentCode = "|cff5c9dff"
     theme:_updateAccentCode()
 
     -- Register every theme so a global font re-resolution can reach it (module addons each make
@@ -80,9 +78,8 @@ function UIF:NewTheme(opts)
     UIF._themes = UIF._themes or {}
     UIF._themes[#UIF._themes + 1] = theme
 
-    -- Bound closures so widgets can wire OnEnter/OnLeave directly to the theme's tooltip.
+    -- Bound closure so widgets can wire OnEnter directly to the theme's tooltip.
     theme.showTip = function(f) theme:_showTip(f) end
-    theme.hideTip = GameTooltip_Hide
 
     return theme
 end
@@ -143,9 +140,6 @@ function UIF.SetGlobalFont(spec)
     if spec ~= nil then UIF._globalFontSpec = spec end   -- remember it so themes created LATER adopt it
     for _, t in ipairs(UIF._themes or {}) do pcall(t.ApplyFont, t, spec) end
 end
-
--- Backwards-compatible alias: re-resolve every theme from its current spec (no change of choice).
-function UIF.ReapplyAllFonts() UIF.SetGlobalFont(nil) end
 
 ----------------------------------------------------------------------
 -- Tooltip system: any frame with ._tipTitle set shows help on hover.
@@ -251,16 +245,4 @@ function Mixin:ShapeTexture(spec)
     local best = UIF.SHAPE_RADII[1]
     for _, v in ipairs(UIF.SHAPE_RADII) do if math.abs(v - r) < math.abs(best - r) then best = v end end
     return self.shapeDir .. "roundrect-" .. best .. ".tga", best
-end
-
--- Resolve an icon value (numeric fileID, full "Interface\\..." path, or bare ICONS name)
--- for SetTexture. Bare names are looked up under Interface\ICONS by default.
-function Mixin:ResolveIcon(v)
-    if type(v) == "number" then return v end
-    if type(v) == "string" and v ~= "" then
-        if v:find("\\") then return v end
-        local n = tonumber(v); if n then return n end
-        return "Interface\\ICONS\\" .. v
-    end
-    return nil
 end

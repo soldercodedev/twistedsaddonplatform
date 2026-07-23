@@ -1,9 +1,7 @@
 -- UIFoundry - Skins.lua
 -- A skin is a named preset that changes COLOR (palette + accent) and SHAPE (corner radius + border
--- weight). Pick one at creation, or swap it live.
---
---   local theme = UIFoundry:NewTheme({ name = "MyAddon", skin = "rounded" })
---   theme:ApplySkin("blizzard");  win:Refresh()          -- swap live, then re-render
+-- weight). Selected at theme creation via `skin =`; the appearance UI drives palette and shape as two
+-- independent axes (see ApplyPalette / ApplyShape below).
 --
 -- Each skin: { palette = { key = {r,g,b}, ... }, accent = {r,g,b}, radius, borderSize, winRadius }.
 -- Skins DELIBERATELY carry NO font: the UI font is a single global choice (UIF.SetGlobalFont, driven
@@ -88,12 +86,6 @@ UIF.SKINS.dragonflight = expac({ 0.96, 0.52, 0.16 })   -- dragon fire (golden or
 UIF.SKINS.warwithin    = expac({ 0.88, 0.66, 0.20 })   -- radiant earthen gold
 UIF.SKINS.midnight     = expac({ 0.54, 0.22, 0.72 })   -- void eclipse violet
 
-UIF.SKIN_ORDER = {
-    "flat", "rounded", "modern", "blizzard", "neon",
-    "classic", "tbc", "wrath", "cataclysm", "mop", "wod",
-    "legion", "bfa", "shadowlands", "dragonflight", "warwithin", "midnight",
-}
-
 -- Friendly display labels.
 UIF.SKIN_LABELS = {
     flat = "Flat", rounded = "Rounded", modern = "Modern", blizzard = "Blizzard", neon = "Neon",
@@ -102,33 +94,12 @@ UIF.SKIN_LABELS = {
     legion = "Legion", bfa = "Battle for Azeroth", shadowlands = "Shadowlands",
     dragonflight = "Dragonflight", warwithin = "The War Within", midnight = "Midnight",
 }
-function Mixin:SkinLabel(name) return UIF.SKIN_LABELS[name] or name end
-
--- Apply a skin to a live theme: reset the palette to defaults, layer the skin's palette / accent /
--- shape tokens, then fire onAccent so the consumer re-renders. Skins NEVER touch the font - that's a
--- single global choice owned by UIF.SetGlobalFont. Call win:Refresh() afterward to see it.
-function Mixin:ApplySkin(name)
-    local skin = UIF.SKINS[name]; if not skin then return self end
-    self.skin = name
-    for k, v in pairs(UIF.DEFAULT_PALETTE) do self.C[k] = { v[1], v[2], v[3] } end
-    if skin.palette then for k, v in pairs(skin.palette) do self.C[k] = { v[1], v[2], v[3] } end end
-    if skin.accent then self.C.accent = { skin.accent[1], skin.accent[2], skin.accent[3] } end
-    self.radius     = skin.radius or 0
-    self.borderSize = skin.borderSize or 1
-    self.winRadius  = skin.winRadius or self.radius
-    self:_updateAccentCode()
-    if self._onAccent then self._onAccent(self) end
-    return self
-end
-
-function Mixin:SkinList() return UIF.SKIN_ORDER end
-
 ----------------------------------------------------------------------
 -- Decoupled shape + palette selection.
 -- A skin bundles SHAPE (corner radius + border weight) and COLOR (palette + accent) together.
 -- The suite's appearance UI splits those into two independent axes so you can pick, say, a
--- rounded shape with the Neon palette. Sidecars can keep using the bundled skins (ApplySkin);
--- these just let a consumer drive each axis on its own, or supply a fully custom palette.
+-- rounded shape with the Neon palette - a consumer drives each axis on its own, or supplies a
+-- fully custom palette.
 ----------------------------------------------------------------------
 
 -- SHAPE presets (the "buttons"): square/sharp vs rounded corners + borders.
@@ -217,7 +188,6 @@ UIF.PALETTE_KEYS = { "bg", "sidebar", "panel", "card", "hover", "border", "accen
 -- Apply ONLY the shape tokens (corner radius + border weight); color + font are untouched.
 function Mixin:ApplyShape(name)
     local s = UIF.SHAPES[name]; if not s then return self end
-    self.shape      = name
     self.radius     = s.radius or 0
     self.borderSize = s.borderSize or 1
     self.winRadius  = s.winRadius or s.radius or 0
@@ -228,7 +198,6 @@ end
 -- Resets to the base palette first so switching schemes never leaves stale entries behind.
 function Mixin:ApplyPalette(name)
     local skin = UIF.SKINS[name]; if not skin then return self end
-    self.palette = name
     for k, v in pairs(UIF.DEFAULT_PALETTE) do self.C[k] = { v[1], v[2], v[3] } end
     if skin.palette then for k, v in pairs(skin.palette) do self.C[k] = { v[1], v[2], v[3] } end end
     if skin.accent then self.C.accent = { skin.accent[1], skin.accent[2], skin.accent[3] } end
@@ -240,7 +209,6 @@ end
 -- Apply a fully custom palette: a table of { key = {r,g,b} } layered over the base defaults.
 -- Any key in UIF.PALETTE_KEYS is honoured; missing keys keep the default. Shape + font stay.
 function Mixin:ApplyCustomPalette(pal)
-    self.palette = "custom"
     for k, v in pairs(UIF.DEFAULT_PALETTE) do self.C[k] = { v[1], v[2], v[3] } end
     if pal then for k, v in pairs(pal) do if self.C[k] then self.C[k] = { v[1], v[2], v[3] } end end end
     self:_updateAccentCode()

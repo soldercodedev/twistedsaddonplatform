@@ -55,7 +55,7 @@ local function build(win)
     local FOOTER_H = (footerStyle == "none" and 0) or (footerStyle == "expanded" and (o.footerHeight or 48)) or (o.footerHeight or 22)
     local SIDE_W   = o.sidebarWidth or 210
     local name     = o.name or UIF.NextId(theme.id .. "Window")
-    win._headerH, win._footerH, win._sideW = HEADER_H, FOOTER_H, SIDE_W
+    win._headerH, win._footerH = HEADER_H, FOOTER_H
 
     local mgr = CreateFrame("Frame", name, UIParent)
     win.frame = mgr
@@ -91,7 +91,6 @@ local function build(win)
     -- Optional maximize / restore button.
     if o.maximizable then
         local maxBtn = theme:Button(mgr); maxBtn:SetPoint("TOPRIGHT", -40, -8); maxBtn:SetFrameLevel(header:GetFrameLevel() + 5)
-        win._maxBtn = maxBtn
         function win:_updateMaxBtn()
             maxBtn:Configure("", 28, 28, "default", function() win:ToggleMaximize() end,
                 { icon = self._maximized and "minimize" or "maximize", iconSize = 14 })
@@ -138,7 +137,6 @@ local function build(win)
     local ntrack = nbar:CreateTexture(nil, "BACKGROUND"); ntrack:SetAllPoints(); UIF.paint(ntrack, C.card, 0.5); win._ntrack = ntrack
     local nthumb = CreateFrame("Button", nil, nbar); nthumb:SetPoint("TOP"); nthumb:SetWidth(6); nthumb:SetHeight(30)
     local nthumbTex = nthumb:CreateTexture(nil, "ARTWORK"); nthumbTex:SetAllPoints()
-    win.navBar = nbar
 
     function win:updateNavScrollbar()
         local vh, ch = navScroll:GetHeight(), navChild:GetHeight()
@@ -284,7 +282,6 @@ local function build(win)
     contentScroll:SetScrollChild(content)
     win.scroll, win.content = contentScroll, content
     win.builder = theme:Builder(content, { contentWidth = o.contentWidth or (W - SIDE_W - 40) })
-    win.viewportH = H - HEADER_H - FOOTER_H - 12
 
     -- Themed scrollbar
     local sbar = CreateFrame("Frame", nil, mgr); sbar:SetWidth(8)
@@ -292,7 +289,7 @@ local function build(win)
     local strack = sbar:CreateTexture(nil, "BACKGROUND"); strack:SetAllPoints(); UIF.paint(strack, C.card, 0.6); win._strack = strack
     local sthumb = CreateFrame("Button", nil, sbar); sthumb:SetPoint("TOP"); sthumb:SetWidth(8); sthumb:SetHeight(40)
     local sthumbTex = sthumb:CreateTexture(nil, "ARTWORK"); sthumbTex:SetAllPoints()
-    win.sbar, win.sthumb = sbar, sthumb
+    win.sbar = sbar
 
     local function updateScrollbar()
         local vh, ch = contentScroll:GetHeight(), content:GetHeight()

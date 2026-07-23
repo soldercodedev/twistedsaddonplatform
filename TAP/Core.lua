@@ -17,9 +17,6 @@
 
 local ADDON, UIF = ...
 
-UIF.MAJOR   = "UIFoundry-1.0"
-UIF.version = 1
-
 -- The library table is exposed as a global so any dependent addon can reach it
 -- without LibStub. As a standalone dependency there is only ever one copy loaded.
 -- It ships as the "TAP" addon (the shared lib for the suite), so it is also
@@ -45,7 +42,6 @@ end
 -- Color math (palette-independent; colors are passed in explicitly)
 ----------------------------------------------------------------------
 local function clamp01(v) return v < 0 and 0 or (v > 1 and 1 or v) end
-UIF.clamp01 = clamp01
 
 -- Fill a texture with a solid color table { r, g, b }, optional alpha.
 function UIF.paint(t, c, a) t:SetColorTexture(c[1], c[2], c[3], a or 1) end

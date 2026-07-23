@@ -209,12 +209,6 @@ function BuilderMixin:Logo(x, y, size, texture)
     return self:put(f, x, y)
 end
 
-function BuilderMixin:Preview(x, y, w, h)
-    local f = acq(self.pool, "preview", function() return self.theme:Preview(self.content) end)
-    f:SetSize(w, h)
-    return self:put(f, x, y)
-end
-
 ----------------------------------------------------------------------
 -- Background decoration (drawn on the content BACKGROUND / ARTWORK layers, behind widgets)
 ----------------------------------------------------------------------

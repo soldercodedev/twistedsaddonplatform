@@ -9,9 +9,6 @@ local ADDON, UIF = ...
 local Mixin = UIF.ThemeMixin
 local QMARK = "Interface\\ICONS\\INV_Misc_QuestionMark"
 
--- Bundled scene backdrops (assets/scenes) usable behind portraits / models.
-UIF.MODEL_SCENES = { "dusk", "ember", "arcane", "verdant", "steel", "void" }
-
 -- For a truly ANIMATED backdrop, pass background = "model:<fileID or name>" to a 3D model
 -- widget: it puts a live, self-animating M2 behind the character. A few verified fileIDs are
 -- named below; pass a raw number for any other (find them on wago.tools DB2 "ModelFileData",

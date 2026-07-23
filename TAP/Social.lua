@@ -118,7 +118,6 @@ function Mixin:SocialBar(parent, list, opts)
     for _, entry in ipairs(list or {}) do
         local e = {}
         for k, v in pairs(entry) do e[k] = v end
-        if opts.iconOnly and e.label == nil then e.label = nil else if opts.labeled then e.label = e.label or (UIF.BRANDS[e.brand] and UIF.BRANDS[e.brand].label) end end
         if opts.size then e.size = opts.size end
         local b = self:SocialButton(bar, e)
         b:SetPoint("LEFT", x, 0)
