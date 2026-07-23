@@ -28,17 +28,24 @@ UIF.HEADING_ROLES = {
     body     = { fontSize = 12, fontFlags = "", color = "text",    upper = false },
 }
 
+-- Apply a role's styling (size / weight / color / upper / wrap) + text to an EXISTING fontstring.
+-- Shared by theme:Heading (a fresh fontstring) and the Builder's pooled Heading so the two can't drift.
+function Mixin:_applyHeading(fs, text, role, opts)
+    opts = opts or {}
+    local r = UIF.HEADING_ROLES[role or opts.role or "h3"] or UIF.HEADING_ROLES.h3
+    self:StyleFont(fs, opts, { fontSize = r.fontSize, fontFlags = r.fontFlags, textColor = self.C[r.color] or self.C.text, justify = "LEFT" })
+    local t = text or ""
+    if (opts.upper == nil and r.upper) or opts.upper then t = t:upper() end
+    -- Reset any width a prior (pooled) caller left, else a leaked width would wrap/clip this heading;
+    -- only constrain when wrapWidth is given.
+    fs:SetWordWrap(opts.wrapWidth ~= nil); fs:SetWidth(opts.wrapWidth or 0)
+    fs:SetText(self:HL(t))
+    return fs
+end
+
 -- Create a heading fontstring. opts.role picks the preset (default "h3"); any style key
 -- overrides it. opts.text sets the string; opts.wrapWidth makes it word-wrap.
 function Mixin:Heading(parent, opts)
     opts = opts or {}
-    local role = UIF.HEADING_ROLES[opts.role or "h3"] or UIF.HEADING_ROLES.h3
-    local fs = parent:CreateFontString(nil, "OVERLAY")
-    local roleColor = self.C[role.color] or self.C.text
-    self:StyleFont(fs, opts, { fontSize = role.fontSize, fontFlags = role.fontFlags, textColor = roleColor, justify = "LEFT" })
-    local text = opts.text or ""
-    if (opts.upper == nil and role.upper) or opts.upper then text = text:upper() end
-    fs:SetText(self:HL(text))
-    if opts.wrapWidth then fs:SetWordWrap(true); fs:SetWidth(opts.wrapWidth) else fs:SetWordWrap(false) end
-    return fs
+    return self:_applyHeading(parent:CreateFontString(nil, "OVERLAY"), opts.text, opts.role, opts)
 end

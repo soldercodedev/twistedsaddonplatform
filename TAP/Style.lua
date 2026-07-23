@@ -90,16 +90,11 @@ function Mixin:PaintShape(tex, color, spec, w, h, alpha)
     if shapeTex then
         if w and h then margin = math.max(2, math.min(margin, math.floor(math.min(w, h) / 2))) end
         tex:SetTexture(shapeTex)
-        if tex.SetTextureSliceMargins then
-            pcall(tex.SetTextureSliceMargins, tex, margin, margin, margin, margin)
-            if tex.SetTextureSliceMode and Enum and Enum.UITextureSliceMode then
-                pcall(tex.SetTextureSliceMode, tex, Enum.UITextureSliceMode.Stretched)
-            end
-        end
+        UIF.applySlice(tex, margin)
         tex:SetVertexColor(col[1], col[2], col[3], alpha or 1)
     else
         tex:SetVertexColor(1, 1, 1)
-        if tex.SetTextureSliceMargins then pcall(tex.SetTextureSliceMargins, tex, 0, 0, 0, 0) end
+        UIF.clearSlice(tex)
         tex:SetColorTexture(col[1], col[2], col[3], alpha or 1)
     end
 end
@@ -118,10 +113,7 @@ function Mixin:AttachShadow(frame, spec)
     if not sh then sh = frame:CreateTexture(nil, "BACKGROUND", nil, -8); frame._uifShadow = sh end
     if self.shapeDir then
         sh:SetTexture(self.shapeDir .. "shadow.tga")
-        if sh.SetTextureSliceMargins then
-            pcall(sh.SetTextureSliceMargins, sh, SHADOW_MARGIN, SHADOW_MARGIN, SHADOW_MARGIN, SHADOW_MARGIN)
-            if sh.SetTextureSliceMode and Enum and Enum.UITextureSliceMode then pcall(sh.SetTextureSliceMode, sh, Enum.UITextureSliceMode.Stretched) end
-        end
+        UIF.applySlice(sh, SHADOW_MARGIN)
         sh:SetVertexColor(col[1], col[2], col[3], alpha)
     else
         sh:SetColorTexture(col[1], col[2], col[3], alpha * 0.5)

@@ -165,17 +165,8 @@ end
 -- Stores the two textures as frame._brd / frame._fill so widgets can recolor the fill on
 -- hover (the Dropdown, cards, etc. all rely on these field names).
 ----------------------------------------------------------------------
--- 9-slice a shape texture so its corners stay crisp at any size (or clear the slicing).
-local function applySlice(tex, m)
-    if not tex.SetTextureSliceMargins then return end
-    pcall(tex.SetTextureSliceMargins, tex, m, m, m, m)
-    if tex.SetTextureSliceMode and Enum and Enum.UITextureSliceMode then
-        pcall(tex.SetTextureSliceMode, tex, Enum.UITextureSliceMode.Stretched)
-    end
-end
-local function clearSlice(tex)
-    if tex.SetTextureSliceMargins then pcall(tex.SetTextureSliceMargins, tex, 0, 0, 0, 0) end
-end
+-- 9-slice helpers (shared; defined as UIF.applySlice / UIF.clearSlice in Core.lua).
+local applySlice, clearSlice = UIF.applySlice, UIF.clearSlice
 
 -- Skin a frame as a bordered, filled panel. When the theme (or the `radius` arg) requests
 -- rounded corners AND a shape texture is available, the border + fill are drawn as 9-sliced

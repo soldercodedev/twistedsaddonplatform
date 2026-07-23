@@ -14,6 +14,28 @@ UIF.BADGE_VARIANTS = {
     info    = { 0.05, 0.55, 0.75 },
 }
 
+-- A 3px left accent bar, inset by the border + corner radius so it stays inside a rounded card
+-- instead of poking out of the corners. Shared by Card and StatTile (stored as frame.accentBar).
+function Mixin:_accentBar(frame, color, width)
+    local bs = self.borderSize or 1
+    local rInset = (self.radius and self.radius > 0) and self.radius or 0
+    local bar = frame:CreateTexture(nil, "ARTWORK"); bar:SetWidth(width or 3)
+    bar:SetPoint("TOPLEFT", bs, -rInset); bar:SetPoint("BOTTOMLEFT", bs, rInset)
+    UIF.paint(bar, color); frame.accentBar = bar
+    return bar
+end
+
+-- Wire a hover tooltip onto a frame from opts.tipData (rich) or opts.tip = { title, body, anchor }.
+-- Card-based components aren't mouse-enabled by default, so this enables the mouse too.
+function Mixin:_wireTip(frame, opts)
+    if not (opts.tipData or opts.tip) then return end
+    frame:EnableMouse(true)
+    if opts.tipData then self:SetTipData(frame, opts.tipData)
+    else self:SetTip(frame, opts.tip.title, opts.tip.body, opts.tip.anchor) end
+    frame:SetScript("OnEnter", function(s) self:_showTip(s) end)
+    frame:SetScript("OnLeave", function() GameTooltip_Hide() end)
+end
+
 ----------------------------------------------------------------------
 -- Badge / pill / tag. opts.variant picks a preset fill; opts.color overrides it.
 --   theme:Badge(parent, { text = "NEW", variant = "success", dot = true })
@@ -72,7 +94,7 @@ function Mixin:Card(parent, opts)
     opts = opts or {}
     local theme, C = self, self.C
     -- Colored variants tint the background and color the accent bar / title.
-    local variant = opts.variant and (UIF.BADGE_VARIANTS[opts.variant] or nil)
+    local variant = opts.variant and UIF.BADGE_VARIANTS[opts.variant]
     local accentCol = UIF.toColor(opts.color or opts.accentColor,
         variant and (type(variant) == "string" and C[variant] or variant) or C.accent)
     local bgCol = UIF.toColor(opts.bg, opts.variant and UIF.mix(C.card, accentCol, 0.12) or C.card)
@@ -97,15 +119,7 @@ function Mixin:Card(parent, opts)
             topPad = pad + 38
         end
         hdr:SetHeight(topPad)
-        if opts.accentBar ~= false then
-            -- Inset the accent bar by the border + corner radius so it stays inside a rounded
-            -- card instead of poking out of the corners.
-            local bs = theme.borderSize or 1
-            local rInset = (theme.radius and theme.radius > 0) and theme.radius or 0
-            local bar = f:CreateTexture(nil, "ARTWORK"); bar:SetWidth(3)
-            bar:SetPoint("TOPLEFT", bs, -rInset); bar:SetPoint("BOTTOMLEFT", bs, rInset)
-            UIF.paint(bar, accentCol); f.accentBar = bar
-        end
+        if opts.accentBar ~= false then theme:_accentBar(f, accentCol) end
     end
 
     if opts.footer then
@@ -226,14 +240,7 @@ local function styledStatTile(theme, parent, opts)
         UIF.paint(gem, accent); gem:SetRotation(0.7854); f.gem = gem   -- 45deg -> diamond
     end
 
-    -- Tooltip (rich tipData wins over simple tip); Card frames aren't mouse-enabled by default.
-    if opts.tipData or opts.tip then
-        f:EnableMouse(true)
-        if opts.tipData then theme:SetTipData(f, opts.tipData)
-        else theme:SetTip(f, opts.tip.title, opts.tip.body, opts.tip.anchor) end
-        f:SetScript("OnEnter", function(s) theme:_showTip(s) end)
-        f:SetScript("OnLeave", function() GameTooltip_Hide() end)
-    end
+    theme:_wireTip(f, opts)   -- rich tipData wins over simple tip; Card frames aren't mouse-enabled
     f.labelFS = label
     return f
 end
@@ -258,13 +265,7 @@ function Mixin:StatTile(parent, opts)
         bg = bgCol, borderColor = borderCol, padding = pad })
 
     -- Non-hero: subtle left accent bar. Hero uses the solid badge instead (below).
-    if accent and not hero then
-        local bs = theme.borderSize or 1
-        local rInset = (theme.radius and theme.radius > 0) and theme.radius or 0
-        local bar = f:CreateTexture(nil, "ARTWORK"); bar:SetWidth(opts.accentWidth or 3)
-        bar:SetPoint("TOPLEFT", bs, -rInset); bar:SetPoint("BOTTOMLEFT", bs, rInset)
-        UIF.paint(bar, accent); f.accentBar = bar
-    end
+    if accent and not hero then theme:_accentBar(f, accent, opts.accentWidth or 3) end
 
     -- Header: optional icon (a SOLID metric badge with a knockout glyph in hero mode) + label.
     local labelX, labelDY = 0, 0
@@ -321,15 +322,7 @@ function Mixin:StatTile(parent, opts)
         d:SetPoint("BOTTOMRIGHT", 0, hero and 10 or 2); f.deltaFS = d
     end
 
-    -- Hover tooltip / accessible label for the whole tile (Card frames aren't mouse-enabled by
-    -- default, so wire it up here). tipData (rich) wins over tip = { title, body }.
-    if opts.tipData or opts.tip then
-        f:EnableMouse(true)
-        if opts.tipData then theme:SetTipData(f, opts.tipData)
-        else theme:SetTip(f, opts.tip.title, opts.tip.body, opts.tip.anchor) end
-        f:SetScript("OnEnter", function(s) theme:_showTip(s) end)
-        f:SetScript("OnLeave", function() GameTooltip_Hide() end)
-    end
+    theme:_wireTip(f, opts)   -- rich tipData wins over simple tip; Card frames aren't mouse-enabled
 
     return f
 end

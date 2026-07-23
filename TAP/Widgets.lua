@@ -65,17 +65,11 @@ function Mixin:Button(parent)
         if self._shapeTex then
             self.bg:SetColorTexture(1, 1, 1)      -- clear any prior solid fill
             self.bg:SetTexture(self._shapeTex)
-            if self.bg.SetTextureSliceMargins then
-                local m = self._shapeMargin or 8
-                pcall(self.bg.SetTextureSliceMargins, self.bg, m, m, m, m)
-                if self.bg.SetTextureSliceMode and Enum and Enum.UITextureSliceMode then
-                    pcall(self.bg.SetTextureSliceMode, self.bg, Enum.UITextureSliceMode.Stretched)
-                end
-            end
+            UIF.applySlice(self.bg, self._shapeMargin or 8)
             self.bg:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
         else
             self.bg:SetVertexColor(1, 1, 1)
-            if self.bg.SetTextureSliceMargins then pcall(self.bg.SetTextureSliceMargins, self.bg, 0, 0, 0, 0) end
+            UIF.clearSlice(self.bg)
             UIF.paint(self.bg, c)
         end
     end

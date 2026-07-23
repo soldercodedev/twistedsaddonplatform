@@ -103,11 +103,6 @@ function BuilderMixin:Sub(text, x, y, w)
 end
 
 
--- A centered "MODULE DISABLED" overlay notice, drawn in place of a tab's content when the module
--- that owns the page is switched off. A dark scrim panel with a red hairline frame, a lock glyph, a
--- red heading and a subtext line, plus an optional "Go to Settings" button (opts.onSettings). Every
--- suite module shows the exact same block, so a disabled module reads consistently. Returns the y
--- below the panel. opts: height (default 300), title, subtitle, icon (bundled slug), onSettings.
 -- Standard page heading used by every /tap page: an h1 title + an optional one-line description, so
 -- all pages open with a consistent header. Returns the new (negative) y below the heading.
 function BuilderMixin:PageHeading(x, y, title, desc, w)
@@ -120,6 +115,11 @@ function BuilderMixin:PageHeading(x, y, title, desc, w)
     return y
 end
 
+-- A centered "MODULE DISABLED" overlay notice, drawn in place of a page's content when the module
+-- that owns it is switched off. A dark scrim panel with a red hairline frame, a lock glyph, a red
+-- heading and a subtext line, plus an optional "Go to Overview" button (opts.onSettings). Every suite
+-- module shows the same block, so a disabled module reads consistently. Returns the y below the panel.
+-- opts: height (default 300), title, subtitle, icon (bundled slug), onSettings.
 function BuilderMixin:DisabledOverlay(x, y, w, opts)
     opts = opts or {}
     local C = self.theme.C
@@ -323,8 +323,6 @@ end
 -- redraw on view changes; for a page that rebuilds on every keystroke, build the rich
 -- component once yourself and reposition it instead of drawing it through the Builder.
 ----------------------------------------------------------------------
-local function put(self, w, x, y) w:ClearAllPoints(); w:SetPoint("TOPLEFT", self.content, "TOPLEFT", x, y); return w end
-
 -- Register a transient so the next Reset() hides it.
 local function transient(self, w)
     self._transient = self._transient or {}
@@ -350,16 +348,9 @@ end
 -- Heading via a role (display/h1..h6/title/subtitle/overline/caption/label/body) + overrides.
 -- Pooled (it's a plain fontstring), so cheap even in per-keystroke rebuilds.
 function BuilderMixin:Heading(text, x, y, role, opts)
-    opts = opts or {}
     local fs = acq(self.pool, "heading", function() return self.content:CreateFontString(nil, "OVERLAY") end)
-    local r = UIF.HEADING_ROLES[role or opts.role or "h3"] or UIF.HEADING_ROLES.h3
-    self.theme:StyleFont(fs, opts, { fontSize = r.fontSize, fontFlags = r.fontFlags, textColor = self.theme.C[r.color] or self.theme.C.text, justify = "LEFT" })
-    local t = text or ""
-    if (opts.upper == nil and r.upper) or opts.upper then t = t:upper() end
-    -- Reset any width a prior (pooled) caller left on this fontstring, else a leaked width would
-    -- wrap/clip this heading. Only constrain when this caller explicitly asked to wrap.
-    fs:SetWordWrap(opts.wrapWidth ~= nil); fs:SetWidth(opts.wrapWidth or 0)
-    fs:SetText(self.theme:HL(t)); return put(self, fs, x, y)
+    self.theme:_applyHeading(fs, text, role, opts)
+    return self:put(fs, x, y)
 end
 
 -- Draw-at-(x,y) wrappers for the transient rich components. Return the live component.
@@ -370,13 +361,13 @@ local RICH = {
 }
 for _, kind in ipairs(RICH) do
     BuilderMixin[kind] = function(self, x, y, opts)
-        return put(self, transient(self, self.theme[kind](self.theme, self.content, opts)), x, y)
+        return self:put(transient(self, self.theme[kind](self.theme, self.content, opts)), x, y)
     end
 end
 
 -- SocialBar takes a list + layout opts rather than a single opts table.
 function BuilderMixin:SocialBar(x, y, list, opts)
-    return put(self, transient(self, self.theme:SocialBar(self.content, list, opts)), x, y)
+    return self:put(transient(self, self.theme:SocialBar(self.content, list, opts)), x, y)
 end
 
 ----------------------------------------------------------------------

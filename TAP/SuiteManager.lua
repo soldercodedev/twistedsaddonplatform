@@ -196,6 +196,22 @@ local function parseChangelog(text)
     return blocks
 end
 
+-- Shared bullet styling for both changelog viewers (modal + inline page), so the "- " lead, the
+-- coloured [TAG] prefix, and the accent NOTE callout can't drift between them. Returns the display
+-- string, its text colour, and whether it's a NOTE (which the modal additionally outlines).
+local function bulletLine(blk, C)
+    local tag = blk.tag and blk.tag:upper()
+    local txt = (blk.text or ""):gsub("%*%*", "")
+    if tag == "NOTE" then return "|cff888888-|r  " .. txt, C.accent, true end
+    local prefix = ""
+    if tag then
+        local c = TAG_COLOR[tag] or C.subtext
+        prefix = string.format("|cff%02x%02x%02x[%s]|r  ",
+            math.floor(c[1] * 255), math.floor(c[2] * 255), math.floor(c[3] * 255), tag)
+    end
+    return "|cff888888-|r  " .. prefix .. txt, C.text, false
+end
+
 local function renderChangelog(content, wrapW, blocks)
     local C = theme.C
     local y = -4
@@ -213,19 +229,8 @@ local function renderChangelog(content, wrapW, blocks)
         elseif blk.kind == "sub" then
             y = y - 4; line(11, C.subtext, wrapW, 4, txt:upper())
         elseif blk.kind == "bullet" then
-            local tag = blk.tag and blk.tag:upper()
-            if tag == "NOTE" then
-                -- A callout: the whole line in the theme accent, outlined so it reads as bold and pops.
-                line(12, C.accent, wrapW - 14, 14, "|cff888888-|r  " .. txt, "OUTLINE")
-            else
-                local prefix = ""
-                if tag then
-                    local c = TAG_COLOR[tag] or C.subtext
-                    prefix = string.format("|cff%02x%02x%02x[%s]|r  ",
-                        math.floor(c[1] * 255), math.floor(c[2] * 255), math.floor(c[3] * 255), tag)
-                end
-                line(12, C.text, wrapW - 14, 14, "|cff888888-|r  " .. prefix .. txt)
-            end
+            local s, color, isNote = bulletLine(blk, C)   -- NOTE is outlined so it reads as bold
+            line(12, color, wrapW - 14, 14, s, isNote and "OUTLINE" or nil)
         else
             line(12, C.text, wrapW, 4, txt)
         end
@@ -278,16 +283,8 @@ local function renderChangelogInline(b, x, y, w, blocks)
             b:Label(txt:upper(), x + 2, y - 2, C.subtext, 11)
             y = y - 20
         elseif blk.kind == "bullet" then
-            local tag = blk.tag and blk.tag:upper()
-            local prefix, color = "|cff888888-|r  ", C.text
-            if tag == "NOTE" then
-                color = C.accent
-            elseif tag then
-                local c = TAG_COLOR[tag] or C.subtext
-                prefix = prefix .. string.format("|cff%02x%02x%02x[%s]|r  ",
-                    math.floor(c[1] * 255), math.floor(c[2] * 255), math.floor(c[3] * 255), tag)
-            end
-            local _, hh = b:Wrap(prefix .. txt, x + 12, y, w - 12, color, 12)
+            local s, color = bulletLine(blk, C)
+            local _, hh = b:Wrap(s, x + 12, y, w - 12, color, 12)
             y = y - (hh + 6)
         else
             local _, hh = b:Wrap(txt, x, y, w, C.text, 12)
@@ -478,35 +475,18 @@ local PALETTE_KEY_LABELS = {
     border = "Border", accent = "Accent", text = "Text", subtext = "Subtext",
 }
 
--- Menu-scale slider: apply the saved window scale only once the mouse button is released. The slider
--- lives INSIDE the window it scales, so applying live on every drag tick moves the thumb out from under
--- the cursor (the "slider slides away as you drag it" bug). We poll briefly and set the scale when the
--- left button is no longer held - which also covers a value typed into the readout field.
-local menuScaleTimer
-local function applyMenuScaleWhenReleased(w)
-    if menuScaleTimer then menuScaleTimer:Cancel() end
-    menuScaleTimer = C_Timer.NewTimer(0.06, function()
-        if IsMouseButtonDown and IsMouseButtonDown("LeftButton") then
-            applyMenuScaleWhenReleased(w); return   -- still dragging - check again shortly
-        end
-        menuScaleTimer = nil
-        if w and w.frame then w.frame:SetScale(appearanceDB().menuScale or 1) end
-    end)
-end
-
--- Window width / height sliders. Same story as the menu-scale slider above: the control lives inside
--- the window it resizes, so we don't resize on every drag tick (a mid-drag rebuild of the slider makes
--- the thumb jump out from under the cursor). Instead we poll until the left button is released, then do
--- one win:Refresh() - which reads opts.onSize (the saved winW/winH) and re-sizes + reflows cleanly.
-local windowSizeTimer
-local function applyWindowSizeWhenReleased(w)
-    if windowSizeTimer then windowSizeTimer:Cancel() end
-    windowSizeTimer = C_Timer.NewTimer(0.06, function()
-        if IsMouseButtonDown and IsMouseButtonDown("LeftButton") then
-            applyWindowSizeWhenReleased(w); return   -- still dragging - check again shortly
-        end
-        windowSizeTimer = nil
-        if w and w:IsShown() then w:Refresh() end
+-- The menu-scale and window width/height sliders all live INSIDE the window they affect, so applying
+-- on every drag tick moves the thumb out from under the cursor (the "slider slides away as you drag it"
+-- bug). Defer the apply to mouse-up: poll briefly and run `apply` once the left button is no longer held
+-- (which also covers a value typed into the readout). One timer suffices - only one slider is ever
+-- dragged at a time.
+local releaseTimer
+local function applyWhenReleased(apply)
+    if releaseTimer then releaseTimer:Cancel() end
+    releaseTimer = C_Timer.NewTimer(0.06, function()
+        if IsMouseButtonDown and IsMouseButtonDown("LeftButton") then applyWhenReleased(apply); return end
+        releaseTimer = nil
+        apply()
     end)
 end
 
@@ -611,7 +591,7 @@ local function pageSettings(b, win)
         y = b:Section("MENU SCALE", x, y); y = y - 36
         theme:SetTip(b:Slider(x, y):Configure(math.min(300, COLW - 20), 0.8, 1.5, 0.05,
             function() return a.menuScale or 1 end,
-            function(v) a.menuScale = v; applyMenuScaleWhenReleased(win) end, "%.2fx"),
+            function(v) a.menuScale = v; applyWhenReleased(function() if win and win.frame then win.frame:SetScale(appearanceDB().menuScale or 1) end end) end, "%.2fx"),
             "Menu scale", "Scales this platform menu (text and everything in it) up or down.")
         y = y - 24
         local _, mh = b:Wrap("Only affects this /tap window - the scoreboard and combat cues keep their own size.",
@@ -625,12 +605,12 @@ local function pageSettings(b, win)
         local sw = math.min(300, COLW - 20)
         theme:SetTip(b:Slider(x, y):Configure(sw, 900, 1720, 10,
             function() return m.winW or 1366 end,
-            function(v) m.winW = v; applyWindowSizeWhenReleased(win) end, "%.0f px"),
+            function(v) m.winW = v; applyWhenReleased(function() if win and win:IsShown() then win:Refresh() end end) end, "%.0f px"),
             "Window width", "How wide the /tap window is. Release the slider to apply.")
         y = y - 42
         theme:SetTip(b:Slider(x, y):Configure(sw, 560, 1180, 10,
             function() return m.winH or 768 end,
-            function(v) m.winH = v; applyWindowSizeWhenReleased(win) end, "%.0f px"),
+            function(v) m.winH = v; applyWhenReleased(function() if win and win:IsShown() then win:Refresh() end end) end, "%.0f px"),
             "Window height", "How tall the /tap window is. Release the slider to apply.")
         y = y - 30
         local _, wh = b:Wrap("Tip: the |cffffffffCollapse|r button at the sidebar foot shrinks the nav to icons; "

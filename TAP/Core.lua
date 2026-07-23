@@ -133,3 +133,17 @@ end
 -- Default full-bleed icon crop (bundled Tabler-style TGAs are edge-to-edge; Blizzard
 -- ICONS want the classic 0.07..0.93 inset to trim their built-in border).
 UIF.ICON_INSET = { 0.07, 0.93, 0.07, 0.93 }
+
+-- 9-slice a shape texture so its corners stay crisp at any size (applySlice), or clear the slicing
+-- (clearSlice, margin 0). Guarded: SetTextureSliceMargins/Mode and Enum are absent on older clients.
+-- Shared by StylePanel, PaintShape, AttachShadow, and the Button background painter.
+function UIF.applySlice(tex, m)
+    if not tex.SetTextureSliceMargins then return end
+    pcall(tex.SetTextureSliceMargins, tex, m, m, m, m)
+    if tex.SetTextureSliceMode and Enum and Enum.UITextureSliceMode then
+        pcall(tex.SetTextureSliceMode, tex, Enum.UITextureSliceMode.Stretched)
+    end
+end
+function UIF.clearSlice(tex)
+    if tex.SetTextureSliceMargins then pcall(tex.SetTextureSliceMargins, tex, 0, 0, 0, 0) end
+end

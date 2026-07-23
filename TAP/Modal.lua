@@ -52,7 +52,7 @@ function Mixin:Modal(opts)
     ensureBackdrop(theme)
     local w = opts.width or 380
     local pad = 16
-    local variant = opts.variant and (UIF.BADGE_VARIANTS[opts.variant] or nil)
+    local variant = opts.variant and UIF.BADGE_VARIANTS[opts.variant]
     local accentCol = UIF.toColor(opts.accentColor or opts.color,
         variant and (type(variant) == "string" and C[variant] or variant) or C.accent)
 
