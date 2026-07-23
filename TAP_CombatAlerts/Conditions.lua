@@ -109,9 +109,7 @@ TCC.CONDITION_TYPES = {
     -- NOTE: as of 1.2.0 this is a COMBAT-SAFE toolset. Conditions that Midnight (12.0)
     -- protects as "Secret values" in combat/instances - Health/Resource %, Spell ready,
     -- and all Buff/Aura (present/missing/time-left/gained/lost) checks - were removed
-    -- because they can't be evaluated reliably in combat. Everything above works in
-    -- combat. (The diagnostic probes in /tcc debug still let you inspect the protected
-    -- APIs.)
+    -- because they can't be evaluated reliably in combat. Everything above works in combat.
     -- Rendered specially in the UI (class + spec dropdowns with icons).
     { type = "classSpec", label = "Class / Spec", params = {} },
 }
@@ -266,126 +264,28 @@ function TCC.DescribeCondition(c)
     return meta and meta.label or c.type
 end
 
--- Distinct colors handed out to nested groups (matched in the editor + summary).
-TCC.GROUP_COLORS = {
-    { 0.38, 0.62, 1.00 },  -- blue
-    { 0.48, 0.82, 0.52 },  -- green
-    { 0.96, 0.72, 0.38 },  -- amber
-    { 0.80, 0.56, 0.96 },  -- purple
-    { 0.98, 0.52, 0.52 },  -- coral
-    { 0.36, 0.82, 0.88 },  -- cyan
-}
-
--- Wrap a string in a WoW color escape (self-contained: open + text + |r).
-function TCC.ColorText(s, c)
-    if not c then return s end
-    return string.format("|cff%02x%02x%02x%s|r",
-        math.floor((c[1] or 1) * 255 + 0.5),
-        math.floor((c[2] or 1) * 255 + 0.5),
-        math.floor((c[3] or 1) * 255 + 0.5), s)
-end
-
--- Assign each nested (non-root) group a stable color by pre-order position.
--- Keyed by the group node table, so the editor and summary agree exactly.
-function TCC.BuildGroupColorMap(root)
-    local map, i = {}, 0
-    local palette = TCC.GROUP_COLORS
-    local function walk(node, isRoot)
-        if node.children then
-            if not isRoot then
-                i = i + 1
-                map[node] = palette[((i - 1) % #palette) + 1]
-            end
-            for _, ch in ipairs(node.children) do walk(ch, false) end
-        end
-    end
-    walk(root, true)
-    return map
-end
-
--- Recursively describe a node. Each atomic piece (clause, separator, paren) is
--- colored independently so nested groups don't fight over |r resets.
-function TCC.DescribeNode(node, colorMap)
+-- Recursively describe a node in plain English (nested AND/OR groups parenthesised).
+function TCC.DescribeNode(node)
     if node.children then
-        if #node.children == 0 then return TCC.ColorText("(empty)", colorMap and colorMap[node]) end
-        local col = colorMap and colorMap[node]
+        if #node.children == 0 then return "(empty)" end
         local sep = (node.op == "ANY") and " OR " or " AND "
         local out = {}
         for _, ch in ipairs(node.children) do
-            if ch.children then
-                out[#out + 1] = TCC.DescribeNode(ch, colorMap)          -- already colored
-            else
-                out[#out + 1] = TCC.ColorText(TCC.DescribeCondition(ch), col)
-            end
+            out[#out + 1] = ch.children and TCC.DescribeNode(ch) or TCC.DescribeCondition(ch)
         end
-        return TCC.ColorText("(", col) .. table.concat(out, TCC.ColorText(sep, col)) .. TCC.ColorText(")", col)
+        return "(" .. table.concat(out, sep) .. ")"
     end
     return TCC.DescribeCondition(node)
 end
 
--- Plain-English summary of a whole rule tree (root group not parenthesised/colored).
-function TCC.DescribeRuleText(root, colorMap)
+-- Plain-English summary of a whole rule tree (root group not parenthesised).
+function TCC.DescribeRuleText(root)
     if not root or not root.children or #root.children == 0 then
         return "no conditions yet - add one below"
     end
     local parts = {}
-    for _, ch in ipairs(root.children) do parts[#parts + 1] = TCC.DescribeNode(ch, colorMap) end
+    for _, ch in ipairs(root.children) do parts[#parts + 1] = TCC.DescribeNode(ch) end
     return table.concat(parts, (root.op == "ANY") and " OR " or " AND ")
-end
-
-----------------------------------------------------------------------
--- Aura presence + edge (gained/lost) helpers
-----------------------------------------------------------------------
--- Returns present(bool), expiration for an aura id/name on a unit.
---
--- Existence is checked WITHOUT comparing the aura's spellId: on Midnight (12.0) the
--- spellId field is a protected "Secret value" that errors on comparison. So we use
--- GetPlayerAuraBySpellID (a nil-existence check, secret-safe) for the player, and a
--- by-NAME match (AuraUtil.FindAuraByName, which never touches spellId) for any unit.
--- The returned expiration may itself be secret; callers must guard arithmetic on it.
--- Is this spell's aura currently READABLE, or has the client marked it a protected
--- "Secret" (which happens in combat / instanced content for most spells)? When it's
--- secret we can't trust a present/absent answer, so callers must treat it as unknown.
-function TCC.AuraReadable(id)
-    if id and C_Secrets and C_Secrets.ShouldSpellAuraBeSecret then
-        local ok, secret = pcall(C_Secrets.ShouldSpellAuraBeSecret, id)
-        if ok and secret then return false end
-    end
-    return true
-end
-
--- Returns present(bool), expiration, readable(bool).
--- readable=false means the aura is a protected Secret right now (unknown existence).
-local function unitHasAura(unit, id, name)
-    -- If the client says this spell's aura is secret, existence can't be trusted.
-    if id and not TCC.AuraReadable(id) then return false, nil, false end
-
-    -- By-spellID existence for ANY unit. The nil-test yields a REAL (non-secret)
-    -- boolean, and it's ID-based so it's Mythic+-safe (no name lookup).
-    if id and C_UnitAuras and C_UnitAuras.GetUnitAuraBySpellID then
-        local a = C_UnitAuras.GetUnitAuraBySpellID(unit, id)
-        if issecretvalue and issecretvalue(a) then return false, nil, false end
-        return (a ~= nil), (a ~= nil and a.expirationTime or nil), true
-    end
-    -- Fallbacks for older clients without GetUnitAuraBySpellID.
-    if unit == "player" and id and C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
-        local a = C_UnitAuras.GetPlayerAuraBySpellID(id)
-        if a ~= nil then return true, a.expirationTime, true end
-    end
-    if name and AuraUtil and AuraUtil.FindAuraByName then
-        local n, _, _, _, _, exp = AuraUtil.FindAuraByName(name, unit, "HELPFUL")
-        if n then return true, exp, true end
-        n, _, _, _, _, exp = AuraUtil.FindAuraByName(name, unit, "HARMFUL")
-        if n then return true, exp, true end
-    end
-    return false, nil, true
-end
-
--- Exposed for the debug screen: the exact aura read the engine uses.
--- Returns present(bool), expiration for `spell` (name or ID) on `unit`.
-function TCC.ProbeAura(unit, spell)
-    local id, name = TCC.ResolveSpell(spell)
-    return unitHasAura(unit, id, name)
 end
 
 ----------------------------------------------------------------------
@@ -574,28 +474,29 @@ end
 --   rule.root = { op = "ALL"|"ANY", children = { <condition|group>, ... } }
 -- A condition is a table with a .type; a group has .children.
 ----------------------------------------------------------------------
-local function evalCondition(c, path)
+local function evalCondition(c)
     local fn = EVAL[c.type]
     if not fn then return false end
-    local ok, result = pcall(fn, c, { key = path })
+    -- pcall so one condition hitting a secret-value comparison (Midnight) can't break the whole pass.
+    local ok, result = pcall(fn, c)
     return ok and result or false
 end
 
-local function evalNode(node, path)
+local function evalNode(node)
     if node.children then  -- group
         if #node.children == 0 then return false end
         if (node.op or "ALL") == "ANY" then
-            for i, child in ipairs(node.children) do
-                if evalNode(child, path .. "." .. i) then return true end
+            for _, child in ipairs(node.children) do
+                if evalNode(child) then return true end
             end
             return false
         end
-        for i, child in ipairs(node.children) do
-            if not evalNode(child, path .. "." .. i) then return false end
+        for _, child in ipairs(node.children) do
+            if not evalNode(child) then return false end
         end
         return true
     end
-    return evalCondition(node, path)
+    return evalCondition(node)
 end
 
 -- Migrate a legacy flat rule (conditions + match) to a root group in place.
@@ -671,11 +572,11 @@ function TCC.EvaluateRule(rule)
     if rule.kind and rule.kind ~= "advanced" then
         if not TCC.LoadPasses(rule.load) then return false end
         if not rule.trigger then return false end
-        return evalCondition(rule.trigger, tostring(rule.id or "r"))
+        return evalCondition(rule.trigger)
     end
     -- Advanced alert: the AND/OR condition tree.
     local root = rule.root
     if not root then TCC.EnsureRuleTree(rule); root = rule.root end
     if not (root and root.children and #root.children > 0) then return false end
-    return evalNode(root, tostring(rule.id or "r"))
+    return evalNode(root)
 end

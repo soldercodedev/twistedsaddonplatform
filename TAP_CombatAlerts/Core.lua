@@ -56,65 +56,21 @@ function TCC.UnitDistanceYards(unit)
     return nil
 end
 
--- Fonts for a rule's visual text: WoW built-ins + bundled TTFs in assets/fonts.
-local FDIR = "Interface\\AddOns\\TAP_CombatAlerts\\assets\\fonts\\"
-TCC.FONTS = {
-    { key = "FRIZQT",   label = "Friz Quadrata (default)", path = "Fonts\\FRIZQT__.TTF" },
-    { key = "SKURRI",   label = "Skurri",        path = "Fonts\\SKURRI.TTF" },
-    { key = "MORPHEUS", label = "Morpheus",      path = "Fonts\\MORPHEUS.TTF" },
-    { key = "2002",     label = "2002",          path = "Fonts\\2002.TTF" },
-    { key = "BARLOW",      label = "Barlow Condensed",  path = FDIR .. "Barlow Condensed.ttf" },
-    { key = "CHANGA",      label = "Changa",            path = FDIR .. "Changa.ttf" },
-    { key = "CINZEL",      label = "Cinzel Decorative", path = FDIR .. "Cinzel Decorative.ttf" },
-    { key = "EXPRESSWAY",  label = "Expressway",        path = FDIR .. "Expressway.TTF" },
-    { key = "EXPRESSWAYB", label = "Expressway Bold",   path = FDIR .. "Expressway Bold.ttf" },
-    { key = "FIRABOLD",    label = "Fira Sans Bold",    path = FDIR .. "FiraSans Bold.ttf" },
-    { key = "FIRALIGHT",   label = "Fira Sans Light",   path = FDIR .. "FiraSans Light.ttf" },
-    { key = "FIRAMED",     label = "Fira Sans Medium",  path = FDIR .. "FiraSans Medium.ttf" },
-    { key = "HOMESPUN",    label = "Homespun",          path = FDIR .. "Homespun.ttf" },
-    { key = "NINJA",       label = "KMT Ninja Naruto",  path = FDIR .. "KMT Ninja Naruto.ttf" },
-    { key = "POPPINS",     label = "Poppins",           path = FDIR .. "Poppins.ttf" },
-    { key = "RUSSO",       label = "Russo One",         path = FDIR .. "Russo One.ttf" },
-    { key = "UBUNTU",      label = "Ubuntu",            path = FDIR .. "Ubuntu.ttf" },
-}
-function TCC.ResolveFont(key)
-    for _, f in ipairs(TCC.FONTS) do
-        if f.key == key then return f.path end
-    end
-    return STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
-end
-function TCC.FontLabel(key)
-    for _, f in ipairs(TCC.FONTS) do if f.key == key then return f.label end end
-    return key or "Friz Quadrata"
-end
+-- NOTE: rule-visual font resolution (TCC.ResolveFont) is provided by TCCShared.lua, which loads
+-- after this file and routes to the suite's shared font catalog. (The old local FONTS table +
+-- ResolveFont/FontLabel lived here but were shadowed by that override, so they were removed.)
 
 ----------------------------------------------------------------------
 -- Defaults (global, non-rule settings) and default rule set
 ----------------------------------------------------------------------
+-- Global (non-rule) profile settings. The old standalone UI's own window/minimap/accent and the
+-- Focus-Tools "macro" block used to live here too; those features moved to the suite chrome and the
+-- Focus Target Interrupt module, so their seeds were removed (CopyDefaults only ADDS missing keys,
+-- so dropping them just stops seeding dead fields - saved data and the legacy migration are untouched).
 local DEFAULTS = {
     enabled     = true,
     channel     = "Master",
-    accentColor  = { 0.04, 0.34, 0.79 },  -- UI theme accent (bootstrap primary, darker)
-    windowScale  = 1.0,       -- Alerts Manager window scale
-    windowPos    = nil,       -- { point, x, y } for the manager window
-    minimap      = { angle = 214, hide = false },  -- minimap button
     pollInterval = 0.25,      -- how often polling conditions are re-checked (sec)
-    macro        = {                       -- Focus Tools: one marker drives call-out + keybind + auto-focus
-        mark          = 8,                 -- raid-target index (1-8, Star..Skull); 0 = none
-        channel       = "NONE",            -- announce channel
-        autoFocus       = false,           -- auto /focus a target carrying our marker (out of combat)
-        announceFocus   = false,           -- announce when focus is set
-        announceReady   = false,           -- announce when a ready check starts
-        announceInstance = "any",          -- restrict announces to a content type (M+ but not raids, etc.)
-        focusTarget     = "smart",         -- focus macro source: smart (mouseover>target) / target / mouseover
-        paletteShown    = false,           -- on-screen marker palette (master on/off)
-        paletteLocked   = false,
-        palettePos      = nil,
-        paletteScale    = 1.0,             -- marker bar size (0.6 - 2.0)
-        paletteVisibility = "always",      -- when the bar is shown: always / any_instance / party / raid / group
-        focusMsg        = "Focus {rt}",             -- {rt} = marker icon (target-name tokens no longer supported)
-        readyMsg        = "My interrupt target is {rt}",  -- no target exists at a ready check
-    },
 }
 
 -- Default action template used when creating brand-new rules.
@@ -277,11 +233,6 @@ function TCC.SetActiveProfile(name)
     TCC.ApplySettings()
     if TCC.RefreshOptions then TCC.RefreshOptions() end
     print(PREFIX .. "Alerts profile: |cff33ff33" .. TCC.ProfileLabel(TCC.activeProfile) .. "|r")
-end
-
--- Back-compat: the old binary Account <-> this-character switch.
-function TCC.SetScope(useChar)
-    TCC.SetActiveProfile(useChar and charKey() or ACCOUNT_KEY)
 end
 
 -- Create a new named profile (seeded by EnsureProfile). `activate` switches this character to it.
@@ -542,7 +493,7 @@ end
 -- Visual warning frames - one per rule, so multiple alerts show at once.
 ----------------------------------------------------------------------
 local visuals = {}   -- ruleId -> frame
-local flashFrame     -- rule-less test flash (/tcc test)
+local flashFrame     -- rule-less test flash (/tap alerts test)
 
 -- Positions a visual frame using a rule action's per-rule placement.
 local function PositionVisual(f, a)
@@ -644,7 +595,7 @@ local function hideRuleVisual(id)
     if f then f.pulse:Stop(); f.text:SetAlpha(1); f:Hide() end
 end
 
--- Briefly flash a rule-less cue (used by /tcc test).
+-- Briefly flash a rule-less cue (used by /tap alerts test).
 function TCC.FlashVisual(text, seconds)
     flashFrame = flashFrame or makeVisualFrame()
     applyVisual(flashFrame, { visualText = text or "TEST", visual = true, pulse = true, color = { 1, 0.82, 0.2 }, font        = "UBUNTU", fontSize = 48 })
@@ -738,10 +689,7 @@ local function startMover(rules, msg)
         PositionVisual(f, a)
         -- Identify each ghost by the alert's name + icon.
         if f.moverLabel then f.moverLabel:SetText(rule.name or "Alert"); f.moverLabel:Show() end
-        if f.moverIcon then
-            local ic = TCC.AlertIcon and TCC.AlertIcon(rule)
-            if ic then f.moverIcon:SetTexture(ic); f.moverIcon:Show() else f.moverIcon:Hide() end
-        end
+        if f.moverIcon then f.moverIcon:Hide() end   -- drag ghost is name-labelled, no per-rule icon
         f.moving = true; f:EnableMouse(true); f.moverBg:Show(); f.moverHint:Show(); f:Show()
         anchor = anchor or f
     end
@@ -759,7 +707,7 @@ function TCC.StartRuleMover(rule)
     startMover({ rule }, "Drag the |cffffff00" .. (rule.name or "cue") .. "|r into place, then Save.")
 end
 
--- Move every alert that uses on-screen text or an icon (/tcc move, sidebar button).
+-- Move every alert that uses on-screen text or an icon (/tap alerts move, sidebar button).
 function TCC.StartPositionMode()
     if not db then return end
     local rules = {}
@@ -794,8 +742,6 @@ function TCC.StopMover(save)
     if TCC.OpenManager then TCC.OpenManager() end
     print(PREFIX .. (save and "Positions saved." or "Move cancelled."))
 end
--- Back-compat alias (older callers used StopRuleMover).
-TCC.StopRuleMover = TCC.StopMover
 
 ----------------------------------------------------------------------
 -- Rule action firing
@@ -994,55 +940,21 @@ function TCC.GetSelectedRule()
     return nil
 end
 
--- One-click alert templates, offered on the New Rule button (all combat-safe).
-TCC.RULE_TEMPLATES = {
-    { key = "blank",       label = "Blank alert" },
-    { key = "notarget",    label = "Alert: No target (in combat)" },
-    { key = "outofrange",  label = "Alert: Target out of range" },
-    { key = "pulledaggro", label = "Alert: You pulled aggro" },
-    { key = "itemready",   label = "Alert: Item / trinket ready" },
-}
-
-local function buildTemplate(kind)
+-- Create a new blank advanced alert (combat-safe: fires only in combat until the user edits it).
+-- Typed one-click alerts (range/target/threat/pet/item) are created separately via TCC.NewTypedAlert
+-- from the New Alert modal's kind cards.
+function TCC.AddRule()
     local r = {
-        id = TCC.NewRuleId(),
+        id      = TCC.NewRuleId(),
         enabled = true,
-        action = TCC.NewAction(),
+        name    = "New Alert",
+        action  = TCC.NewAction(),
+        root    = { op = "ALL", children = { { type = "combat", op = "in" } } },
     }
-    local function root(...) r.root = { op = "ALL", children = { ... } } end
-    if kind == "notarget" then
-        r.name = "No target in combat"
-        root({ type = "combat", op = "in" }, { type = "target", state = "none" })
-        r.action.visual = true; r.action.visualText = "NO TARGET"
-    elseif kind == "outofrange" then
-        r.name = "Target out of range"
-        root({ type = "combat", op = "in" }, TCC.NewCondition("range"))
-        r.action.visual = true; r.action.visualText = "OUT OF RANGE"
-    elseif kind == "pulledaggro" then
-        r.name = "Pulled aggro"
-        root(TCC.NewCondition("threat"))
-        r.action.visual = true; r.action.visualText = "AGGRO!"
-    elseif kind == "itemready" then
-        r.name = "Item ready"
-        root({ type = "combat", op = "in" }, TCC.NewCondition("itemReady"))
-        r.action.visual = true; r.action.visualText = "USE ITEM"
-    else -- blank
-        r.name = "New Alert"
-        root({ type = "combat", op = "in" })
-    end
-    return r
-end
-
-function TCC.NewRuleFrom(kind)
-    local r = buildTemplate(kind)
     table.insert(db.rules, r)
     TCC.selectedRuleId = r.id
     TCC.ApplySettings()
     return r
-end
-
-function TCC.AddRule()
-    return TCC.NewRuleFrom("blank")
 end
 
 function TCC.DuplicateSelectedRule()
@@ -1121,7 +1033,7 @@ local function HandleSlash(msg)
     msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
 
     if msg == "" or msg == "config" or msg == "manager" or msg == "rules" or msg == "alerts" then
-        if TCC.ToggleManager then TCC.ToggleManager() end
+        if TCC.OpenManager then TCC.OpenManager("alerts") end   -- open /tap on the Combat Alerts page
     elseif msg == "options" then
         if TCC.OpenOptions then TCC.OpenOptions() end
     elseif msg == "on" then
@@ -1136,46 +1048,30 @@ local function HandleSlash(msg)
         TCC.StartPositionMode()   -- reposition every on-screen alert at once
     elseif msg == "status" then
         TCC.PrintStatus()
-    elseif msg == "debug" then
-        if TCC.OpenManager then TCC.OpenManager("debug") end
-    elseif msg == "macros" or msg == "macro" then
-        if TCC.OpenManager then TCC.OpenManager("macros") end
-    elseif msg == "togglemarkers" or msg == "markers" then
-        if TCC.ToggleMarkerPalette then
-            local shown = TCC.ToggleMarkerPalette()
-            print(PREFIX .. "On-screen marker palette " .. (shown and "shown." or "hidden."))
-        end
     elseif msg == "reset" then
         pendingReset = true
-        print(PREFIX .. "This resets ALL settings and alerts. Type |cffffff00/tcc reset confirm|r to proceed.")
+        print(PREFIX .. "This resets ALL settings and alerts. Type |cffffff00/tap alerts reset confirm|r to proceed.")
     elseif msg == "reset confirm" then
         if pendingReset then
             pendingReset = false
             TCC.ResetSettings()
         else
-            print(PREFIX .. "Nothing to confirm. Type |cffffff00/tcc reset|r first.")
+            print(PREFIX .. "Nothing to confirm. Type |cffffff00/tap alerts reset|r first.")
         end
     else
-        print(PREFIX .. "Commands (|cffffff00/tcc|r or |cffffff00/tap alerts|r):")
-        print("  |cffffff00/tcc|r - open the Alerts Manager")
-        print("  |cffffff00/tcc options|r - global options panel")
-        print("  |cffffff00/tcc on|r / |cffffff00/tcc off|r - enable/disable")
-        print("  |cffffff00/tcc test|r - play a test alert")
-        print("  |cffffff00/tcc move|r - reposition all on-screen alerts")
-        print("  |cffffff00/tcc status|r - list alerts and state")
-        print("  |cffffff00/tcc debug|r - live diagnostics (what the engine sees)")
-        print("  |cffffff00/tcc macros|r - macro factory (focus / interrupt)")
-        print("  |cffffff00/tcc togglemarkers|r - show/hide the on-screen marker palette")
-        print("  |cffffff00/tcc reset|r - reset everything (confirmation required)")
+        print(PREFIX .. "Commands (|cffffff00/tap alerts|r):")
+        print("  |cffffff00/tap alerts|r - open the Alerts Manager")
+        print("  |cffffff00/tap alerts options|r - global options panel")
+        print("  |cffffff00/tap alerts on|r / |cffffff00/tap alerts off|r - enable/disable")
+        print("  |cffffff00/tap alerts test|r - play a test alert")
+        print("  |cffffff00/tap alerts move|r - reposition all on-screen alerts")
+        print("  |cffffff00/tap alerts status|r - list alerts and state")
+        print("  |cffffff00/tap alerts reset|r - reset everything (confirmation required)")
     end
 end
 
-SLASH_TWISTEDSCOMBATCUES1 = "/tcc"
-SLASH_TWISTEDSCOMBATCUES2 = "/twistedscombatcues"
-SlashCmdList["TWISTEDSCOMBATCUES"] = HandleSlash
-
--- Mirror the whole command set under the platform slash (/tap alerts ...) and list it on the
--- Manager's Help > Commands page. The native /tcc keeps working alongside this.
+-- Commands live entirely under the platform slash (/tap alerts ...), also listed on the Manager's
+-- Help > Commands page.
 if _G.TAP and _G.TAP.RegisterCommand then
     _G.TAP:RegisterCommand({
         cmd = "/tap alerts", desc = "Combat Alerts manager & tools", owner = "Combat Alerts",
@@ -1187,13 +1083,9 @@ if _G.TAP and _G.TAP.RegisterCommand then
             { "test",          "Play a test alert" },
             { "move",          "Reposition all on-screen alerts" },
             { "status",        "List alerts and state" },
-            { "debug",         "Live diagnostics (what the engine sees)" },
-            { "macros",        "Macro factory (focus / interrupt)" },
-            { "togglemarkers", "Show/hide the on-screen marker palette" },
             { "reset",         "Reset everything (confirmation required)" },
         },
     })
-    _G.TAP:RegisterCommand({ cmd = "/tcc", desc = "Alias for /tap alerts (native slash)", owner = "Combat Alerts" })
 end
 
 ----------------------------------------------------------------------
@@ -1254,10 +1146,6 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         TCC.UpgradeSpellIds()   -- name -> id while name lookups still work (open world)
         TCC.RebuildEngine()
         TCC.Evaluate()
-        if TCC.EnsureMarkerPaletteWatcher then TCC.EnsureMarkerPaletteWatcher() end
-        if TCC.RefreshMarkerPaletteVisibility then
-            TCC.RefreshMarkerPaletteVisibility()   -- restore the palette, honoring its visibility setting
-        end
     else
         -- Any state change re-evaluates all rules.
         TCC.Evaluate()

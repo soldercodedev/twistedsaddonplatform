@@ -83,7 +83,6 @@ if theme then for k, slug in pairs(KIND_ICON) do KIND_ICON_TEX[k] = theme:GetIco
 ----------------------------------------------------------------------
 local editorId
 local editorTab   -- which editor tab is showing (per the tab set below)
-local listTab = "alerts"   -- active list page in the docked top-nav: alerts | profiles | settings
 
 local function softApply()
     if TCC.RebuildEngine then TCC.RebuildEngine() end
@@ -94,7 +93,6 @@ local function ruleIcon(rule)
     if rule.navIcon and rule.navIcon ~= "" then return TCC.ResolveIcon(rule.navIcon) or rule.navIcon end
     -- Default to the icon that represents this alert's type.
     if rule.kind and KIND_ICON_TEX[rule.kind] then return KIND_ICON_TEX[rule.kind] end
-    if TCC.GetAlertKind and rule.kind then local k = TCC.GetAlertKind(rule.kind); if k and k.icon then return k.icon end end
     if rule.action and rule.action.showIcon and rule.action.icon and rule.action.icon ~= "" then return TCC.ResolveIcon(rule.action.icon) end
     return 134400
 end
@@ -572,10 +570,6 @@ local function sectionVisual(P, a, rule, y, win)
         if win then win:Hide() end
         if TCC.StartRuleMover then TCC.StartRuleMover(rule) end
     end, { icon = "arrows-sort", iconSize = 13 })
-    b:Button(P.x + 160, y, 110, "Test cue", "primary", function()
-        if win then win:Hide() end
-        if TCC.StartTest then TCC.StartTest(rule) end
-    end, { icon = "bolt", iconSize = 13 })
     return y - 34
 end
 
@@ -675,6 +669,12 @@ local function renderEditor(mod, b, x, y, w, win)
         x, y, "h2")
     P:tip(b:Button(x + w - 104, y - 4, 92, "Back", "default", function() editorId = nil; if win then win:Refresh() end end,
         { icon = "arrow-left", iconSize = 13 }), "Back", "Return to the alert list.")
+    -- Test Alert lives in this always-visible header (not inside a tab section) so a preview can be fired
+    -- from any editor tab. Hides the window while the on-screen cue plays; the Stop Test bar restores it.
+    P:tip(b:Button(x + w - 212, y - 4, 100, "Test Alert", "primary", function()
+        if win then win:Hide() end
+        if TCC.StartTest then TCC.StartTest(rule) end
+    end, { icon = "bolt", iconSize = 13 }), "Test Alert", "Play this alert now as a preview.")
     y = y - 38
 
     -- Identity header (always visible above the tabs): name + enabled, then the list icon.
@@ -1070,7 +1070,6 @@ local baseSetEnabled = TCC.SetEnabled
 if baseSetEnabled then
     TCC.SetEnabled = function(on)
         baseSetEnabled(on)
-        TCC.alertsEnabled = on and true or false
         if applying or not mod then return end
         applying = true
         if mod:IsEnabled() ~= (on and true or false) then mod:SetEnabled(on) end
@@ -1098,7 +1097,7 @@ mod = Suite:RegisterModule({
     changelog = TCC.CHANGELOG,
     OnEnable  = function() pushToEngine(true) end,
     OnDisable = function() pushToEngine(false) end,
-    OnSelect  = function() editorId = nil; listTab = "alerts" end,   -- entering the module lands on Alerts
+    OnSelect  = function() editorId = nil end,   -- entering the module drops back to the Alerts list
     pages     = caPages(),
 })
 
@@ -1118,7 +1117,6 @@ boot:SetScript("OnEvent", function()
         applying = true
         mod:SetEnabled(TCC.db.enabled and true or false)
         applying = false
-        TCC.alertsEnabled = TCC.db.enabled and true or false
     end
     ready = true
 end)

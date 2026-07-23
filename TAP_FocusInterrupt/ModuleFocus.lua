@@ -38,7 +38,7 @@ Part of the platform's new **two-tier navigation** (TAP 1.5.0-beta.1).
   light themes, or a WoW-expansion palette) or full custom colors, and scale the menu with
   **Menu scale**.
 
-## 1.0.0
+## 1.0.0-beta.1
 
 - **[NEW]** Focus Target Interrupt is here - the focus & interrupt tools split out into their own
   add-on so you can run just the bits you want.
@@ -391,8 +391,7 @@ if Suite.RegisterMinimapButton then
     })
 end
 
--- List a shortcut to this module's page on Help > Commands. Its macro tools also live under
--- /tcc macros (or /tap alerts macros).
+-- List a shortcut to this module's page on Help > Commands.
 if Suite and Suite.RegisterCommand then
     Suite:RegisterCommand({
         cmd = "/tap focus", desc = "Open the Focus Target Interrupt page", owner = "Focus Target Interrupt",

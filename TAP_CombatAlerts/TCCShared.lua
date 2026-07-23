@@ -12,9 +12,6 @@ local UIF   = _G.UIFoundry
 local Suite = _G.TAP
 local theme = (Suite and Suite.uiTheme) or (UIF and UIF:NewTheme({ name = "TAP_CombatAlertsEngine" }))
 
--- Per-feature gate the alerts module flips, so the always-on alert engine can respect it.
-if TCC.alertsEnabled == nil then TCC.alertsEnabled = true end
-
 ----------------------------------------------------------------------
 -- Centralize sounds + fonts on the SUITE's shared catalogs. The engine (Core.lua) plays sounds
 -- via TCC.PlayKey and reads visual fonts via TCC.ResolveFont; override both to use the suite so
@@ -22,9 +19,7 @@ if TCC.alertsEnabled == nil then TCC.alertsEnabled = true end
 -- every soundKey maps 1:1 - no migration).
 ----------------------------------------------------------------------
 function TCC.PlayKey(key, channel) if theme then theme:PlaySound(key, channel) end end
-function TCC.SoundLabel(key) return (theme and theme:SoundLabel(key)) or tostring(key) end
 function TCC.ResolveFont(key) return (theme and theme:ResolveFont(key)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF") end
-function TCC.FontLabel(key) return (theme and theme:FontLabel(key)) or tostring(key) end
 
 ----------------------------------------------------------------------
 -- Engine -> suite window hooks.
@@ -98,6 +93,43 @@ end
 
 function TCC.HideMoverControls()
     if TCC._moverBar then TCC._moverBar:Hide() end
+end
+
+-- On-screen "Stop Test" bar, shown while a test cue plays (TCC.StartTest -> ShowTestControls). The
+-- old themed UI drew this; rebuild it on the suite theme. Without it StopTest is unreachable, so a
+-- looping test sound runs until /reload and TCC.testActive stays stuck on.
+function TCC.ShowTestControls(ruleName, onStop)
+    local bar = TCC._testBar
+    if not bar then
+        bar = CreateFrame("Frame", "TAP_CombatAlertsTestBar", UIParent)
+        bar:SetSize(300, 68)
+        bar:SetFrameStrata("FULLSCREEN_DIALOG"); bar:SetToplevel(true); bar:SetClampedToScreen(true)
+        bar:EnableMouse(true); bar:SetMovable(true)
+        bar:RegisterForDrag("LeftButton")
+        bar:SetScript("OnDragStart", function(self) self:StartMoving() end)
+        bar:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+        if theme and theme.StylePanel then theme:StylePanel(bar, theme.C.panel, theme.C.border) end
+
+        bar.label = bar:CreateFontString(nil, "OVERLAY")
+        bar.label:SetFont((theme and theme.FONT) or STANDARD_TEXT_FONT, 12)
+        bar.label:SetPoint("TOP", 0, -10); bar.label:SetPoint("LEFT", 12, 0); bar.label:SetPoint("RIGHT", -12, 0)
+        bar.label:SetJustifyH("CENTER")
+        if theme then bar.label:SetTextColor(unpack(theme.C.text)) end
+
+        bar.stop = theme:Button(bar); bar.stop:Configure("Stop Test", 160, 26, "primary", function()
+            if bar._onStop then bar._onStop() end
+        end)
+        bar.stop:SetPoint("BOTTOM", 0, 12)
+        TCC._testBar = bar
+    end
+    bar._onStop = onStop
+    bar.label:SetText("Testing alert: " .. (ruleName or "Alert"))
+    bar:ClearAllPoints(); bar:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 260)
+    bar:Show()
+end
+
+function TCC.HideTestControls()
+    if TCC._testBar then TCC._testBar:Hide() end
 end
 
 -- Minimap button + Blizzard options panel belonged to the old UI; the suite manager (/tap)

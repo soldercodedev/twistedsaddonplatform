@@ -5,7 +5,6 @@
 -- byte-for-byte the same as their Combat Cues originals. Loads FIRST, before the engine.
 
 local addonName, FTI = ...
-local UIF   = _G.UIFoundry
 local Suite = _G.TAP
 
 FTI.PREFIX = "|cff33ff99Focus Target Interrupt:|r "
@@ -30,7 +29,6 @@ local MACRO_DEFAULTS = {
     announceInstance = "any",
     focusTarget      = "smart",         -- smart (mouseover>target) / target / mouseover
     paletteShown     = false,
-    paletteLocked    = false,
     palettePos       = nil,
     paletteScale     = 1.0,
     paletteVisibility = "always",
@@ -82,14 +80,7 @@ end
 function FTI.RefreshManager()
     if Suite and Suite.RefreshWindow then Suite:RefreshWindow() end
 end
-FTI.RefreshOptions = FTI.RefreshManager
 
 function FTI.OpenManager()
     if Suite and Suite.OpenWindow then Suite:OpenWindow("mod:focusInterrupt") end
 end
-FTI.OpenOptions = FTI.OpenManager
-
--- Old standalone-UI hooks the engine may still guard-call; harmless no-ops under the suite.
-FTI.InitMinimap = FTI.InitMinimap or function() end
-FTI.InitOptions = FTI.InitOptions or function() end
-FTI.HideManager = FTI.HideManager or function() if Suite and Suite.CloseWindow then Suite:CloseWindow() end end

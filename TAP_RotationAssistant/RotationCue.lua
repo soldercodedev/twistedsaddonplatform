@@ -1238,7 +1238,7 @@ local CHANGELOG = [==[
   light themes, or a WoW-expansion palette) or full custom colors, and scale the menu with
   **Menu scale**.
 
-## 1.1.0
+## 1.1.0 (standalone, pre-platform)
 
 - **[NEW]** Cast vs instant indicator - a colored corner dot (or border tint) tells you whether
   your next suggested ability is a hard cast or an instant.
@@ -1249,7 +1249,7 @@ local CHANGELOG = [==[
 - **[NEW]** Can't-afford warning - tint the icon when you're short on resource (mana, energy,
   rage, combo points, and so on).
 
-## 1.0.0
+## 1.0.0 (standalone, pre-platform)
 
 - **[NEW]** First release. Shows the keybind of Blizzard's suggested next ability on screen - it
   only shows the key, it never presses anything for you.
