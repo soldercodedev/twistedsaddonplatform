@@ -1,5 +1,5 @@
 -- TAP - SuiteManager.lua
--- The control panel for the suite. `/tap` opens a UIFoundry window.
+-- The control panel for the suite. `/tap` opens a TAP window.
 --
 -- Navigation:
 --   Suite     -> Overview (dashboard + enable/disable + fully-unload), Settings (appearance)
@@ -13,7 +13,7 @@
 --
 -- This lives in the parent hub so `/tap` always works, even with zero sidecars installed.
 
-local ADDON, UIF = ...
+local ADDON, TAP = ...
 local Suite = _G.TAP
 
 local ICON_DIR = "Interface\\AddOns\\TAP\\assets\\icons\\"
@@ -29,7 +29,7 @@ local DEFAULT_PALETTE_NAME = "obsidian"       -- near-black, cool neutral (steel
 -- re-arms it locally for testing.
 local WELCOME_CAMPAIGN = "2026-07-runshare"
 
-local theme = UIF:NewTheme({
+local theme = TAP:NewTheme({
     name    = "TAPManager",
     skin    = DEFAULT_SKIN,   -- default color scheme (see DEFAULT_SKIN above; overridden by saved appearance)
     iconDir = ICON_DIR,
@@ -74,7 +74,7 @@ local function appearanceDB()
     local t = m.theme
     -- Migrate a legacy bundled-skin setting into the split shape + palette model.
     if t.skin and not t.palette then
-        local sk = UIF.SKINS[t.skin]
+        local sk = TAP.SKINS[t.skin]
         t.shape   = (sk and sk.radius and sk.radius > 0) and "rounded" or "square"
         t.palette = (t.skin == "rounded") and "flat" or t.skin   -- "rounded" was flat's palette
         t.skin = nil
@@ -94,7 +94,7 @@ local function applyFont()
     local a = appearanceDB()
     -- Push the chosen font to EVERY registered theme (hub + each module's own theme) so module
     -- config panels/chrome follow the global choice and a first-login TTF fallback self-corrects.
-    if UIF.SetGlobalFont then UIF.SetGlobalFont(a.font or "UBUNTU")
+    if TAP.SetGlobalFont then TAP.SetGlobalFont(a.font or "UBUNTU")
     else theme:ApplyFont(a.font or "UBUNTU") end
 end
 
@@ -498,7 +498,7 @@ end
 -- sticks. Mutating in place keeps the picker and the saved value pointing at the same table.
 local function seedCustomPalette(a)
     a.custom = a.custom or {}
-    for _, k in ipairs(UIF.PALETTE_KEYS) do
+    for _, k in ipairs(TAP.PALETTE_KEYS) do
         if not a.custom[k] then
             local c = theme.C[k] or { 0.5, 0.5, 0.5 }
             a.custom[k] = { c[1], c[2], c[3] }
@@ -564,21 +564,21 @@ local function pageSettings(b, win)
             b:Wrap("Click a swatch to set each color. These define the whole palette.", x, y, COLW - 8, C.subtext, 10)
             y = y - 20
             local colW, rowTop = (COLW - 20) / 2, y
-            for i, k in ipairs(UIF.PALETTE_KEYS) do
+            for i, k in ipairs(TAP.PALETTE_KEYS) do
                 local col = (i - 1) % 2
                 local ry = rowTop - math.floor((i - 1) / 2) * 30
                 local cx = x + col * colW
                 local label = PALETTE_KEY_LABELS[k] or k
                 b:Swatch(cx, ry - 2, cust[k], function() theme:ApplyCustomPalette(cust); win:Refresh() end,
                     label, "Set the " .. label:lower() .. " color.")
-                b:Label(label .. "  ·  #" .. UIF.hexOf(cust[k][1], cust[k][2], cust[k][3]), cx + 28, ry - 4, C.text, 11)
+                b:Label(label .. "  ·  #" .. TAP.hexOf(cust[k][1], cust[k][2], cust[k][3]), cx + 28, ry - 4, C.text, 11)
             end
-            y = rowTop - math.ceil(#UIF.PALETTE_KEYS / 2) * 30 - 10
+            y = rowTop - math.ceil(#TAP.PALETTE_KEYS / 2) * 30 - 10
         else
             y = b:Section("ACCENT", x, y); y = y - 30
             b:Swatch(x, y - 2, a.accent, function(r, g, b2) theme:ApplyAccent({ r, g, b2 }); win:Refresh() end,
                 "Accent color", "The platform's highlight color, on top of the color scheme.")
-            b:Label("Accent  ·  #" .. UIF.hexOf(a.accent[1], a.accent[2], a.accent[3]), x + 30, y - 4, C.text)
+            b:Label("Accent  ·  #" .. TAP.hexOf(a.accent[1], a.accent[2], a.accent[3]), x + 30, y - 4, C.text)
             y = y - 34
         end
     end
@@ -1031,7 +1031,7 @@ end
 local function createWindow()
     builtSig = moduleSig()
     win = theme:Window({
-        name = UIF.NextId("TAPManagerWindow"),
+        name = TAP.NextId("TAPManagerWindow"),
         title = "Twisteds Addon Platform",
         logo = theme:GetIcon("adjustments-horizontal"),
         width = 1366, height = 768, sidebarWidth = 220, contentWidth = 740,

@@ -1,12 +1,12 @@
--- UIFoundry - ClassSpec.lua
+-- TAP - ClassSpec.lua
 -- A reusable class + spec multi-select, promoted from Twisteds Combat Alerts and rebuilt on the
 -- library's OWN components (Checkbox, Heading, Button, StylePanel) so ANY suite sidecar can gate
 -- features by class/spec with the same class-colored grid, in the addon's theme.
 --
 -- Data helpers (palette-independent):
---   UIF.GetClassList()              -> { { token, name, id, color = {r,g,b} }, ... }
---   UIF.GetSpecList(token[, all])   -> { { id = specID, name, icon }, ... }  (all=true prepends "all")
---   UIF.ClassColor(token)           -> r, g, b
+--   TAP.GetClassList()              -> { { token, name, id, color = {r,g,b} }, ... }
+--   TAP.GetSpecList(token[, all])   -> { { id = specID, name, icon }, ... }  (all=true prepends "all")
+--   TAP.ClassColor(token)           -> r, g, b
 --
 -- UI (theme methods):
 --   theme:ClassSpecSummary(selected)          -> "All classes / specs" | "N specs selected"
@@ -18,25 +18,25 @@
 --   opts (picker):  selected, title, hint, onChange(selected), columns (5), colWidth (160)
 --   opts (button):  selected, title, hint, onChange(selected), width (190), height, kind, columns, colWidth
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 ----------------------------------------------------------------------
 -- Data
 ----------------------------------------------------------------------
-function UIF.ClassColor(token)
+function TAP.ClassColor(token)
     local c = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[token]
     if c then return c.r, c.g, c.b end
     return 0.9, 0.9, 0.95
 end
 
-function UIF.GetClassList()
+function TAP.GetClassList()
     local list = {}
     local n = (GetNumClasses and GetNumClasses()) or 0
     for i = 1, n do
         local name, token, id = GetClassInfo(i)
         if token then
-            local r, g, b = UIF.ClassColor(token)
+            local r, g, b = TAP.ClassColor(token)
             list[#list + 1] = { token = token, name = name, id = id, color = { r, g, b } }
         end
     end
@@ -44,10 +44,10 @@ function UIF.GetClassList()
 end
 
 local function classIdFromToken(token)
-    for _, c in ipairs(UIF.GetClassList()) do if c.token == token then return c.id end end
+    for _, c in ipairs(TAP.GetClassList()) do if c.token == token then return c.id end end
 end
 
-function UIF.GetSpecList(token, includeAll)
+function TAP.GetSpecList(token, includeAll)
     local list = {}
     if includeAll then list[#list + 1] = { id = "all", name = "All Specs" } end
     local classID = token and classIdFromToken(token)
@@ -73,7 +73,7 @@ local RANGED_DPS = {
 }
 
 -- Map a spec to a role group: "TANK" | "HEALER" | "RANGED" | "MELEE".
-function UIF.SpecGroup(specID, role)
+function TAP.SpecGroup(specID, role)
     if role == "TANK" then return "TANK" end
     if role == "HEALER" then return "HEALER" end
     return RANGED_DPS[specID] and "RANGED" or "MELEE"
@@ -89,7 +89,7 @@ function Mixin:ClassSpecSummary(selected)
 end
 
 ----------------------------------------------------------------------
--- The picker popup - assembled entirely from UIFoundry components.
+-- The picker popup - assembled entirely from TAP components.
 ----------------------------------------------------------------------
 function Mixin:OpenClassSpecPicker(opts)
     opts = opts or {}
@@ -100,7 +100,7 @@ function Mixin:OpenClassSpecPicker(opts)
 
     local p = theme._classSpecPicker
     if not p then
-        p = CreateFrame("Frame", UIF.NextId(theme.id .. "ClassSpecPicker"), UIParent)
+        p = CreateFrame("Frame", TAP.NextId(theme.id .. "ClassSpecPicker"), UIParent)
         theme._classSpecPicker = p
         p:SetSize(40 + COLS * COLW, 596); p:SetPoint("CENTER")
         p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetToplevel(true); p:SetClampedToScreen(true)
@@ -118,7 +118,7 @@ function Mixin:OpenClassSpecPicker(opts)
 
         -- Bulk actions (ghost Buttons) + hint (Heading/caption).
         local ca = theme:Button(p); ca:Configure("Check All", 84, 20, "ghost", function()
-            for _, cls in ipairs(UIF.GetClassList()) do for _, sp in ipairs(UIF.GetSpecList(cls.token)) do p._selected[sp.id] = true end end
+            for _, cls in ipairs(TAP.GetClassList()) do for _, sp in ipairs(TAP.GetSpecList(cls.token)) do p._selected[sp.id] = true end end
             p._rebuild(); if p._onChange then p._onChange(p._selected) end
         end); ca:SetPoint("TOPLEFT", 16, -42)
         local ua = theme:Button(p); ua:Configure("Uncheck All", 96, 20, "ghost", function()
@@ -130,9 +130,9 @@ function Mixin:OpenClassSpecPicker(opts)
         -- the button clears them; otherwise it checks them all.
         local function roleToggle(group)
             local ids = {}
-            for _, cls in ipairs(UIF.GetClassList()) do
-                for _, sp in ipairs(UIF.GetSpecList(cls.token)) do
-                    if UIF.SpecGroup(sp.id, sp.role) == group then ids[#ids + 1] = sp.id end
+            for _, cls in ipairs(TAP.GetClassList()) do
+                for _, sp in ipairs(TAP.GetSpecList(cls.token)) do
+                    if TAP.SpecGroup(sp.id, sp.role) == group then ids[#ids + 1] = sp.id end
                 end
             end
             local allOn = #ids > 0
@@ -157,7 +157,7 @@ function Mixin:OpenClassSpecPicker(opts)
         p._rebuild = function()
             for _, hh in ipairs(p._headers) do hh:Hide() end
             for _, cc in ipairs(p._checks) do cc:Hide() end
-            local classes = UIF.GetClassList()
+            local classes = TAP.GetClassList()
             table.sort(classes, function(a, b) return a.name < b.name end)
             local cols = {}; for i = 1, COLS do cols[i] = {} end
             for i, cls in ipairs(classes) do table.insert(cols[((i - 1) % COLS) + 1], cls) end
@@ -171,7 +171,7 @@ function Mixin:OpenClassSpecPicker(opts)
                     hh:ClearAllPoints(); hh:SetPoint("TOPLEFT", p.body, "TOPLEFT", colX, -yOff); hh:Show()
                     hh:SetText(cls.name); hh:SetTextColor(cls.color[1], cls.color[2], cls.color[3])
                     yOff = yOff + 24
-                    for _, sp in ipairs(UIF.GetSpecList(cls.token)) do
+                    for _, sp in ipairs(TAP.GetSpecList(cls.token)) do
                         nC = nC + 1
                         local c = p._checks[nC]
                         if not c then c = theme:Checkbox(p.body); p._checks[nC] = c end

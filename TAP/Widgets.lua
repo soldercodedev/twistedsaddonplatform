@@ -1,4 +1,4 @@
--- UIFoundry - Widgets.lua
+-- TAP - Widgets.lua
 -- Bare, pooled-friendly widget factories. Each is a Theme method that returns a plain
 -- frame carrying a :Configure (or :Set*) method. They read their colors from the theme
 -- live, so ApplyAccent() recolors them on the next Configure/refresh. Positioning is left
@@ -10,8 +10,8 @@
 --   local e  = theme:EditBox(parent); e:Configure(200, 24, value, onCommit)
 --   local s  = theme:Slider(parent);  s:Configure(200, 0, 10, 0.5, getVal, setVal, "%.1f")
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 ----------------------------------------------------------------------
 -- Toggle (on/off switch)
@@ -24,18 +24,18 @@ function Mixin:Toggle(parent)
     function f:_render()
         local C = theme.C
         if self.checked then
-            UIF.paint(self.track, self._onColor or C.accent)
+            TAP.paint(self.track, self._onColor or C.accent)
             self.knob:ClearAllPoints(); self.knob:SetPoint("RIGHT", -2, 0); self.knob:SetColorTexture(0.05, 0.06, 0.08)
         else
-            UIF.paint(self.track, C.border)
-            self.knob:ClearAllPoints(); self.knob:SetPoint("LEFT", 2, 0); UIF.paint(self.knob, C.text)
+            TAP.paint(self.track, C.border)
+            self.knob:ClearAllPoints(); self.knob:SetPoint("LEFT", 2, 0); TAP.paint(self.knob, C.text)
         end
     end
     function f:Configure(checked, cb, opts)
         self.checked = checked and true or false; self.cb = cb
         -- Reset style EVERY time (this widget is pooled): otherwise a toggle reused without opts
         -- keeps a prior caller's on color or size, so toggles render inconsistent colors.
-        self._onColor  = opts and UIF.toColor(opts.color or opts.onColor) or nil
+        self._onColor  = opts and TAP.toColor(opts.color or opts.onColor) or nil
         self:SetSize((opts and opts.width) or 38, (opts and opts.height) or 18)
         self:_render()
     end
@@ -65,12 +65,12 @@ function Mixin:Button(parent)
         if self._shapeTex then
             self.bg:SetColorTexture(1, 1, 1)      -- clear any prior solid fill
             self.bg:SetTexture(self._shapeTex)
-            UIF.applySlice(self.bg, self._shapeMargin or 8)
+            TAP.applySlice(self.bg, self._shapeMargin or 8)
             self.bg:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
         else
             self.bg:SetVertexColor(1, 1, 1)
-            UIF.clearSlice(self.bg)
-            UIF.paint(self.bg, c)
+            TAP.clearSlice(self.bg)
+            TAP.paint(self.bg, c)
         end
     end
     b:SetScript("OnEnter", function(self) self._hovered = true; if self._hover then self:_paintBg(self._hover) end; theme:_showTip(self) end)
@@ -84,29 +84,29 @@ function Mixin:Button(parent)
         self.fs:SetFont(theme.FONT, (st and st.fontSize) or 12, (st and st.fontFlags) or "")
         if self._kind == "primary" then
             self._normal = { C.accent[1], C.accent[2], C.accent[3] }
-            self._hover  = UIF.lighten(C.accent, 0.14)
+            self._hover  = TAP.lighten(C.accent, 0.14)
             self.fs:SetTextColor(1, 1, 1)
         elseif self._kind == "danger" then
             self._normal, self._hover = { 0.32, 0.14, 0.15 }, { 0.5, 0.22, 0.23 }
             self.fs:SetTextColor(1, 0.72, 0.72)
         elseif self._kind == "ghost" then
-            self._normal, self._hover = { C.bg[1], C.bg[2], C.bg[3] }, UIF.mix(C.bg, C.accent, 0.30)
+            self._normal, self._hover = { C.bg[1], C.bg[2], C.bg[3] }, TAP.mix(C.bg, C.accent, 0.30)
             self.fs:SetTextColor(unpack(C.text))
         else
             self._normal = { C.card[1], C.card[2], C.card[3] }
-            self._hover  = UIF.darken(C.accent, 0.35)
+            self._hover  = TAP.darken(C.accent, 0.35)
             self.fs:SetTextColor(unpack(C.text))
         end
         if st then
-            self._normal = UIF.toColor(st.color, self._normal)
-            self._hover  = UIF.toColor(st.hoverColor, st.color and UIF.lighten(self._normal, 0.12) or self._hover)
-            local tc = UIF.toColor(st.textColor)
+            self._normal = TAP.toColor(st.color, self._normal)
+            self._hover  = TAP.toColor(st.hoverColor, st.color and TAP.lighten(self._normal, 0.12) or self._hover)
+            local tc = TAP.toColor(st.textColor)
             if tc then self.fs:SetTextColor(tc[1], tc[2], tc[3]) end
             if st.font then self.fs:SetFont(theme:ResolveFont(st.font), st.fontSize or 12, st.fontFlags or "") end
             if st.icon then
                 self.iconTex:SetTexture(theme:IconPath(st.icon, st.iconVariant) or st.icon)
                 self.iconTex:SetSize(st.iconSize or 14, st.iconSize or 14)
-                if st.iconColor then local ic = UIF.toColor(st.iconColor); self.iconTex:SetVertexColor(ic[1], ic[2], ic[3]) else self.iconTex:SetVertexColor(1, 1, 1) end
+                if st.iconColor then local ic = TAP.toColor(st.iconColor); self.iconTex:SetVertexColor(ic[1], ic[2], ic[3]) else self.iconTex:SetVertexColor(1, 1, 1) end
                 self.iconTex:Show()
                 self.iconTex:ClearAllPoints()
                 local txt = self.fs:GetText()
@@ -232,7 +232,7 @@ function Mixin:EditBox(parent)
         if opts.font or opts.fontSize or opts.fontFlags then
             self:SetFont(opts.font and theme:ResolveFont(opts.font) or theme.FONT, opts.fontSize or 12, opts.fontFlags or "")
         end
-        local tc = UIF.toColor(opts.textColor); if tc then self:SetTextColor(tc[1], tc[2], tc[3]) end
+        local tc = TAP.toColor(opts.textColor); if tc then self:SetTextColor(tc[1], tc[2], tc[3]) end
     end
     return e
 end
@@ -253,9 +253,9 @@ end
 function Mixin:Slider(parent)
     local theme, C = self, self.C
     local s = CreateFrame("Slider", nil, parent); s:SetOrientation("HORIZONTAL")
-    s.track = s:CreateTexture(nil, "ARTWORK"); UIF.paint(s.track, C.border)
+    s.track = s:CreateTexture(nil, "ARTWORK"); TAP.paint(s.track, C.border)
     s.track:SetHeight(3); s.track:SetPoint("LEFT"); s.track:SetPoint("RIGHT")
-    s.thumb = s:CreateTexture(nil, "OVERLAY"); UIF.paint(s.thumb, C.accent); s.thumb:SetSize(12, 12)
+    s.thumb = s:CreateTexture(nil, "OVERLAY"); TAP.paint(s.thumb, C.accent); s.thumb:SetSize(12, 12)
     s:SetThumbTexture(s.thumb)
     -- Value readout is an EditBox (not a FontString) so it doubles as a manual-entry field.
     s.val = CreateFrame("EditBox", nil, s); s.val:SetFont(theme.FONT, 11, "")
@@ -299,7 +299,7 @@ function Mixin:Slider(parent)
 
     function s:Configure(w, minv, maxv, step, getVal, setVal, fmt)
         fmt = fmt or "%.1f"
-        UIF.paint(self.thumb, theme.C.accent)
+        TAP.paint(self.thumb, theme.C.accent)
         self._min, self._max, self._step, self._fmt, self._dec = minv, maxv, step, fmt, stepDecimals(step)
         -- Clear any previous setter FIRST: this slider may be pooled, and SetValue() fires
         -- OnValueChanged. Without this, reuse would run the OLD setter with the new value.
@@ -312,9 +312,9 @@ function Mixin:Slider(parent)
     -- Override track / thumb / value-text colors per instance.
     function s:ApplyStyle(opts)
         self._style = opts; if not opts then return end
-        if opts.trackColor then UIF.paint(self.track, UIF.toColor(opts.trackColor)) end
-        if opts.color or opts.thumbColor then UIF.paint(self.thumb, UIF.toColor(opts.thumbColor or opts.color)) end
-        local tc = UIF.toColor(opts.textColor)
+        if opts.trackColor then TAP.paint(self.track, TAP.toColor(opts.trackColor)) end
+        if opts.color or opts.thumbColor then TAP.paint(self.thumb, TAP.toColor(opts.thumbColor or opts.color)) end
+        local tc = TAP.toColor(opts.textColor)
         if tc then self.val:SetTextColor(tc[1], tc[2], tc[3]); self.val._base = { tc[1], tc[2], tc[3] } end
         if opts.hideValue then self.val:Hide() else self.val:Show() end
     end
@@ -337,7 +337,7 @@ function Mixin:Icon(parent)
         theme:StyleFrame(self, opts)
         if opts.icon then self.tex:SetTexture(theme:IconPath(opts.icon, opts.iconVariant) or opts.icon) end
         if opts.iconInset == false then self.tex:SetTexCoord(0, 1, 0, 1) elseif opts.iconCoords then self.tex:SetTexCoord(unpack(opts.iconCoords)) end
-        local ic = UIF.toColor(opts.iconColor); if ic then self.tex:SetVertexColor(ic[1], ic[2], ic[3]) end
+        local ic = TAP.toColor(opts.iconColor); if ic then self.tex:SetVertexColor(ic[1], ic[2], ic[3]) end
     end
     return b
 end
@@ -376,14 +376,14 @@ end
 function Mixin:Logo(parent)
     local theme = self
     local f = CreateFrame("Frame", nil, parent)
-    f.brd = f:CreateTexture(nil, "BACKGROUND", nil, 0); f.brd:SetAllPoints(); UIF.paint(f.brd, theme.C.accent)
+    f.brd = f:CreateTexture(nil, "BACKGROUND", nil, 0); f.brd:SetAllPoints(); TAP.paint(f.brd, theme.C.accent)
     f.inner = f:CreateTexture(nil, "BACKGROUND", nil, 1)
-    f.inner:SetPoint("TOPLEFT", 2, -2); f.inner:SetPoint("BOTTOMRIGHT", -2, 2); UIF.paint(f.inner, theme.C.bg)
+    f.inner:SetPoint("TOPLEFT", 2, -2); f.inner:SetPoint("BOTTOMRIGHT", -2, 2); TAP.paint(f.inner, theme.C.bg)
     f.tex = f:CreateTexture(nil, "ARTWORK")
     f.tex:SetPoint("TOPLEFT", 6, -6); f.tex:SetPoint("BOTTOMRIGHT", -6, 6)
     function f:SetLogo(texture, size)
         if size then self:SetSize(size, size) end
-        UIF.paint(self.brd, theme.C.accent)   -- track theme accent on rebuild
+        TAP.paint(self.brd, theme.C.accent)   -- track theme accent on rebuild
         self.tex:SetTexture(texture)
     end
     return f
@@ -395,12 +395,12 @@ end
 function Mixin:Checkbox(parent)
     local theme, C = self, self.C
     local b = CreateFrame("Button", nil, parent); b:SetHeight(22)
-    b.brd = b:CreateTexture(nil, "BACKGROUND"); b.brd:SetSize(16, 16); b.brd:SetPoint("LEFT", 2, 0); UIF.paint(b.brd, C.border)
-    b.box = b:CreateTexture(nil, "ARTWORK"); b.box:SetPoint("TOPLEFT", b.brd, "TOPLEFT", 1, -1); b.box:SetPoint("BOTTOMRIGHT", b.brd, "BOTTOMRIGHT", -1, 1); UIF.paint(b.box, C.bg)
+    b.brd = b:CreateTexture(nil, "BACKGROUND"); b.brd:SetSize(16, 16); b.brd:SetPoint("LEFT", 2, 0); TAP.paint(b.brd, C.border)
+    b.box = b:CreateTexture(nil, "ARTWORK"); b.box:SetPoint("TOPLEFT", b.brd, "TOPLEFT", 1, -1); b.box:SetPoint("BOTTOMRIGHT", b.brd, "BOTTOMRIGHT", -1, 1); TAP.paint(b.box, C.bg)
     b.check = b:CreateTexture(nil, "OVERLAY"); b.check:SetPoint("TOPLEFT", b.box, "TOPLEFT", 2, -2); b.check:SetPoint("BOTTOMRIGHT", b.box, "BOTTOMRIGHT", -2, 2); b.check:Hide()
     b.fs = b:CreateFontString(nil, "OVERLAY"); b.fs:SetFont(theme.FONT, 12); b.fs:SetPoint("LEFT", b.brd, "RIGHT", 8, 0); b.fs:SetPoint("RIGHT", 0, 0); b.fs:SetJustifyH("LEFT")
-    b:SetScript("OnEnter", function(self) UIF.paint(self.box, theme.C.hover) end)
-    b:SetScript("OnLeave", function(self) UIF.paint(self.box, theme.C.bg) end)
+    b:SetScript("OnEnter", function(self) TAP.paint(self.box, theme.C.hover) end)
+    b:SetScript("OnLeave", function(self) TAP.paint(self.box, theme.C.bg) end)
     -- label, checked, cb(newChecked); optional checkColor { r,g,b } (defaults to accent).
     function b:Configure(label, checked, cb, checkColor)
         local C = theme.C
@@ -424,8 +424,8 @@ end
 function Mixin:NavRow(parent, width)
     local theme, C = self, self.C
     local b = CreateFrame("Button", nil, parent); b:SetSize(width or 194, 30)
-    b.bg = b:CreateTexture(nil, "BACKGROUND"); b.bg:SetAllPoints(); UIF.paint(b.bg, C.sidebar)
-    b.sel = b:CreateTexture(nil, "ARTWORK"); UIF.paint(b.sel, C.accent)
+    b.bg = b:CreateTexture(nil, "BACKGROUND"); b.bg:SetAllPoints(); TAP.paint(b.bg, C.sidebar)
+    b.sel = b:CreateTexture(nil, "ARTWORK"); TAP.paint(b.sel, C.accent)
     b.sel:SetPoint("TOPLEFT"); b.sel:SetPoint("BOTTOMLEFT"); b.sel:SetWidth(3); b.sel:Hide()
     b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(18, 18); b.icon:SetPoint("LEFT", 12, 0)
     b.fs = b:CreateFontString(nil, "OVERLAY"); b.fs:SetFont(theme.FONT, 12)
@@ -434,7 +434,7 @@ function Mixin:NavRow(parent, width)
     -- Attention pulse: a slow accent wash that fades in and out to draw the eye to an important
     -- row. Sits just above the row background (below icon/text) so it reads as a glow, not a mask.
     b.pulse = b:CreateTexture(nil, "BACKGROUND", nil, 1); b.pulse:SetAllPoints()
-    UIF.paint(b.pulse, C.accent); b.pulse:SetAlpha(0); b.pulse:Hide()
+    TAP.paint(b.pulse, C.accent); b.pulse:SetAlpha(0); b.pulse:Hide()
     b._pulseAG = b.pulse:CreateAnimationGroup(); b._pulseAG:SetLooping("REPEAT")
     local pIn  = b._pulseAG:CreateAnimation("Alpha"); pIn:SetOrder(1);  pIn:SetDuration(0.85)
     pIn:SetFromAlpha(0);    pIn:SetToAlpha(0.30); pIn:SetSmoothing("IN_OUT")
@@ -444,7 +444,7 @@ function Mixin:NavRow(parent, width)
         self._wantPulse = true
         if self._sel or self._pulsing then return end   -- selected rows don't pulse
         self._pulsing = true
-        UIF.paint(self.pulse, theme.C.accent)           -- re-tint if the theme accent changed
+        TAP.paint(self.pulse, theme.C.accent)           -- re-tint if the theme accent changed
         self.pulse:SetAlpha(0); self.pulse:Show(); self._pulseAG:Play()
     end
     function b:StopPulse(permanent)
@@ -453,14 +453,14 @@ function Mixin:NavRow(parent, width)
         self._pulseAG:Stop(); self.pulse:SetAlpha(0); self.pulse:Hide()
     end
 
-    b:SetScript("OnEnter", function(self) if not self._sel then UIF.paint(self.bg, UIF.mix(theme.C.sidebar, theme.C.accent, 0.28)) end end)
-    b:SetScript("OnLeave", function(self) if not self._sel then UIF.paint(self.bg, theme.C.sidebar) end end)
+    b:SetScript("OnEnter", function(self) if not self._sel then TAP.paint(self.bg, TAP.mix(theme.C.sidebar, theme.C.accent, 0.28)) end end)
+    b:SetScript("OnLeave", function(self) if not self._sel then TAP.paint(self.bg, theme.C.sidebar) end end)
     -- Apply/clear the selected look.
     function b:Select(sel)
         local C = theme.C
         self._sel = sel
-        self.sel:SetShown(sel); UIF.paint(self.sel, C.accent)
-        UIF.paint(self.bg, sel and UIF.mix(C.sidebar, C.accent, 0.45) or C.sidebar)
+        self.sel:SetShown(sel); TAP.paint(self.sel, C.accent)
+        TAP.paint(self.bg, sel and TAP.mix(C.sidebar, C.accent, 0.45) or C.sidebar)
         self.fs:SetTextColor(unpack(sel and { 0.98, 0.99, 1 } or C.text))
         -- Pause the attention pulse while selected; resume on deselect if still wanted.
         if sel then self:StopPulse() elseif self._wantPulse then self:StartPulse() end

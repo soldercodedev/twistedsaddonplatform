@@ -8,9 +8,9 @@
 -- the module file.
 
 local addonName, TCC = ...
-local UIF   = _G.UIFoundry
+local TAP   = _G.TAP
 local Suite = _G.TAP
-local theme = (Suite and Suite.uiTheme) or (UIF and UIF:NewTheme({ name = "TAP_CombatAlertsEngine" }))
+local theme = (Suite and Suite.uiTheme) or (TAP and TAP:NewTheme({ name = "TAP_CombatAlertsEngine" }))
 
 ----------------------------------------------------------------------
 -- Centralize sounds + fonts on the SUITE's shared catalogs. The engine (Core.lua) plays sounds

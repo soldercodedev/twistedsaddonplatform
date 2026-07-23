@@ -1,4 +1,4 @@
--- UIFoundry - TextDialog.lua
+-- TAP - TextDialog.lua
 -- A reusable multi-line text dialog with a scroll-clipped editbox. WoW addons can't open a
 -- browser or the clipboard directly, so this is how you hand a string to the user
 -- (export / copy a link) or take one back (import / paste). Each theme builds one.
@@ -7,13 +7,13 @@
 --   theme:ShowLinkDialog(title, url)                -- same, phrased for a URL
 --   theme:ShowInputDialog(title, info, acceptLabel, function(text) ... end)  -- paste + accept
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 local function ensureDialog(theme)
     if theme._textDlg then return theme._textDlg end
     local C = theme.C
-    local name = UIF.NextId(theme.id .. "TextDialog")
+    local name = TAP.NextId(theme.id .. "TextDialog")
     local d = CreateFrame("Frame", name, UIParent)
     d:SetSize(470, 300); d:SetPoint("CENTER"); d:SetFrameStrata("FULLSCREEN_DIALOG"); d:SetToplevel(true); d:SetClampedToScreen(true)
     theme:StylePanel(d, C.panel, C.border)
@@ -21,7 +21,7 @@ local function ensureDialog(theme)
     tinsert(UISpecialFrames, name)
 
     local hd = CreateFrame("Button", nil, d); hd:SetPoint("TOPLEFT", 1, -1); hd:SetPoint("TOPRIGHT", -1, -1); hd:SetHeight(28)
-    local hbg = hd:CreateTexture(nil, "BACKGROUND"); hbg:SetAllPoints(); UIF.paint(hbg, C.card)
+    local hbg = hd:CreateTexture(nil, "BACKGROUND"); hbg:SetAllPoints(); TAP.paint(hbg, C.card)
     hd:RegisterForDrag("LeftButton")
     hd:SetScript("OnDragStart", function() d:StartMoving() end)
     hd:SetScript("OnDragStop", function() d:StopMovingOrSizing() end)
@@ -33,7 +33,7 @@ local function ensureDialog(theme)
     -- A ScrollFrame clips the editbox to the panel so a long string can't overflow.
     local scroll = CreateFrame("ScrollFrame", nil, box)
     scroll:SetPoint("TOPLEFT", 8, -8); scroll:SetPoint("BOTTOMRIGHT", -8, 8)
-    scroll:EnableMouseWheel(true); scroll:SetScript("OnMouseWheel", UIF.scrollWheel)
+    scroll:EnableMouseWheel(true); scroll:SetScript("OnMouseWheel", TAP.scrollWheel)
     local eb = CreateFrame("EditBox", nil, scroll)
     eb:SetMultiLine(true); eb:SetAutoFocus(false); eb:SetFont(theme.FONT, 12, ""); eb:SetTextColor(unpack(C.text))
     eb:SetTextInsets(2, 2, 2, 2); eb:SetWidth(420)

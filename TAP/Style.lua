@@ -1,4 +1,4 @@
--- UIFoundry - Style.lua
+-- TAP - Style.lua
 -- The per-call override system. Almost everything you draw can be restyled at draw time
 -- via an `opts` table, so a component call reads like "draw this, but bigger / in this
 -- color / with this border". These helpers are the backbone every widget and component
@@ -15,27 +15,27 @@
 --
 -- Colors may be given as { r, g, b } OR a "RRGGBB" hex string anywhere below.
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 -- Normalize a color value ({r,g,b} table or "RRGGBB"/"#RRGGBB" hex) to { r, g, b }.
 -- The fallback is normalized the same way, so it may itself be a hex string.
-function UIF.toColor(v, fallback)
+function TAP.toColor(v, fallback)
     if v == nil then v = fallback end
     if type(v) == "table" then return v end
     if type(v) == "string" then
-        local r, g, b = UIF.parseHex(v)
+        local r, g, b = TAP.parseHex(v)
         if r then return { r, g, b } end
     end
     return type(fallback) == "table" and fallback or nil
 end
-local toColor = UIF.toColor
+local toColor = TAP.toColor
 
 -- Resolve a color spec: a palette key name ("accent"/"success"/...), a hex string, an
 -- { r,g,b } table, else the fallback.
-function UIF.ThemeMixin:Color(spec, fallback)
+function TAP.ThemeMixin:Color(spec, fallback)
     if type(spec) == "string" and self.C[spec] then return self.C[spec] end
-    return UIF.toColor(spec, fallback)
+    return TAP.toColor(spec, fallback)
 end
 
 ----------------------------------------------------------------------
@@ -69,7 +69,7 @@ function Mixin:StyleFrame(f, opts)
         else
             f._brd:Show()
             local bd = opts.border
-            UIF.paint(f._brd, toColor(bd.color, self.C.border))
+            TAP.paint(f._brd, toColor(bd.color, self.C.border))
             local inset = bd.size or 1
             if f._fill then
                 f._fill:ClearAllPoints()
@@ -85,16 +85,16 @@ end
 -- or nil (solid). When w/h are given, the slice margin is fitted so short elements (badges)
 -- round correctly instead of over-slicing.
 function Mixin:PaintShape(tex, color, spec, w, h, alpha)
-    local col = UIF.toColor(color, self.C.accent)
+    local col = TAP.toColor(color, self.C.accent)
     local shapeTex, margin = self:ShapeTexture(spec)
     if shapeTex then
         if w and h then margin = math.max(2, math.min(margin, math.floor(math.min(w, h) / 2))) end
         tex:SetTexture(shapeTex)
-        UIF.applySlice(tex, margin)
+        TAP.applySlice(tex, margin)
         tex:SetVertexColor(col[1], col[2], col[3], alpha or 1)
     else
         tex:SetVertexColor(1, 1, 1)
-        UIF.clearSlice(tex)
+        TAP.clearSlice(tex)
         tex:SetColorTexture(col[1], col[2], col[3], alpha or 1)
     end
 end
@@ -108,12 +108,12 @@ function Mixin:AttachShadow(frame, spec)
     if spec == true then spec = {} end
     local spread = spec.spread or 6
     local ox, oy = spec.offsetX or 0, spec.offsetY or -3
-    local col = UIF.toColor(spec.color, { 0, 0, 0 })
+    local col = TAP.toColor(spec.color, { 0, 0, 0 })
     local alpha = spec.alpha or 0.38
     if not sh then sh = frame:CreateTexture(nil, "BACKGROUND", nil, -8); frame._uifShadow = sh end
     if self.shapeDir then
         sh:SetTexture(self.shapeDir .. "shadow.tga")
-        UIF.applySlice(sh, SHADOW_MARGIN)
+        TAP.applySlice(sh, SHADOW_MARGIN)
         sh:SetVertexColor(col[1], col[2], col[3], alpha)
     else
         sh:SetColorTexture(col[1], col[2], col[3], alpha * 0.5)
@@ -130,7 +130,7 @@ end
 function Mixin:Panel(parent, opts)
     opts = opts or {}
     local f = CreateFrame("Frame", nil, parent)
-    self:StylePanel(f, UIF.toColor(opts.bg, self.C.panel), UIF.toColor(opts.borderColor, self.C.border))
+    self:StylePanel(f, TAP.toColor(opts.bg, self.C.panel), TAP.toColor(opts.borderColor, self.C.border))
     if opts.width or opts.height then f:SetSize(opts.width or 100, opts.height or 100) end
     self:StyleFrame(f, opts)
     return f

@@ -1,4 +1,4 @@
--- UIFoundry - Icons.lua
+-- TAP - Icons.lua
 -- The bundled-icon registry + a colorable icon display (Glyph). Icons are the Tabler set
 -- converted to white TGAs under the theme's iconDir (see tools/convert_icons.py + ICONS.md),
 -- listed in the generated IconManifest.lua. Because they're white, any icon can be tinted to
@@ -10,12 +10,12 @@
 --   local g = theme:Glyph(parent, { icon = "flame", size = 24, color = "FF7A00" })
 --   g:SetGlyph("shield", "filled");  g:SetColor("20C997")
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 -- Build fast lookup sets from the manifest once.
 local function sets()
-    local m = UIF.ICON_MANIFEST
+    local m = TAP.ICON_MANIFEST
     if not m then return nil end
     if not m._sets then
         local s = { outline = {}, filled = {}, social = {} }
@@ -78,7 +78,7 @@ function Mixin:Glyph(parent, opts)
         elseif opts.inset then tex:SetTexCoord(unpack(theme.iconInset))
         else tex:SetTexCoord(0, 1, 0, 1) end
     end
-    function f:SetColor(c) local col = UIF.toColor(c, { 1, 1, 1 }); tex:SetVertexColor(col[1], col[2], col[3], col[4]) end
+    function f:SetColor(c) local col = TAP.toColor(c, { 1, 1, 1 }); tex:SetVertexColor(col[1], col[2], col[3], col[4]) end
     if opts.icon then f:SetGlyph(opts.icon, opts.variant) end
     f:SetColor(opts.color or { 1, 1, 1 })
     return f

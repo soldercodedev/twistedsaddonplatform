@@ -7,8 +7,8 @@
 
 local ADDON, ML = ...
 local Suite = _G.TAP
-local UIF   = _G.UIFoundry
-if not (Suite and UIF) then return end
+local TAP   = _G.TAP
+if not (Suite and TAP) then return end
 
 local Guide = {}
 ML.ScoringGuide = Guide

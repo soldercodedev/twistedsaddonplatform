@@ -6,7 +6,7 @@
 -- this is the ONLY file that should need touching.
 
 local ADDON, ML = ...
-local UIF = _G.UIFoundry
+local TAP = _G.TAP
 
 local API = {}
 ML.API = API
@@ -18,8 +18,8 @@ ML.API = API
 ----------------------------------------------------------------------
 function ML.CanRead(v)
     if v == nil then return true end
-    if UIF and UIF.CanRead then
-        local ok, res = pcall(UIF.CanRead, v)
+    if TAP and TAP.CanRead then
+        local ok, res = pcall(TAP.CanRead, v)
         if ok then return res and true or false end
     end
     -- Fallback: a Secret throws on a trivial self-compare; a normal value does not.

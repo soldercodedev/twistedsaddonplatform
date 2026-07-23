@@ -1,8 +1,8 @@
--- UIFoundry - Selectors.lua
+-- TAP - Selectors.lua
 -- FontSelect: a dropdown where each option's label is rendered in its own font.
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 ----------------------------------------------------------------------
 -- FontSelect: a dropdown where each option's label is rendered in that font, so you can see

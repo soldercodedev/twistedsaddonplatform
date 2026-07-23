@@ -1,4 +1,4 @@
--- UIFoundry - Builder.lua
+-- TAP - Builder.lua
 -- An immediate-mode layout helper over a scroll content frame. Every page redraw calls
 -- :Reset() then lays widgets out by (x, y) offsets from the content's TOPLEFT (y grows
 -- downward as negatives). Widgets are pooled per builder, so rebuilding a page every
@@ -15,8 +15,8 @@
 -- Chaining widgets (dropdown / slider) return the widget so you can :SetChoices/:Configure.
 -- SetTip works on anything returned:  theme:SetTip(b:Dropdown(x,y), "Title", "Body"):SetChoices(...)
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 -- Simple grow-only pool: acq hands out the next free widget of a kind (creating on demand);
 -- releaseAll hides everything and rewinds the counters for the next frame.
@@ -411,4 +411,4 @@ function BuilderMixin:Grid(x, yTop, cells, opts)
     return y
 end
 
-UIF.BuilderMixin = BuilderMixin   -- exposed so consumers can add their own builder helpers
+TAP.BuilderMixin = BuilderMixin   -- exposed so consumers can add their own builder helpers

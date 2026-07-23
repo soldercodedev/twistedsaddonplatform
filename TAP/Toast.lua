@@ -1,4 +1,4 @@
--- UIFoundry - Toast.lua
+-- TAP - Toast.lua
 -- Transient on-screen notifications that stack and (optionally) auto-dismiss. Variants set
 -- the accent stripe + default icon; position, animation, and dismissibility are all options.
 --
@@ -19,10 +19,10 @@
 --   sound      = a sound key, or true for the variant default · soundChannel
 --   width · onClick
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
-UIF.TOAST_VARIANTS = {
+TAP.TOAST_VARIANTS = {
     info    = { color = { 0.05, 0.55, 0.75 }, slug = "info-circle" },
     success = { color = { 0.13, 0.60, 0.38 }, slug = "circle-check" },
     warning = { color = { 0.80, 0.60, 0.22 }, slug = "alert-triangle" },
@@ -82,8 +82,8 @@ function Mixin:Toast(opts)
     local theme, C = self, self.C
     -- opts.parent: a frame to spawn within (default the viewport); opts.inset: corner inset.
     local host = ensureHost(theme, opts.parent, opts.position or "TOP", opts.inset)
-    local variant = UIF.TOAST_VARIANTS[opts.variant or "info"] or UIF.TOAST_VARIANTS.info
-    local accent = UIF.toColor(opts.color, variant.color)
+    local variant = TAP.TOAST_VARIANTS[opts.variant or "info"] or TAP.TOAST_VARIANTS.info
+    local accent = TAP.toColor(opts.color, variant.color)
     local w = opts.width or 320
     local hasTitle = opts.title ~= nil
     local dismissible = opts.dismissible ~= false
@@ -91,7 +91,7 @@ function Mixin:Toast(opts)
     local t = CreateFrame("Button", nil, host); t:SetSize(w, hasTitle and 52 or 36)
     theme:StylePanel(t, C.panel, C.border)
     theme:StyleFrame(t, opts)
-    local stripe = t:CreateTexture(nil, "ARTWORK"); stripe:SetPoint("TOPLEFT", 1, -1); stripe:SetPoint("BOTTOMLEFT", 1, 1); stripe:SetWidth(3); UIF.paint(stripe, accent)
+    local stripe = t:CreateTexture(nil, "ARTWORK"); stripe:SetPoint("TOPLEFT", 1, -1); stripe:SetPoint("BOTTOMLEFT", 1, 1); stripe:SetWidth(3); TAP.paint(stripe, accent)
 
     local rightPad = dismissible and 26 or 14
     local textX = 14
@@ -139,7 +139,7 @@ function Mixin:Toast(opts)
 
     -- Optional audible notification: a sound key, or `true` for the variant's default sound.
     if opts.sound and theme.PlaySound then
-        local key = (opts.sound == true) and ((UIF.TOAST_SOUNDS and UIF.TOAST_SOUNDS[opts.variant or "info"]) or "SUBTLE") or opts.sound
+        local key = (opts.sound == true) and ((TAP.TOAST_SOUNDS and TAP.TOAST_SOUNDS[opts.variant or "info"]) or "SUBTLE") or opts.sound
         theme:PlaySound(key, opts.soundChannel)
     end
 

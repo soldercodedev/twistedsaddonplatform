@@ -1,4 +1,4 @@
--- UIFoundry - Window.lua
+-- TAP - Window.lua
 -- The application shell: a movable, self-skinned window with a header (drag handle + logo +
 -- title + close), a left sidebar of icon nav rows, a scroll-clipped content area with a
 -- themed scrollbar, and a footer. Pages render into a pooled Builder.
@@ -26,8 +26,8 @@
 --   win:SelectView(v)   -- switch page + refresh
 --   win:Refresh()       -- re-render current page
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 local WindowMixin = {}
 local WindowMeta = { __index = WindowMixin }
@@ -54,7 +54,7 @@ local function build(win)
     local footerStyle = (footerCfg == false and "none") or (type(footerCfg) == "table" and footerCfg.style) or "minimal"
     local FOOTER_H = (footerStyle == "none" and 0) or (footerStyle == "expanded" and (o.footerHeight or 48)) or (o.footerHeight or 22)
     local SIDE_W   = o.sidebarWidth or 210
-    local name     = o.name or UIF.NextId(theme.id .. "Window")
+    local name     = o.name or TAP.NextId(theme.id .. "Window")
     win._headerH, win._footerH = HEADER_H, FOOTER_H
 
     local mgr = CreateFrame("Frame", name, UIParent)
@@ -70,7 +70,7 @@ local function build(win)
     -- Header (drag handle)
     local header = CreateFrame("Button", nil, mgr); header:SetPoint("TOPLEFT", 1, -1); header:SetPoint("TOPRIGHT", -1, -1)
     header:SetHeight(HEADER_H)
-    local hbg = header:CreateTexture(nil, "BACKGROUND"); hbg:SetAllPoints(); UIF.paint(hbg, C.panel); win._hbg = hbg
+    local hbg = header:CreateTexture(nil, "BACKGROUND"); hbg:SetAllPoints(); TAP.paint(hbg, C.panel); win._hbg = hbg
     header:RegisterForDrag("LeftButton")
     header:SetScript("OnDragStart", function() mgr:StartMoving() end)
     header:SetScript("OnDragStop", function()
@@ -78,11 +78,11 @@ local function build(win)
         local point, _, _, px, py = mgr:GetPoint()
         if o.onMovePos then o.onMovePos({ point = point, x = px, y = py }) end
     end)
-    local logo = header:CreateTexture(nil, "ARTWORK"); UIF.paint(logo, C.accent); logo:SetSize(o.logo and 18 or 14, o.logo and 18 or 14); logo:SetPoint("LEFT", 16, 0)
+    local logo = header:CreateTexture(nil, "ARTWORK"); TAP.paint(logo, C.accent); logo:SetSize(o.logo and 18 or 14, o.logo and 18 or 14); logo:SetPoint("LEFT", 16, 0)
     if o.logo then logo:SetTexture(o.logo); logo:SetTexCoord(0, 1, 0, 1); logo:SetVertexColor(C.accent[1], C.accent[2], C.accent[3]) end
     mgr.logo = logo
     local title = header:CreateFontString(nil, "OVERLAY"); title:SetFont(theme.FONT, 15)
-    title:SetPoint("LEFT", logo, "RIGHT", 8, 0); title:SetText(o.title or "UIFoundry"); title:SetTextColor(unpack(C.text))
+    title:SetPoint("LEFT", logo, "RIGHT", 8, 0); title:SetText(o.title or "TAP"); title:SetTextColor(unpack(C.text))
     mgr.titleFS = title
 
     local close = theme:Button(mgr); close:Configure("X", 28, 28, "danger", function() mgr:Hide() end)
@@ -117,8 +117,8 @@ local function build(win)
     local side = CreateFrame("Frame", nil, mgr)
     side:SetPoint("TOPLEFT", 1, -HEADER_H); side:SetPoint("BOTTOMLEFT", 1, FOOTER_H + 1); side:SetWidth(win._sideW)
     win.side = side
-    local sbg = side:CreateTexture(nil, "BACKGROUND"); sbg:SetAllPoints(); UIF.paint(sbg, C.sidebar); win._sbg = sbg
-    local sedge = side:CreateTexture(nil, "ARTWORK"); UIF.paint(sedge, C.border); sedge:SetWidth(1); win._sedge = sedge
+    local sbg = side:CreateTexture(nil, "BACKGROUND"); sbg:SetAllPoints(); TAP.paint(sbg, C.sidebar); win._sbg = sbg
+    local sedge = side:CreateTexture(nil, "ARTWORK"); TAP.paint(sedge, C.border); sedge:SetWidth(1); win._sedge = sedge
     sedge:SetPoint("TOPRIGHT"); sedge:SetPoint("BOTTOMRIGHT")
 
     -- Bottom-of-sidebar reserve: room for an optional action button and/or the collapse toggle.
@@ -134,29 +134,29 @@ local function build(win)
 
     local nbar = CreateFrame("Frame", nil, side); nbar:SetWidth(6)
     nbar:SetPoint("TOPRIGHT", navScroll, "TOPRIGHT", 8, 0); nbar:SetPoint("BOTTOMRIGHT", navScroll, "BOTTOMRIGHT", 8, 0)
-    local ntrack = nbar:CreateTexture(nil, "BACKGROUND"); ntrack:SetAllPoints(); UIF.paint(ntrack, C.card, 0.5); win._ntrack = ntrack
+    local ntrack = nbar:CreateTexture(nil, "BACKGROUND"); ntrack:SetAllPoints(); TAP.paint(ntrack, C.card, 0.5); win._ntrack = ntrack
     local nthumb = CreateFrame("Button", nil, nbar); nthumb:SetPoint("TOP"); nthumb:SetWidth(6); nthumb:SetHeight(30)
     local nthumbTex = nthumb:CreateTexture(nil, "ARTWORK"); nthumbTex:SetAllPoints()
 
     function win:updateNavScrollbar()
         local vh, ch = navScroll:GetHeight(), navChild:GetHeight()
-        if not (UIF.CanRead(vh) and UIF.CanRead(ch)) then nbar:Hide(); return end
+        if not (TAP.CanRead(vh) and TAP.CanRead(ch)) then nbar:Hide(); return end
         local range = math.max(0, ch - vh)
         if range > 1 then
             nbar:Show()
             local trackH = nbar:GetHeight(); local thumbH = math.max(20, trackH * (vh / ch)); nthumb:SetHeight(thumbH)
-            local pos = navScroll:GetVerticalScroll(); local frac = UIF.CanRead(pos) and (pos / range) or 0
+            local pos = navScroll:GetVerticalScroll(); local frac = TAP.CanRead(pos) and (pos / range) or 0
             frac = math.min(1, math.max(0, frac))
             nthumb:ClearAllPoints(); nthumb:SetPoint("TOP", nbar, "TOP", 0, -frac * (trackH - thumbH))
-            UIF.paint(nthumbTex, theme.C.accent)
+            TAP.paint(nthumbTex, theme.C.accent)
         else nbar:Hide() end
     end
     navScroll:EnableMouseWheel(true)
-    navScroll:SetScript("OnMouseWheel", function(self, delta) UIF.scrollWheel(self, delta); win:updateNavScrollbar() end)
+    navScroll:SetScript("OnMouseWheel", function(self, delta) TAP.scrollWheel(self, delta); win:updateNavScrollbar() end)
     nthumb:RegisterForDrag("LeftButton")
     nthumb:SetScript("OnDragStart", function(self)
         self:SetScript("OnUpdate", function()
-            local range = UIF.scrollMax(navScroll); if range <= 0 then return end
+            local range = TAP.scrollMax(navScroll); if range <= 0 then return end
             local trackH = nbar:GetHeight(); local s = nbar:GetEffectiveScale()
             local _, cy = GetCursorPosition(); local top = nbar:GetTop()
             if top and s and s > 0 then
@@ -286,7 +286,7 @@ local function build(win)
     -- Themed scrollbar
     local sbar = CreateFrame("Frame", nil, mgr); sbar:SetWidth(8)
     sbar:SetPoint("TOPRIGHT", -6, -HEADER_H - 8); sbar:SetPoint("BOTTOMRIGHT", -6, FOOTER_H + 8)
-    local strack = sbar:CreateTexture(nil, "BACKGROUND"); strack:SetAllPoints(); UIF.paint(strack, C.card, 0.6); win._strack = strack
+    local strack = sbar:CreateTexture(nil, "BACKGROUND"); strack:SetAllPoints(); TAP.paint(strack, C.card, 0.6); win._strack = strack
     local sthumb = CreateFrame("Button", nil, sbar); sthumb:SetPoint("TOP"); sthumb:SetWidth(8); sthumb:SetHeight(40)
     local sthumbTex = sthumb:CreateTexture(nil, "ARTWORK"); sthumbTex:SetAllPoints()
     win.sbar = sbar
@@ -296,7 +296,7 @@ local function build(win)
         -- Midnight: scroll range/pos come back secret when content shows secret values, and
         -- comparing a secret throws. Heights are plain, so derive range from them and only
         -- read the live scroll offset when it's safe.
-        if not (UIF.CanRead(vh) and UIF.CanRead(ch)) then sbar:Hide(); return end
+        if not (TAP.CanRead(vh) and TAP.CanRead(ch)) then sbar:Hide(); return end
         local range = math.max(0, (ch or 0) - (vh or 0))
         if range > 1 and ch > 0 then
             sbar:Show()
@@ -304,10 +304,10 @@ local function build(win)
             local thumbH = math.max(24, trackH * (vh / ch))
             sthumb:SetHeight(thumbH)
             local pos = contentScroll:GetVerticalScroll()
-            local frac = UIF.CanRead(pos) and (pos / range) or 0
+            local frac = TAP.CanRead(pos) and (pos / range) or 0
             if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
             sthumb:ClearAllPoints(); sthumb:SetPoint("TOP", sbar, "TOP", 0, -frac * (trackH - thumbH))
-            UIF.paint(sthumbTex, theme.C.accent)
+            TAP.paint(sthumbTex, theme.C.accent)
         else
             sbar:Hide()
         end
@@ -315,12 +315,12 @@ local function build(win)
     win.updateScrollbar = updateScrollbar
 
     contentScroll:EnableMouseWheel(true)
-    contentScroll:SetScript("OnMouseWheel", function(self, delta) UIF.scrollWheel(self, delta); updateScrollbar() end)
+    contentScroll:SetScript("OnMouseWheel", function(self, delta) TAP.scrollWheel(self, delta); updateScrollbar() end)
 
     sthumb:RegisterForDrag("LeftButton")
     sthumb:SetScript("OnDragStart", function(self)
         self:SetScript("OnUpdate", function()
-            local range = UIF.scrollMax(contentScroll)   -- heights-based; safe vs secret range
+            local range = TAP.scrollMax(contentScroll)   -- heights-based; safe vs secret range
             if range <= 0 then return end
             local trackH = sbar:GetHeight()
             local s = sbar:GetEffectiveScale()
@@ -342,8 +342,8 @@ local function build(win)
         local textSize = expanded and 12 or 11
         local footer = CreateFrame("Frame", nil, mgr)
         footer:SetPoint("BOTTOMLEFT", 1, 1); footer:SetPoint("BOTTOMRIGHT", -1, 1); footer:SetHeight(FOOTER_H)
-        local fbg = footer:CreateTexture(nil, "BACKGROUND"); fbg:SetAllPoints(); UIF.paint(fbg, C.panel); win._fbg = fbg
-        local fedge = footer:CreateTexture(nil, "ARTWORK"); UIF.paint(fedge, C.border); fedge:SetHeight(1); win._fedge = fedge
+        local fbg = footer:CreateTexture(nil, "BACKGROUND"); fbg:SetAllPoints(); TAP.paint(fbg, C.panel); win._fbg = fbg
+        local fedge = footer:CreateTexture(nil, "ARTWORK"); TAP.paint(fedge, C.border); fedge:SetHeight(1); win._fedge = fedge
         fedge:SetPoint("TOPLEFT"); fedge:SetPoint("TOPRIGHT")
         local fcfg = (type(footerCfg) == "table") and footerCfg or {}
         if fcfg.left then
@@ -386,13 +386,13 @@ local function build(win)
     function win:ReskinChrome()
         local C = theme.C
         theme:StylePanel(mgr, C.bg, C.border, theme.winRadius)
-        if self._hbg then UIF.paint(self._hbg, C.panel) end
-        if self._sbg then UIF.paint(self._sbg, C.sidebar) end
-        if self._sedge then UIF.paint(self._sedge, C.border) end
-        if self._ntrack then UIF.paint(self._ntrack, C.card, 0.5) end
-        if self._strack then UIF.paint(self._strack, C.card, 0.6) end
-        if self._fbg then UIF.paint(self._fbg, C.panel) end
-        if self._fedge then UIF.paint(self._fedge, C.border) end
+        if self._hbg then TAP.paint(self._hbg, C.panel) end
+        if self._sbg then TAP.paint(self._sbg, C.sidebar) end
+        if self._sedge then TAP.paint(self._sedge, C.border) end
+        if self._ntrack then TAP.paint(self._ntrack, C.card, 0.5) end
+        if self._strack then TAP.paint(self._strack, C.card, 0.6) end
+        if self._fbg then TAP.paint(self._fbg, C.panel) end
+        if self._fedge then TAP.paint(self._fedge, C.border) end
         if mgr.titleFS then mgr.titleFS:SetTextColor(unpack(C.text)) end
         if self._fLeftFS then self._fLeftFS:SetTextColor(unpack(C.subtext)) end
         if self.sidebarButton then self.sidebarButton:Retheme() end
@@ -425,7 +425,7 @@ function WindowMixin:Refresh()
     -- opts.contentFluid.
     if o.contentFluid and self.content and self.builder then
         local vw = mgr:GetWidth() - (self._sideW or o.sidebarWidth or 210) - 24
-        if UIF.CanRead(vw) and vw > 120 then
+        if TAP.CanRead(vw) and vw > 120 then
             self.content:SetWidth(vw)
             self.builder.contentWidth = vw
         end
@@ -437,7 +437,7 @@ function WindowMixin:Refresh()
     -- header logo and sidebar button too (nav rows + scrollbar recolor on their own).
     if mgr.logo then
         if o.logo then mgr.logo:SetTexture(o.logo); mgr.logo:SetTexCoord(0, 1, 0, 1); mgr.logo:SetVertexColor(theme.C.accent[1], theme.C.accent[2], theme.C.accent[3])
-        else UIF.paint(mgr.logo, theme.C.accent) end
+        else TAP.paint(mgr.logo, theme.C.accent) end
     end
     if self.sidebarButton then self.sidebarButton:Retheme() end
     -- Re-apply the live theme font to window chrome (nav + title) so a global font swap sticks, and
@@ -446,7 +446,7 @@ function WindowMixin:Refresh()
     if mgr.titleFS then
         mgr.titleFS:SetFont(theme.FONT, 15)
         local page = self:_pageFor(self.view)
-        mgr.titleFS:SetText((o.title or "UIFoundry") .. ((page and page.titleSuffix) or ""))
+        mgr.titleFS:SetText((o.title or "TAP") .. ((page and page.titleSuffix) or ""))
     end
     for _, r in ipairs(self.navRows or {}) do r.fs:SetFont(theme.FONT, 12) end
     for _, h in ipairs(self.navHeaders or {}) do if h.fs then h.fs:SetFont(theme.FONT, 10) end end
@@ -479,7 +479,7 @@ function WindowMixin:Refresh()
     end)
     if not ok then
         local msg = tostring(errOrY)
-        print("|cffff5555UIFoundry window render error:|r " .. msg)
+        print("|cffff5555TAP window render error:|r " .. msg)
         -- Surface the error ON the page too, so a broken page is diagnosable at a glance.
         pcall(function()
             self.builder:Wrap("|cffff5555Render error on this page:|r\n" .. msg,
@@ -699,4 +699,4 @@ function WindowMixin:Hide() if self.built then self.frame:Hide() end end
 function WindowMixin:IsShown() return self.built and self.frame:IsShown() end
 function WindowMixin:GetBuilder() return self.builder end
 
-UIF.WindowMixin = WindowMixin
+TAP.WindowMixin = WindowMixin

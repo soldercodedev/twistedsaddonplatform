@@ -1,4 +1,4 @@
-# UIFoundry
+# TAP
 
 A self-skinned, **dependency-free** UI kit for World of Warcraft addons - extracted from
 *Twisteds Combat Cues* so a whole suite of tools can share one look.
@@ -12,7 +12,7 @@ typography and buttons to progress bars, form controls, cards, tabs, social butt
 pickers, dialogs, a pooled content builder, and a complete application window shell.
 
 The component gallery (`Showcase.lua`) has no slash command; open it with
-`UIFoundry._demoWindow:Toggle()` for local testing.
+`TAP._demoWindow:Toggle()` for local testing.
 
 ---
 
@@ -22,12 +22,12 @@ Ships as the addon folder **`TwistedsAddonSuite`** (the shared lib for the suite
 
 1. The folder lives at `Interface/AddOns/TwistedsAddonSuite/`.
 2. In each consuming addon's `.toc`: `## Dependencies: TwistedsAddonSuite` (the folder name)
-3. Reach it through the global (either works): `local UIF = _G.UIFoundry` (or `_G.TwistedsAddonSuite`)
+3. Reach it through the global (either works): `local UIF = _G.TAP` (or `_G.TwistedsAddonSuite`)
 
 ## Quick start
 
 ```lua
-local UIF   = _G.UIFoundry
+local UIF   = _G.TAP
 local theme = UIF:NewTheme({ name = "MyAddon", accent = { 0.13, 0.79, 0.59 } })
 
 local btn = theme:Button(parent)
@@ -58,17 +58,17 @@ A **skin** is a named preset that changes both the palette/accent **and the shap
 radius, border weight, and font. Pick one at creation or swap it live.
 
 ```lua
-local theme = UIFoundry:NewTheme({ name = "MyAddon", skin = "rounded" })
+local theme = TAP:NewTheme({ name = "MyAddon", skin = "rounded" })
 theme:ApplySkin("blizzard");  win:Refresh()      -- swap live, then re-render
 ```
 
-Built-in skins (`UIFoundry.SKIN_ORDER`): **flat** (default, square) · **rounded** (soft 8px) ·
+Built-in skins (`TAP.SKIN_ORDER`): **flat** (default, square) · **rounded** (soft 8px) ·
 **modern** (teal, deep palette, 12px) · **blizzard** (dark gold, square, heavy border) ·
 **neon** (magenta, 10px), plus a preset per **WoW expansion** (`classic`, `tbc`, `wrath`,
 `cataclysm`, `mop`, `wod`, `legion`, `bfa`, `shadowlands`, `dragonflight`, `warwithin`,
 `midnight`) - each
 its signature accent over a subtly tinted palette. `theme:SkinLabel(name)` gives a display
-label. Add your own to `UIFoundry.SKINS`.
+label. Add your own to `TAP.SKINS`.
 
 The skin's `radius` becomes the default corner for buttons, inputs, dropdowns, cards, badges,
 and every `StylePanel` panel; `borderSize` sets border weight. Override per-widget any time
@@ -265,7 +265,7 @@ ic:SetItem(5512);  ic:SetSpell(116);  ic:SetAura(21562)          -- swap live
 | **SocialButton** | brand icon + official brand color, opens a link (copy dialog) or custom handler |
 | **SocialBar** | a row of social buttons (icon-only or labeled) |
 
-Built-in brands (in `UIFoundry.BRANDS`, with bundled icons): **Discord, GitHub, Patreon,
+Built-in brands (in `TAP.BRANDS`, with bundled icons): **Discord, GitHub, Patreon,
 Twitch, YouTube**. Add your own with one line (see ICONS.md). Without an `iconDir` a social
 button falls back to its label on the brand color.
 

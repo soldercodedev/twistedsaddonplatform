@@ -1,8 +1,8 @@
--- UIFoundry - Forms.lua
+-- TAP - Forms.lua
 -- SearchBox: a live filter input (search glyph, placeholder, clear button).
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 ----------------------------------------------------------------------
 -- SearchBox: an input with a search glyph, placeholder, and a clear (x) button. onChange
@@ -19,7 +19,7 @@ function Mixin:SearchBox(parent, opts)
     if opts.icon then
         e.searchIcon = e:CreateTexture(nil, "ARTWORK"); e.searchIcon:SetSize(14, 14); e.searchIcon:SetPoint("LEFT", 7, 0)
         e.searchIcon:SetTexture(theme:ResolveIcon(opts.icon) or opts.icon)
-        local ic = UIF.toColor(opts.iconColor, C.subtext); e.searchIcon:SetVertexColor(ic[1], ic[2], ic[3])
+        local ic = TAP.toColor(opts.iconColor, C.subtext); e.searchIcon:SetVertexColor(ic[1], ic[2], ic[3])
     end
     e._ph = e:CreateFontString(nil, "OVERLAY"); theme:StyleFont(e._ph, opts, { fontSize = 11, textColor = C.subtext })
     e._ph:SetPoint("LEFT", opts.icon and 26 or 8, 0); e._ph:SetText(opts.placeholder or "Search...")

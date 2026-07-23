@@ -7,8 +7,8 @@
 
 local ADDON, ML = ...
 local Suite = _G.TAP
-local UIF   = _G.UIFoundry
-if not (Suite and UIF) then return end
+local TAP   = _G.TAP
+if not (Suite and TAP) then return end
 
 local Guide = {}
 ML.DungeonGuide = Guide
@@ -198,7 +198,7 @@ local function spellRow(b, C, x, y, w, e, kind, win)
     if sub ~= "" then b:Label(sub, x + 35, y - 21, C.subtext, 10) end
 
     -- Tier chip (a small colored dot + label) in a fixed right-hand zone (wide rows -> no name overlap).
-    b:Box(x + w - 142, y - 13, 9, 9, 1, 0, UIF.toColor(ti.color))
+    b:Box(x + w - 142, y - 13, 9, 9, 1, 0, TAP.toColor(ti.color))
     b:Label("|cff" .. ti.color .. tier .. "|r", x + w - 128, y - 9, C.text, 11)
     return y - rowH
 end

@@ -1,4 +1,4 @@
--- UIFoundry - IconPicker.lua
+-- TAP - IconPicker.lua
 -- A generic grid picker for a curated set of icons (bundled TGAs, atlas coords, or
 -- fileIDs). Each theme builds one picker; the icon set is supplied per open, so the same
 -- picker serves any list.
@@ -17,8 +17,8 @@
 --                                            -- pick, or the raw typed string for custom input.
 --   })
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 function Mixin:OpenIconPicker(opts)
     opts = opts or {}
@@ -37,7 +37,7 @@ function Mixin:OpenIconPicker(opts)
     if p and p._sig ~= sig then p:Hide(); p:SetParent(nil); theme._iconPicker = nil; p = nil end
 
     if not p then
-        local name = UIF.NextId(theme.id .. "IconPicker")
+        local name = TAP.NextId(theme.id .. "IconPicker")
         p = CreateFrame("Frame", name, UIParent)
         theme._iconPicker = p
         p._sig = sig

@@ -1,4 +1,4 @@
--- UIFoundry - Menu.lua
+-- TAP - Menu.lua
 -- A self-skinned dropdown menu (replaces Blizzard's MenuUtil for our dropdowns). Supports
 -- section headers, per-row icons, and per-row fonts.
 --
@@ -12,8 +12,8 @@
 -- getSelected(): the currently selected value (row gets an accent dot).
 -- onPick(value): chosen value; the menu then closes.
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 local function makeMenuItem(theme, menu)
     local b = CreateFrame("Button", nil, menu.child); b:SetHeight(22)
@@ -26,7 +26,7 @@ local function makeMenuItem(theme, menu)
     function b:Set(it, selected, onClick)
         local C = theme.C
         self._header = it.header
-        UIF.paint(self.hl, UIF.mix(C.card, C.accent, 0.55))
+        TAP.paint(self.hl, TAP.mix(C.card, C.accent, 0.55))
         self.fs:ClearAllPoints(); self.fs:SetPoint("RIGHT", -6, 0)
         local font = it.font and theme:ResolveFont(it.font) or theme.FONT
         if it.header then
@@ -39,13 +39,13 @@ local function makeMenuItem(theme, menu)
                 self.icon:SetTexture(theme:IconPath(it.icon) or it.icon)
                 if it.coords then self.icon:SetTexCoord(it.coords[1], it.coords[2], it.coords[3], it.coords[4])
                 else self.icon:SetTexCoord(unpack(theme.iconInset)) end
-                if it.iconColor then local ic = UIF.toColor(it.iconColor); self.icon:SetVertexColor(ic[1], ic[2], ic[3]) else self.icon:SetVertexColor(1, 1, 1) end
+                if it.iconColor then local ic = TAP.toColor(it.iconColor); self.icon:SetVertexColor(ic[1], ic[2], ic[3]) else self.icon:SetVertexColor(1, 1, 1) end
                 self.icon:Show(); self.fs:SetPoint("LEFT", 34, 0)
             else
                 self.icon:Hide(); self.fs:SetPoint("LEFT", 16, 0)
             end
             if selected then
-                self.fs:SetTextColor(C.accent[1], C.accent[2], C.accent[3]); UIF.paint(self.dot, C.accent); self.dot:Show()
+                self.fs:SetTextColor(C.accent[1], C.accent[2], C.accent[3]); TAP.paint(self.dot, C.accent); self.dot:Show()
             else
                 self.fs:SetTextColor(C.text[1], C.text[2], C.text[3]); self.dot:Hide()
             end
@@ -60,13 +60,13 @@ end
 local function ensureMenu(theme)
     if theme._menu then return theme._menu end
     local C = theme.C
-    local m = CreateFrame("Frame", UIF.NextId(theme.id .. "Menu"), UIParent)
+    local m = CreateFrame("Frame", TAP.NextId(theme.id .. "Menu"), UIParent)
     m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true); m:SetClampedToScreen(true); m:Hide()
     theme:StylePanel(m, C.panel, C.accent)
     m.scroll = CreateFrame("ScrollFrame", nil, m)
     m.scroll:SetPoint("TOPLEFT", 4, -4); m.scroll:SetPoint("BOTTOMRIGHT", -4, 4)
     m.child = CreateFrame("Frame", nil, m.scroll); m.child:SetSize(10, 10); m.scroll:SetScrollChild(m.child)
-    m.scroll:EnableMouseWheel(true); m.scroll:SetScript("OnMouseWheel", UIF.scrollWheel)
+    m.scroll:EnableMouseWheel(true); m.scroll:SetScript("OnMouseWheel", TAP.scrollWheel)
     m.items = {}
     local closer = CreateFrame("Button", nil, UIParent)
     closer:SetAllPoints(UIParent); closer:SetFrameStrata("FULLSCREEN_DIALOG"); closer:Hide()

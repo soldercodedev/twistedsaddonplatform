@@ -1,8 +1,8 @@
--- UIFoundry - Tabs.lua
+-- TAP - Tabs.lua
 -- NavBar: a horizontal navigation strip of segmented buttons (the docked page top-nav).
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 ----------------------------------------------------------------------
 -- NavBar: a horizontal navigation strip of segmented buttons - one per item, one marked active -
@@ -44,7 +44,7 @@ function Mixin:NavBar(parent)
         f:SetSize(math.max(1, width), h + 8)
         -- Accent baseline across the whole bar (the "docked header" underline).
         f.line:ClearAllPoints(); f.line:SetPoint("TOPLEFT", 0, -h - 2); f.line:SetWidth(math.max(1, width))
-        UIF.paint(f.line, theme.C.accent); f.line:SetAlpha(0.5); f.line:Show()
+        TAP.paint(f.line, theme.C.accent); f.line:SetAlpha(0.5); f.line:Show()
     end
     return f
 end

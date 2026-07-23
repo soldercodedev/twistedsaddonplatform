@@ -1,12 +1,12 @@
--- UIFoundry - Game.lua
+-- TAP - Game.lua
 -- Widgets that pull live data from the game client:
 --   UnitModel     - a full 3D character model (PlayerModel), drag-to-rotate.
 --   GameIcon      - the icon for any spell / buff / debuff / item, with the real game tooltip.
 --
 -- All guard for API availability, so they degrade to a placeholder icon on odd states.
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 local QMARK = "Interface\\ICONS\\INV_Misc_QuestionMark"
 
 -- For a truly ANIMATED backdrop, pass background = "model:<fileID or name>" to a 3D model
@@ -16,7 +16,7 @@ local QMARK = "Interface\\ICONS\\INV_Misc_QuestionMark"
 --   theme:UnitModel(parent, { unit = "player", background = "model:illidan" })
 --   theme:UnitModel(parent, { unit = "player", background = "model:122968" })   -- raw fileID
 -- Static scenes accept `animated = true` for a gentle breathing accent glow instead.
-UIF.MODEL_BACKDROPS = {
+TAP.MODEL_BACKDROPS = {
     illidan = 124614,   -- Creature/illidan/illidandark.m2  (verified, WeakAuras default)
     arthas  = 122968,   -- Creature/arthaslichking/arthaslichking.m2  (verified, WeakAuras default)
 }
@@ -29,11 +29,11 @@ UIF.MODEL_BACKDROPS = {
 --   "dusk" / a scene   -> a bundled scene backdrop (theme.sceneDir .. name .. ".tga")
 local function applyBackground(theme, tex, spec)
     if spec == nil then tex:Hide(); return end
-    if type(spec) == "table" then local c = UIF.toColor(spec); tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1); tex:Show(); return end
+    if type(spec) == "table" then local c = TAP.toColor(spec); tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1); tex:Show(); return end
     if type(spec) == "string" then
         if spec:find("^atlas:") then if tex.SetAtlas then pcall(tex.SetAtlas, tex, spec:sub(7), false) end
         elseif spec:find("\\") then tex:SetTexture(spec)
-        elseif UIF.parseHex(spec) then local r, g, b = UIF.parseHex(spec); tex:SetColorTexture(r, g, b)
+        elseif TAP.parseHex(spec) then local r, g, b = TAP.parseHex(spec); tex:SetColorTexture(r, g, b)
         else tex:SetTexture((theme.sceneDir or "") .. spec .. ".tga") end   -- scene name
         tex:SetTexCoord(0, 1, 0, 1); tex:Show()
     end
@@ -46,7 +46,7 @@ local function makeModel(theme, parent, opts, defZoom, defW, defH)
     opts = opts or {}
     local f = CreateFrame("Frame", nil, parent)
     f:SetSize(opts.width or opts.size or defW, opts.height or opts.size or defH)
-    theme:StylePanel(f, opts.bg and UIF.toColor(opts.bg) or theme.C.bg, UIF.toColor(opts.borderColor, theme.C.accent))
+    theme:StylePanel(f, opts.bg and TAP.toColor(opts.bg) or theme.C.bg, TAP.toColor(opts.borderColor, theme.C.accent))
     -- Scene / background behind the 3D model (the character renders on top; the scene shows
     -- around it). Sits above the panel fill, below the model.
     local sceneTex = f:CreateTexture(nil, "BACKGROUND", nil, 1)
@@ -83,7 +83,7 @@ local function makeModel(theme, parent, opts, defZoom, defW, defH)
         if type(spec) == "string" and spec:find("^model:") then
             local sm = ensureSceneModel(); sm:Show()
             local id = spec:sub(7)
-            local num = tonumber(id) or UIF.MODEL_BACKDROPS[id]   -- named preset or raw fileID
+            local num = tonumber(id) or TAP.MODEL_BACKDROPS[id]   -- named preset or raw fileID
             if sm.SetModel then pcall(sm.SetModel, sm, num or id) end
             if sm.SetCamera then pcall(sm.SetCamera, sm, 0) end
             self.sceneTex:Hide(); self.sceneGlow:Hide(); self._glowAnim:Stop()

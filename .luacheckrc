@@ -36,7 +36,7 @@ files["TAP_MythicLedger/Scoring/Tests.lua"] = { ignore = { "411" } }      -- a t
 -- pollution (luacheck warning 111), matching the bytecode gate's whitelist.
 globals = {
   -- Namespace exports (also written explicitly as _G.<name>)
-  "UIFoundry", "TAP",
+  "TAP",
   -- SavedVariables (declared in the TOCs; the client populates these as globals)
   "TAPDB", "TAP_CombatAlertsDB", "TAP_CombatAlertsCharDB", "TAP_MythicLedgerDB",
   -- WoW frame we stash private fields on (GameTooltip._tapmlKey/_tapmlOwned); marked writable so the

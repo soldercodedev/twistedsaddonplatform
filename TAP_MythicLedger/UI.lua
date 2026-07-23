@@ -2,7 +2,7 @@
 -- The module's single page, an internal tab bar (Overview / Runs / Dungeons / Characters /
 -- Players / Bests / Settings / Debug) with Run-Details and Player-Details sub-views, plus the
 -- post-run summary modal. Tables are Lua-sorted/filtered row loops rendered into the suite's
--- shared scroll frame (UIFoundry has no table widget), styled with the shared Builder widgets.
+-- shared scroll frame (TAP has no table widget), styled with the shared Builder widgets.
 
 local ADDON, ML = ...
 local API     = ML.API
@@ -1030,7 +1030,7 @@ local GU_ICON_SZ = 27   -- 50% larger than the old 18px
 -- Group-utility dispel tiles need RGB tables keyed by the catalog's lowercase school (e.type). Derive
 -- them from the shared ML.SCHOOL_COLOR (hex, Capitalized) so the tiles match the Dungeon Guide exactly.
 local GU_SCHOOL_COL = {}
-for name, hex in pairs(ML.SCHOOL_COLOR) do GU_SCHOOL_COL[name:lower()] = _G.UIFoundry.toColor(hex) end
+for name, hex in pairs(ML.SCHOOL_COLOR) do GU_SCHOOL_COL[name:lower()] = _G.TAP.toColor(hex) end
 local function renderGuIcons(b, tile, tileX, tileTopY, tileW, tileH, list, startIdx)
     local n = startIdx
     if type(list) ~= "table" or #list == 0 then return n end
@@ -4041,8 +4041,8 @@ function UI.ShowScoreboard(run, opts)
     -- restore it (all the modal's fontstrings capture theme.FONT at creation).
     local prevFont = theme.FONT
     local sbFontKey = DB.Settings().scoreboardFont
-    if sbFontKey and sbFontKey ~= "" and _G.UIFoundry and _G.UIFoundry.ResolveFontFile then
-        theme.FONT = _G.UIFoundry.ResolveFontFile(theme:ResolveFont(sbFontKey))
+    if sbFontKey and sbFontKey ~= "" and _G.TAP and _G.TAP.ResolveFontFile then
+        theme.FONT = _G.TAP.ResolveFontFile(theme:ResolveFont(sbFontKey))
     end
 
     -- Party sorted by DPS (highest first); the player's own row is marked.

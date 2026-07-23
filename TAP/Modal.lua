@@ -1,4 +1,4 @@
--- UIFoundry - Modal.lua
+-- TAP - Modal.lua
 -- Centered dialog windows over a dimmed backdrop. One flexible builder (theme:Modal) plus
 -- ready-made Alert / Confirm helpers. Modals stack, support variants (accent color
 -- + icon), a custom content region, and a footer button row.
@@ -12,8 +12,8 @@
 --       buttons = { { label = "Close", onClick = function(m) m:Close() end } } })
 --   m:Open()
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 local function ensureBackdrop(theme)
     if theme._modalBackdrop then return theme._modalBackdrop end
@@ -52,19 +52,19 @@ function Mixin:Modal(opts)
     ensureBackdrop(theme)
     local w = opts.width or 380
     local pad = 16
-    local variant = opts.variant and UIF.BADGE_VARIANTS[opts.variant]
-    local accentCol = UIF.toColor(opts.accentColor or opts.color,
+    local variant = opts.variant and TAP.BADGE_VARIANTS[opts.variant]
+    local accentCol = TAP.toColor(opts.accentColor or opts.color,
         variant and (type(variant) == "string" and C[variant] or variant) or C.accent)
 
     local modal = {}
-    local name = UIF.NextId(theme.id .. "Modal")
+    local name = TAP.NextId(theme.id .. "Modal")
     local f = CreateFrame("Frame", name, UIParent)
     modal.frame = f
     f:SetFrameStrata("FULLSCREEN_DIALOG"); f:SetToplevel(true); f:SetClampedToScreen(true); f:Hide()
     theme:StylePanel(f, C.panel, C.border)
     f:EnableMouse(true); f:SetMovable(true)
 
-    local bar = f:CreateTexture(nil, "ARTWORK"); bar:SetPoint("TOPLEFT", 1, -1); bar:SetPoint("TOPRIGHT", -1, -1); bar:SetHeight(3); UIF.paint(bar, accentCol)
+    local bar = f:CreateTexture(nil, "ARTWORK"); bar:SetPoint("TOPLEFT", 1, -1); bar:SetPoint("TOPRIGHT", -1, -1); bar:SetHeight(3); TAP.paint(bar, accentCol)
 
     -- Header (drag handle) with optional icon + title + close.
     local hd = CreateFrame("Button", nil, f); hd:SetPoint("TOPLEFT", 1, -4); hd:SetPoint("TOPRIGHT", -1, -4); hd:SetHeight(34)
@@ -126,7 +126,7 @@ function Mixin:Modal(opts)
         modal._bodyFS = {}
         for i, l in ipairs(lines) do
             local txt = type(l) == "table" and l.text or l
-            local col = (type(l) == "table" and l.color) and UIF.toColor(l.color, C.text) or (i == 1 and C.text or C.subtext)
+            local col = (type(l) == "table" and l.color) and TAP.toColor(l.color, C.text) or (i == 1 and C.text or C.subtext)
             if type(l) == "table" and type(l.color) == "string" and C[l.color] then col = C[l.color] end
             local fs = body:CreateFontString(nil, "OVERLAY")
             fs:SetFont(theme.FONT, 12); fs:SetJustifyH("LEFT"); fs:SetWordWrap(true); fs:SetWidth(w - 2 * pad)

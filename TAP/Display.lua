@@ -1,11 +1,11 @@
--- UIFoundry - Display.lua
+-- TAP - Display.lua
 -- Presentational components: Badge, Card, StatTile, Separator. All styleable.
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 -- Named badge variants map to a fill; text color is chosen for contrast (or overridden).
-UIF.BADGE_VARIANTS = {
+TAP.BADGE_VARIANTS = {
     accent  = "accent",
     neutral = { 0.30, 0.33, 0.40 },
     success = { 0.13, 0.53, 0.33 },
@@ -21,7 +21,7 @@ function Mixin:_accentBar(frame, color, width)
     local rInset = (self.radius and self.radius > 0) and self.radius or 0
     local bar = frame:CreateTexture(nil, "ARTWORK"); bar:SetWidth(width or 3)
     bar:SetPoint("TOPLEFT", bs, -rInset); bar:SetPoint("BOTTOMLEFT", bs, rInset)
-    UIF.paint(bar, color); frame.accentBar = bar
+    TAP.paint(bar, color); frame.accentBar = bar
     return bar
 end
 
@@ -46,8 +46,8 @@ end
 function Mixin:Badge(parent, opts)
     opts = opts or {}
     local theme, C = self, self.C
-    local variant = UIF.BADGE_VARIANTS[opts.variant or "accent"] or C.accent
-    local fill = UIF.toColor(opts.color, type(variant) == "string" and C[variant] or variant)
+    local variant = TAP.BADGE_VARIANTS[opts.variant or "accent"] or C.accent
+    local fill = TAP.toColor(opts.color, type(variant) == "string" and C[variant] or variant)
     local f = CreateFrame("Frame", nil, parent)
     local borderTex = f:CreateTexture(nil, "BACKGROUND", nil, -1); borderTex:SetAllPoints(); borderTex:Hide()
     local bg = f:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); f.bg = bg
@@ -55,7 +55,7 @@ function Mixin:Badge(parent, opts)
     local dot
     if opts.dot then
         dot = f:CreateTexture(nil, "ARTWORK"); dot:SetSize(5, 5); dot:SetPoint("LEFT", pad, 0)
-        UIF.paint(dot, UIF.toColor(opts.dotColor, { 1, 1, 1 }))
+        TAP.paint(dot, TAP.toColor(opts.dotColor, { 1, 1, 1 }))
     end
     local fs = f:CreateFontString(nil, "OVERLAY")
     theme:StyleFont(fs, opts, { fontSize = 10, textColor = { 1, 1, 1 } })
@@ -94,13 +94,13 @@ function Mixin:Card(parent, opts)
     opts = opts or {}
     local theme, C = self, self.C
     -- Colored variants tint the background and color the accent bar / title.
-    local variant = opts.variant and UIF.BADGE_VARIANTS[opts.variant]
-    local accentCol = UIF.toColor(opts.color or opts.accentColor,
+    local variant = opts.variant and TAP.BADGE_VARIANTS[opts.variant]
+    local accentCol = TAP.toColor(opts.color or opts.accentColor,
         variant and (type(variant) == "string" and C[variant] or variant) or C.accent)
-    local bgCol = UIF.toColor(opts.bg, opts.variant and UIF.mix(C.card, accentCol, 0.12) or C.card)
+    local bgCol = TAP.toColor(opts.bg, opts.variant and TAP.mix(C.card, accentCol, 0.12) or C.card)
 
     local f = CreateFrame("Frame", nil, parent); f:SetSize(opts.width or 300, opts.height or 160)
-    theme:StylePanel(f, bgCol, UIF.toColor(opts.borderColor, C.border))
+    theme:StylePanel(f, bgCol, TAP.toColor(opts.borderColor, C.border))
     theme:StyleFrame(f, opts)
     local pad = opts.padding or 14
     local topPad, botPad = pad, pad
@@ -109,7 +109,7 @@ function Mixin:Card(parent, opts)
         local hdr = CreateFrame("Frame", nil, f); hdr:SetPoint("TOPLEFT", 0, 0); hdr:SetPoint("TOPRIGHT", 0, 0); f.header = hdr
         -- On a colored (tinted) card, brighten the title toward white so it pops against the
         -- tint instead of blending in; the accent bar keeps the true variant color.
-        local titleCol = opts.variant and UIF.mix(accentCol, { 1, 1, 1 }, 0.45) or opts.titleColor
+        local titleCol = opts.variant and TAP.mix(accentCol, { 1, 1, 1 }, 0.45) or opts.titleColor
         local t = theme:Heading(hdr, { text = opts.title, role = opts.titleRole or "h4", textColor = titleCol })
         t:SetPoint("TOPLEFT", pad, -pad); f.title = t
         topPad = pad + 22
@@ -164,7 +164,7 @@ end
 --   "compact" - flat card, big value, a two-line data footer (Best / range / last-N / this week)
 local function styledStatTile(theme, parent, opts)
     local C = theme.C
-    local accent = opts.accent and UIF.toColor(opts.accent) or UIF.toColor(C.accent) or { 0.6, 0.62, 0.7 }
+    local accent = opts.accent and TAP.toColor(opts.accent) or TAP.toColor(C.accent) or { 0.6, 0.62, 0.7 }
     local style = opts.style
     local w = opts.width or 150
     local pad = opts.padding or 12
@@ -173,14 +173,14 @@ local function styledStatTile(theme, parent, opts)
     -- Card ground + border per style.
     local bg, borderCol
     if style == "panel" then
-        bg = UIF.mix(C.card, { 0, 0, 0 }, 0.22)             -- darker stone/metal
-        borderCol = UIF.mix(C.border, accent, 0.55)
+        bg = TAP.mix(C.card, { 0, 0, 0 }, 0.22)             -- darker stone/metal
+        borderCol = TAP.mix(C.border, accent, 0.55)
     elseif style == "compact" then
         bg = C.card
-        borderCol = UIF.mix(C.border, accent, 0.30)
+        borderCol = TAP.mix(C.border, accent, 0.30)
     else -- clean
         bg = C.card
-        borderCol = UIF.mix(C.border, accent, 0.42)         -- thin accent-tinted border
+        borderCol = TAP.mix(C.border, accent, 0.42)         -- thin accent-tinted border
     end
     local f = theme:Card(parent, { width = w, height = h, bg = bg, borderColor = borderCol, padding = pad })
     local body, bodyW = f.body, w - 2 * pad
@@ -192,15 +192,15 @@ local function styledStatTile(theme, parent, opts)
             local badge = 26
             local frame = body:CreateTexture(nil, "ARTWORK", nil, 1)
             frame:SetSize(badge, badge); frame:SetPoint("TOPLEFT", 0, 0)
-            theme:PaintShape(frame, UIF.mix(C.card, accent, 0.40), opts.badgeShape or "md", badge, badge, 1)
+            theme:PaintShape(frame, TAP.mix(C.card, accent, 0.40), opts.badgeShape or "md", badge, badge, 1)
             local g = theme:Glyph(body, { icon = opts.icon, variant = opts.iconVariant, size = 15,
-                color = UIF.mix(accent, { 1, 1, 1 }, 0.15) })
+                color = TAP.mix(accent, { 1, 1, 1 }, 0.15) })
             g:SetPoint("CENTER", frame, "CENTER", 0, 0); f.iconGlyph = g
             labelX = badge + 8
         else
             local isz = opts.iconSize or 14
             local g = theme:Glyph(body, { icon = opts.icon, variant = opts.iconVariant, size = isz,
-                color = opts.iconColor or UIF.mix(C.subtext, accent, 0.5) })
+                color = opts.iconColor or TAP.mix(C.subtext, accent, 0.5) })
             -- A large icon fills the right side of the card (hero style); a small one tucks top-right.
             if isz >= 30 then g:SetPoint("RIGHT", 4, 0) else g:SetPoint("TOPRIGHT", 0, -1) end
             f.iconGlyph = g
@@ -237,7 +237,7 @@ local function styledStatTile(theme, parent, opts)
     if style == "panel" then
         local gem = body:CreateTexture(nil, "OVERLAY")
         gem:SetSize(9, 9); gem:SetPoint("TOPRIGHT", -1, -2)
-        UIF.paint(gem, accent); gem:SetRotation(0.7854); f.gem = gem   -- 45deg -> diamond
+        TAP.paint(gem, accent); gem:SetRotation(0.7854); f.gem = gem   -- 45deg -> diamond
     end
 
     theme:_wireTip(f, opts)   -- rich tipData wins over simple tip; Card frames aren't mouse-enabled
@@ -250,15 +250,15 @@ function Mixin:StatTile(parent, opts)
     if opts.style then return styledStatTile(self, parent, opts) end
     local theme, C = self, self.C
     -- The accent color drives the border tint, the badge/meter, and (by default) the value.
-    local accent = opts.accent and UIF.toColor(opts.accent) or nil
+    local accent = opts.accent and TAP.toColor(opts.accent) or nil
     local hero = opts.hero and accent or nil
     local borderCol = opts.borderColor
-    if accent and borderCol == nil then borderCol = UIF.mix(C.border, accent, hero and 0.55 or 0.35) end
+    if accent and borderCol == nil then borderCol = TAP.mix(C.border, accent, hero and 0.55 or 0.35) end
     local valueCol = opts.valueColor
     if valueCol == nil and accent then valueCol = accent end
     -- Hero cards get a faint metric wash so they read as "colored" without a solid fill.
     local bgCol = opts.bg
-    if bgCol == nil and hero then bgCol = UIF.mix(C.card, accent, 0.10) end
+    if bgCol == nil and hero then bgCol = TAP.mix(C.card, accent, 0.10) end
 
     local pad = opts.padding or 12
     local f = theme:Card(parent, { width = opts.width or 150, height = opts.height or 72,
@@ -277,7 +277,7 @@ function Mixin:StatTile(parent, opts)
             bTex:SetSize(badge, badge); bTex:SetPoint("TOPLEFT", 0, -1)
             theme:PaintShape(bTex, accent, opts.badgeShape or "md", badge, badge, 1); f.iconChip = bTex
             local g = theme:Glyph(f.body, { icon = opts.icon, variant = opts.iconVariant,
-                size = isz, color = opts.iconColor or UIF.mix(C.card, { 0, 0, 0 }, 0.35) })
+                size = isz, color = opts.iconColor or TAP.mix(C.card, { 0, 0, 0 }, 0.35) })
             g:SetPoint("CENTER", bTex, "CENTER", 0, 0); f.iconGlyph = g
             labelX = badge + 10; labelDY = -3
         else
@@ -308,7 +308,7 @@ function Mixin:StatTile(parent, opts)
         local bodyW = (opts.width or 150) - 2 * pad
         local track = f.body:CreateTexture(nil, "ARTWORK", nil, 1)
         track:SetHeight(mh); track:SetPoint("BOTTOMLEFT", 0, 0); track:SetPoint("BOTTOMRIGHT", 0, 0)
-        theme:PaintShape(track, UIF.mix(C.card, { 0, 0, 0 }, 0.35), "pill", bodyW, mh, 0.9)
+        theme:PaintShape(track, TAP.mix(C.card, { 0, 0, 0 }, 0.35), "pill", bodyW, mh, 0.9)
         local fill = f.body:CreateTexture(nil, "ARTWORK", nil, 2)
         fill:SetHeight(mh); fill:SetPoint("BOTTOMLEFT", 0, 0); fill:SetWidth(math.max(mh, frac * bodyW))
         theme:PaintShape(fill, accent, "pill", bodyW, mh, 1)
@@ -316,8 +316,8 @@ function Mixin:StatTile(parent, opts)
     end
 
     if opts.delta then
-        local trendCol = opts.trend == "up" and UIF.BADGE_VARIANTS.success
-            or opts.trend == "down" and UIF.BADGE_VARIANTS.danger or C.subtext
+        local trendCol = opts.trend == "up" and TAP.BADGE_VARIANTS.success
+            or opts.trend == "down" and TAP.BADGE_VARIANTS.danger or C.subtext
         local d = theme:Heading(f.body, { text = opts.delta, role = "caption", textColor = trendCol })
         d:SetPoint("BOTTOMRIGHT", 0, hero and 10 or 2); f.deltaFS = d
     end
@@ -335,12 +335,12 @@ end
 function Mixin:Separator(parent, opts)
     opts = opts or {}
     local theme, C = self, self.C
-    local col = UIF.toColor(opts.color, C.border)
+    local col = TAP.toColor(opts.color, C.border)
     local thick = opts.thickness or 1
     local f = CreateFrame("Frame", nil, parent)
     if opts.vertical then
         f:SetSize(thick, opts.height or 40)
-        local line = f:CreateTexture(nil, "ARTWORK"); line:SetAllPoints(); UIF.paint(line, col, opts.alpha or 0.8)
+        local line = f:CreateTexture(nil, "ARTWORK"); line:SetAllPoints(); TAP.paint(line, col, opts.alpha or 0.8)
     else
         local w = opts.width or 400
         f:SetSize(w, math.max(thick, opts.label and 14 or thick))
@@ -348,10 +348,10 @@ function Mixin:Separator(parent, opts)
             local fs = theme:Heading(f, { text = opts.label, role = "overline", textColor = opts.textColor })
             fs:SetPoint("CENTER"); fs:SetJustifyH("CENTER")
             local lw = fs:GetStringWidth() + 16
-            local l = f:CreateTexture(nil, "ARTWORK"); l:SetHeight(thick); l:SetPoint("LEFT"); l:SetPoint("RIGHT", f, "CENTER", -lw / 2, 0); UIF.paint(l, col, opts.alpha or 0.8)
-            local r = f:CreateTexture(nil, "ARTWORK"); r:SetHeight(thick); r:SetPoint("RIGHT"); r:SetPoint("LEFT", f, "CENTER", lw / 2, 0); UIF.paint(r, col, opts.alpha or 0.8)
+            local l = f:CreateTexture(nil, "ARTWORK"); l:SetHeight(thick); l:SetPoint("LEFT"); l:SetPoint("RIGHT", f, "CENTER", -lw / 2, 0); TAP.paint(l, col, opts.alpha or 0.8)
+            local r = f:CreateTexture(nil, "ARTWORK"); r:SetHeight(thick); r:SetPoint("RIGHT"); r:SetPoint("LEFT", f, "CENTER", lw / 2, 0); TAP.paint(r, col, opts.alpha or 0.8)
         else
-            local line = f:CreateTexture(nil, "ARTWORK"); line:SetHeight(thick); line:SetPoint("LEFT"); line:SetPoint("RIGHT"); UIF.paint(line, col, opts.alpha or 0.8)
+            local line = f:CreateTexture(nil, "ARTWORK"); line:SetHeight(thick); line:SetPoint("LEFT"); line:SetPoint("RIGHT"); TAP.paint(line, col, opts.alpha or 0.8)
         end
     end
     return f

@@ -1,18 +1,18 @@
--- UIFoundry - Fonts.lua
+-- TAP - Fonts.lua
 -- The bundled font registry: WoW built-ins + the TTF/OTF fonts packed under assets/fonts
 -- (shared from Twisteds Combat Alerts). A theme uses this as its default `fonts` list, so
 -- font dropdowns / FontSelect / the Preview font picker work out of the box, and any style
 -- opts.font can be given as a key (e.g. "UBUNTU") instead of a full path.
 
-local ADDON, UIF = ...
+local ADDON, TAP = ...
 
 local FDIR = "Interface\\AddOns\\TAP\\assets\\fonts\\"
 
 -- The single global UI-font default. There is no per-theme / per-skin font: the selected font (set
--- via UIF.SetGlobalFont from the appearance page) always wins and is shared by every theme.
-UIF.DEFAULT_FONT_KEY = "UBUNTU"
+-- via TAP.SetGlobalFont from the appearance page) always wins and is shared by every theme.
+TAP.DEFAULT_FONT_KEY = "UBUNTU"
 
-UIF.DEFAULT_FONTS = {
+TAP.DEFAULT_FONTS = {
     -- WoW built-ins (always available)
     { key = "FRIZQT",   label = "Friz Quadrata (default)", path = "Fonts\\FRIZQT__.TTF" },
     { key = "ARIALN",   label = "Arial Narrow",           path = "Fonts\\ARIALN.TTF" },
@@ -38,12 +38,12 @@ UIF.DEFAULT_FONTS = {
 }
 
 -- The theme's font registry (defaults to the bundled set) as { key, label, path } rows.
-function UIF.ThemeMixin:FontList()
-    return self.fonts or UIF.DEFAULT_FONTS
+function TAP.ThemeMixin:FontList()
+    return self.fonts or TAP.DEFAULT_FONTS
 end
 
 -- Label for a font key.
-function UIF.ThemeMixin:FontLabel(key)
+function TAP.ThemeMixin:FontLabel(key)
     for _, f in ipairs(self:FontList()) do if f.key == key then return f.label end end
     return key
 end

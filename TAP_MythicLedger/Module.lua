@@ -4,9 +4,9 @@
 
 local ADDON, ML = ...
 local Suite = _G.TAP
-local UIF   = _G.UIFoundry
+local TAP   = _G.TAP
 
-if not (Suite and UIF) then
+if not (Suite and TAP) then
     print("|cffff5555TAP: Mythic Ledger|r requires the Twisteds Addon Platform. Enable TAP and reload.")
     return
 end

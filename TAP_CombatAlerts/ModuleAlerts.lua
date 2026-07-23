@@ -4,7 +4,7 @@
 -- suite's Builder, and wires the module on/off to the engine's master enable (TCC.SetEnabled).
 
 local addonName, TCC = ...
-local UIF   = _G.UIFoundry
+local TAP   = _G.TAP
 local Suite = _G.TAP
 if not Suite then return end
 
@@ -193,7 +193,7 @@ local function openNewAlertModal(onPick)
                 local de = cd:CreateFontString(nil, "OVERLAY"); de:SetFont(theme.FONT, 11)
                 de:SetPoint("TOPLEFT", cd, "TOPLEFT", 66, -38); de:SetPoint("RIGHT", cd, "RIGHT", -12, 0)
                 de:SetJustifyH("LEFT"); de:SetWordWrap(true); de:SetTextColor(unpack(C.subtext)); de:SetText(card.desc)
-                cd:SetScript("OnEnter", function(self) theme:StylePanel(self, UIF.mix(C.card, C.accent, 0.18), C.accent) end)
+                cd:SetScript("OnEnter", function(self) theme:StylePanel(self, TAP.mix(C.card, C.accent, 0.18), C.accent) end)
                 cd:SetScript("OnLeave", function(self) theme:StylePanel(self, C.card, C.border) end)
                 cd._kind = card.kind
                 cd:SetScript("OnClick", function(self) modal:Close(); if onPick then onPick(self._kind) end end)
@@ -292,7 +292,7 @@ local function openSpellItemSearch(theme, mode, onPick)
                 theme:StylePanel(r, C.bg)
                 r.ic = r:CreateTexture(nil, "ARTWORK"); r.ic:SetSize(16, 16); r.ic:SetPoint("LEFT", 3, 0)
                 r.fs = r:CreateFontString(nil, "OVERLAY"); r.fs:SetFont(theme.FONT, 12); r.fs:SetPoint("LEFT", 24, 0); r.fs:SetTextColor(unpack(C.text))
-                r:SetScript("OnEnter", function(self) theme:StylePanel(self, UIF.mix(C.bg, C.accent, 0.30)) end)
+                r:SetScript("OnEnter", function(self) theme:StylePanel(self, TAP.mix(C.bg, C.accent, 0.30)) end)
                 r:SetScript("OnLeave", function(self) theme:StylePanel(self, C.bg) end)
                 r:Hide(); rows[i] = r
             end
@@ -339,13 +339,13 @@ local function renderParams(P, cond, y)
     -- classSpec: two dropdowns (single class + single spec), bound to cond.class / cond.spec.
     if cond.type == "classSpec" then
         local classes = {}
-        for _, cls in ipairs(UIF.GetClassList()) do classes[#classes + 1] = { cls.token, cls.name } end
+        for _, cls in ipairs(TAP.GetClassList()) do classes[#classes + 1] = { cls.token, cls.name } end
         b:Label("Class", P.x, y - 2, C.subtext)
         local dd = b:Dropdown(P.x + 70, y); dd:SetChoices(160, classes, function() return cond.class end,
             function(v) cond.class = v; cond.spec = "all"; softApply(); P.repage() end)
         y = y - 30
         local specs = {}
-        for _, sp in ipairs(UIF.GetSpecList(cond.class, true)) do specs[#specs + 1] = { tostring(sp.id), sp.name } end
+        for _, sp in ipairs(TAP.GetSpecList(cond.class, true)) do specs[#specs + 1] = { tostring(sp.id), sp.name } end
         b:Label("Spec", P.x, y - 2, C.subtext)
         local sd = b:Dropdown(P.x + 70, y); sd:SetChoices(180, specs, function() return tostring(cond.spec or "all") end,
             function(v) cond.spec = (v == "all") and "all" or (tonumber(v) or v); softApply() end)

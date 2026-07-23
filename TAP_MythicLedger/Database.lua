@@ -37,7 +37,7 @@ local DEFAULTS = {
         scoreboardScale    = 1.05,      -- end-of-run scoreboard size (capped to fit the screen)
         scoreboardFont     = "",        -- font key for the scoreboard ("" = use the UI font)
         scoreboardSound    = true,      -- play a sound when the scoreboard opens
-        scoreboardSoundKey = "VictoryFanfare", -- which sound (see UIF.SOUNDS)
+        scoreboardSoundKey = "VictoryFanfare", -- which sound (see TAP.SOUNDS)
         scoreboardSoundChannel = "Master",     -- sound channel for the scoreboard sound
         scoreboardSoundWhen = "END",    -- END = end-of-run popup only; ALWAYS = every time it's viewed
         debug              = false,
@@ -52,7 +52,7 @@ local DEFAULTS = {
             includeNotes      = false,      -- notes are NEVER shown automatically unless opted in
             joinDelay         = 3,          -- seconds after joining before recaps may fire
             sound             = true,       -- play a sound (once) when returning players are found
-            soundKey          = "Applause", -- which sound (see UIF.SOUNDS)
+            soundKey          = "Applause", -- which sound (see TAP.SOUNDS)
             soundChannel      = "Master",   -- sound channel for the recap sound
         },
         -- On-screen post-pull DEATH REPORT: after combat drops (or at run end), flash who died since the

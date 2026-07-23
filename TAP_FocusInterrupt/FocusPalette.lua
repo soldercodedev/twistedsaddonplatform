@@ -5,9 +5,9 @@
 -- and re-skinned on the suite theme; the behavior is unchanged.
 
 local addonName, FTI = ...
-local UIF   = _G.UIFoundry
+local TAP   = _G.TAP
 local Suite = _G.TAP
-local theme = (Suite and Suite.uiTheme) or (UIF and UIF:NewTheme({ name = "TAP_FocusInterruptFocus" }))
+local theme = (Suite and Suite.uiTheme) or (TAP and TAP:NewTheme({ name = "TAP_FocusInterruptFocus" }))
 
 local MARK_NAMES = { [1] = "Star", [2] = "Circle", [3] = "Diamond", [4] = "Triangle",
                      [5] = "Moon", [6] = "Square", [7] = "Cross (X)", [8] = "Skull" }

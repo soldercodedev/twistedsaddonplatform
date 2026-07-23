@@ -1,11 +1,11 @@
--- UIFoundry - ColorPicker.lua
+-- TAP - ColorPicker.lua
 -- A self-skinned color picker: live preview + hex box + RGB sliders + a preset grid.
 -- Each theme builds one draggable, Escape-closable picker on demand.
 --
 --   theme:OpenColorPicker(r, g, b, function(r, g, b) ... end)   -- callback fires live
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 -- Bootstrap-ish preset palette (8 columns).
 local PRESETS = {
@@ -17,7 +17,7 @@ local PRESETS = {
 local function ensurePicker(theme)
     if theme._cpick then return theme._cpick end
     local C = theme.C
-    local name = UIF.NextId(theme.id .. "ColorPicker")
+    local name = TAP.NextId(theme.id .. "ColorPicker")
     local p = CreateFrame("Frame", name, UIParent)
     theme._cpick = p
     p:SetSize(260, 340); p:SetPoint("CENTER"); p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetToplevel(true); p:SetClampedToScreen(true)
@@ -26,7 +26,7 @@ local function ensurePicker(theme)
     tinsert(UISpecialFrames, name)
 
     local hd = CreateFrame("Button", nil, p); hd:SetPoint("TOPLEFT", 1, -1); hd:SetPoint("TOPRIGHT", -1, -1); hd:SetHeight(26)
-    local hbg = hd:CreateTexture(nil, "BACKGROUND"); hbg:SetAllPoints(); UIF.paint(hbg, C.card)
+    local hbg = hd:CreateTexture(nil, "BACKGROUND"); hbg:SetAllPoints(); TAP.paint(hbg, C.card)
     hd:RegisterForDrag("LeftButton")
     hd:SetScript("OnDragStart", function() p:StartMoving() end)
     hd:SetScript("OnDragStop", function() p:StopMovingOrSizing() end)
@@ -45,7 +45,7 @@ local function ensurePicker(theme)
         local r, g, b = p.cur[1], p.cur[2], p.cur[3]
         p.prevTex:SetColorTexture(r, g, b)
         p._sync = true
-        if src ~= "hex" then p.hex:SetText(UIF.hexOf(r, g, b)) end
+        if src ~= "hex" then p.hex:SetText(TAP.hexOf(r, g, b)) end
         if p.sr and p.sg and p.sb then
             p.sr:SetValue(r * 255); p.sg:SetValue(g * 255); p.sb:SetValue(b * 255)
         end
@@ -56,7 +56,7 @@ local function ensurePicker(theme)
 
     hexBox:SetScript("OnTextChanged", function(self)
         if p._sync then return end
-        local r, g, b = UIF.parseHex(self:GetText())
+        local r, g, b = TAP.parseHex(self:GetText())
         if r then p.cur[1], p.cur[2], p.cur[3] = r, g, b; emit("hex") end
     end)
 
@@ -83,7 +83,7 @@ local function ensurePicker(theme)
         sw:SetPoint("TOPLEFT", gx + col * 28, gy)
         theme:StylePanel(sw, C.bg)
         local tx = sw:CreateTexture(nil, "ARTWORK"); tx:SetPoint("TOPLEFT", 1, -1); tx:SetPoint("BOTTOMRIGHT", -1, 1)
-        local r, g, b = UIF.parseHex(hex); tx:SetColorTexture(r, g, b)
+        local r, g, b = TAP.parseHex(hex); tx:SetColorTexture(r, g, b)
         sw:SetScript("OnClick", function() p.cur[1], p.cur[2], p.cur[3] = r, g, b; emit("preset") end)
         col = col + 1
         if col >= 8 then col = 0; gy = gy - 22 end

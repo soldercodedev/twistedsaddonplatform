@@ -11,7 +11,7 @@
 --         id      = "rotationCue",                 -- unique, stable key (used in SavedVariables)
 --         title   = "Rotation Assistant",
 --         desc    = "Shows the keybind of Blizzard's next suggested ability.",
---         icon    = "keyboard",                    -- bundled UIFoundry icon name (or a texture path)
+--         icon    = "keyboard",                    -- bundled TAP icon name (or a texture path)
 --         addon   = "TAP_RotationAssistant",         -- its own addon folder (for hard load control)
 --         default = true,                          -- enabled on first run?
 --         OnEnable  = function(m) ... end,         -- create frames / register events
@@ -26,18 +26,17 @@
 -- sidecar addon from the Manager's Overview page (or Blizzard's AddOns list) - that needs a
 -- reload but keeps the code entirely out of memory.
 
-local ADDON, UIF = ...
+local ADDON, TAP = ...
 
 ----------------------------------------------------------------------
--- The registry (exposed as a global so sidecars can reach it without LibStub).
+-- The module registry lives ON the shared framework table (TAP, set up in Core.lua), so _G.TAP is the
+-- single entry point for both the UI kit and module registration. `Suite` below is a local alias.
 ----------------------------------------------------------------------
-local Suite = {
-    modules = {},   -- array, in registration order
-    byId    = {},   -- id -> module handle
-    _loggedIn = false,
-}
-_G.TAP = Suite
-UIF.Suite = Suite
+local Suite = TAP
+Suite.modules   = {}   -- array, in registration order
+Suite.byId      = {}   -- id -> module handle
+Suite._loggedIn = false
+TAP.Suite = Suite      -- self-reference, for any consumer that reached the registry via TAP.Suite
 
 ----------------------------------------------------------------------
 -- SavedVariables (declared in the .toc as TAPDB). Created lazily so it works on a

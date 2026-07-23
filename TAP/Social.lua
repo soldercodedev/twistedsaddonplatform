@@ -1,10 +1,10 @@
--- UIFoundry - Social.lua
+-- TAP - Social.lua
 -- Real social buttons: brand icon + official brand color, wired to open a link (via the
 -- copy dialog, since WoW can't launch a browser) or a custom onClick.
 --
 -- Brand icons come from Tabler's `brand-*` outline set (MIT). Convert the ones you use to
 -- TGA (see tools/convert_icons.py + ICONS.md) and point the theme at that folder:
---     local theme = UIF:NewTheme({ name="MyAddon", iconDir = "Interface\\AddOns\\MyAddon\\icons\\" })
+--     local theme = TAP:NewTheme({ name="MyAddon", iconDir = "Interface\\AddOns\\MyAddon\\icons\\" })
 -- Every brand below except Ko-fi maps to a Tabler slug (Ko-fi isn't in Tabler, so it falls
 -- back to the `coffee` glyph). If no iconDir/icon is available, the button shows its label
 -- text in the brand color instead, so it always renders.
@@ -13,13 +13,13 @@
 --   theme:SocialButton(parent, { brand = "github", label = "Star on GitHub", url = "..." })
 --   theme:SocialBar(parent, { { brand="discord", url=... }, { brand="github", url=... } })
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 -- brand -> { slug (bundled social icon name), color (hex), label, on = icon/text-on-brand color }
 -- The default set matches the icons bundled in tools/socials (converted by convert_icons.py).
--- Add your own with:  UIFoundry.BRANDS.mybrand = { slug = "mybrand", color = "AABBCC", label = "…" }
-UIF.BRANDS = {
+-- Add your own with:  TAP.BRANDS.mybrand = { slug = "mybrand", color = "AABBCC", label = "…" }
+TAP.BRANDS = {
     discord = { slug = "discord", color = "5865F2", label = "Discord" },
     github  = { slug = "github",  color = "24292E", label = "GitHub",  on = "FFFFFF" },
     patreon = { slug = "patreon", color = "F96854", label = "Patreon" },
@@ -36,7 +36,7 @@ end
 
 ----------------------------------------------------------------------
 -- A single social button. opts:
---   brand    = key into UIF.BRANDS (or omit and pass icon/color/label directly)
+--   brand    = key into TAP.BRANDS (or omit and pass icon/color/label directly)
 --   url      = link to copy on click (opens the copy dialog)
 --   onClick  = custom handler (overrides url)
 --   label    = text; omit for an icon-only square button
@@ -46,17 +46,17 @@ end
 function Mixin:SocialButton(parent, opts)
     opts = opts or {}
     local theme, C = self, self.C
-    local brand = (opts.brand and UIF.BRANDS[opts.brand]) or {}
-    local fill = UIF.toColor(opts.color, brand.color) or C.card
+    local brand = (opts.brand and TAP.BRANDS[opts.brand]) or {}
+    local fill = TAP.toColor(opts.color, brand.color) or C.card
     local iconTex = brandIcon(theme, brand, opts.icon)
-    local iconTint = UIF.toColor(opts.iconColor or brand.on, { 1, 1, 1 })
+    local iconTint = TAP.toColor(opts.iconColor or brand.on, { 1, 1, 1 })
     local label = opts.label
     local iconOnly = (label == nil)
 
     local b = CreateFrame("Button", nil, parent)
     b.bg = b:CreateTexture(nil, "BACKGROUND"); b.bg:SetAllPoints()
-    local normal, hover = fill, UIF.lighten(fill, 0.10)
-    UIF.paint(b.bg, normal)
+    local normal, hover = fill, TAP.lighten(fill, 0.10)
+    TAP.paint(b.bg, normal)
 
     if iconTex then
         b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetTexture(iconTex)
@@ -89,13 +89,13 @@ function Mixin:SocialButton(parent, opts)
     end
 
     b:SetScript("OnEnter", function(self)
-        UIF.paint(self.bg, hover)
+        TAP.paint(self.bg, hover)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:SetText(opts.tip or brand.label or label or "Link", theme:AccentHeader())
         if opts.url then GameTooltip:AddLine("Click to copy the link.", 0.82, 0.86, 0.92, true) end
         GameTooltip:Show()
     end)
-    b:SetScript("OnLeave", function(self) UIF.paint(self.bg, normal); GameTooltip_Hide() end)
+    b:SetScript("OnLeave", function(self) TAP.paint(self.bg, normal); GameTooltip_Hide() end)
     b:SetScript("OnClick", function(self)
         if opts.onClick then opts.onClick(self)
         elseif opts.url then theme:ShowLinkDialog((brand.label or "Link") .. " - copy this link (Ctrl+C)", opts.url) end

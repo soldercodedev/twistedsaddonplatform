@@ -1,15 +1,15 @@
--- UIFoundry - Tooltip.lua
+-- TAP - Tooltip.lua
 -- Rich multi-line hover tooltips: theme:SetTipData(frame, { icon, title, anchor, lines = {...} })
 -- attaches structured lines (plain, colored, two-column, spacers, dividers) that the extended
 -- _showTip renderer below emits. (theme:SetTip already handles a plain title + body.)
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 -- Resolve a line's color: a palette key name, a hex string, an { r,g,b } table, or nil.
 local function lineColor(theme, c, default)
     if type(c) == "string" and theme.C[c] then return theme.C[c] end
-    return UIF.toColor(c, default or theme.C.text)
+    return TAP.toColor(c, default or theme.C.text)
 end
 
 -- Attach a RICH hover tooltip. data = {

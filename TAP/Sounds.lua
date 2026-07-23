@@ -1,4 +1,4 @@
--- UIFoundry - Sounds.lua
+-- TAP - Sounds.lua
 -- Sound catalog + playback (shared from Twisteds Combat Alerts). Supports both Blizzard
 -- SOUNDKIT sounds (PlaySound) and the bundled .ogg/.mp3 files in the Sounds/ folder
 -- (PlaySoundFile), with safe fallbacks. Also a SoundSelect widget that previews on pick, and
@@ -9,13 +9,13 @@
 --   theme:SoundSelect(parent, { value = "Focus", onChange = function(key) ... end })
 --   theme:Toast({ text = "Pull!", variant = "warning", sound = "AirHorn" })
 
-local ADDON, UIF = ...
-local Mixin = UIF.ThemeMixin
+local ADDON, TAP = ...
+local Mixin = TAP.ThemeMixin
 
 local FALLBACK_SOUND = 8959   -- SOUNDKIT.RAID_WARNING numeric id (hard fallback)
 
 -- An entry uses EITHER `kit` (a SOUNDKIT constant name) OR `file` (a bundled file name).
-UIF.SOUNDS = {
+TAP.SOUNDS = {
     -- Built-in Blizzard sounds.
     { key = "RAID_WARNING", label = "Raid Warning",       kit = "RAID_WARNING" },
     { key = "READY_CHECK",  label = "Ready Check",         kit = "READY_CHECK" },
@@ -92,9 +92,9 @@ UIF.SOUNDS = {
 }
 
 -- Default notification sound per toast variant (used when a toast passes sound = true).
-UIF.TOAST_SOUNDS = { info = "SUBTLE", success = "READY_CHECK", warning = "ALARM_CLOCK", danger = "RAID_WARNING" }
+TAP.TOAST_SOUNDS = { info = "SUBTLE", success = "READY_CHECK", warning = "ALARM_CLOCK", danger = "RAID_WARNING" }
 
-function Mixin:SoundList() return self.sounds or UIF.SOUNDS end
+function Mixin:SoundList() return self.sounds or TAP.SOUNDS end
 
 function Mixin:SoundLabel(key)
     for _, s in ipairs(self:SoundList()) do if s.key == key then return s.label end end

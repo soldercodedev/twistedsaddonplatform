@@ -10,10 +10,10 @@
 -- and OnDisable fully stands it down (hides the cue, unregisters every event).
 
 local ADDON = ...
-local UIF   = _G.UIFoundry
+local TAP   = _G.TAP
 local Suite = _G.TAP
 
-if not (UIF and Suite) then
+if not (TAP and Suite) then
     print("|cffff5555TAP_RotationAssistant:|r requires TAP. Enable it and reload.")
     return
 end
@@ -98,7 +98,7 @@ local ANCHOR_LABELS = {
     custom = "Custom (X / Y offset)",
 }
 
-local theme = UIF:NewTheme({
+local theme = TAP:NewTheme({
     name    = "TAP_RotationAssistant",
     accent  = { 0.62, 0.36, 0.96 },
     iconDir = "Interface\\AddOns\\TAP\\assets\\icons\\",
@@ -194,10 +194,10 @@ end
 local function actionOfButton(btn)
     if btn.GetAction then
         local ok, t, a = pcall(btn.GetAction, btn)
-        if ok and t == "action" and a and UIF.CanRead(a) then return a end
+        if ok and t == "action" and a and TAP.CanRead(a) then return a end
     end
     local slot = btn.action or (btn.GetAttribute and btn:GetAttribute("action"))
-    if slot and UIF.CanRead(slot) then return slot end
+    if slot and TAP.CanRead(slot) then return slot end
     return nil
 end
 
@@ -297,7 +297,7 @@ local function keybindForSpell(spellID)
     local slots = FindSlots(spellID)
     if type(slots) == "table" then
         for _, slot in ipairs(slots) do
-            if UIF.CanRead(slot) then
+            if TAP.CanRead(slot) then
                 local btn = slotToButton[slot]
                 -- Prefer the live button's key; fall back to the slot's standard binding command when no
                 -- button frame was harvested for that slot (e.g. an unrecognised bar addon) so it still
@@ -417,7 +417,7 @@ local function applyAppearance(f, s, size)
     f:SetAlpha(s.opacity or 1)
     f.icon:SetAlpha(s.iconOpacity or 1)
     f.key:SetAlpha(s.textOpacity or 1)
-    f.key:SetFont(UIF.ResolveFontFile(theme:ResolveFont(s.keyFont or "UBUNTU")), (s.keySize or 20) * dispScale, "OUTLINE")
+    f.key:SetFont(TAP.ResolveFontFile(theme:ResolveFont(s.keyFont or "UBUNTU")), (s.keySize or 20) * dispScale, "OUTLINE")
     f.key:SetTextColor(s.keyColor[1], s.keyColor[2], s.keyColor[3])
     f.key:ClearAllPoints()
     if (s.textAnchor or "BOTTOM") == "custom" then
@@ -564,7 +564,7 @@ local function updatePreviewSpell()
     local spellID
     if GetNext then
         local ok, id = pcall(GetNext, false)
-        if ok and id and UIF.CanRead(id) then spellID = id end
+        if ok and id and TAP.CanRead(id) then spellID = id end
     end
     local shown = spellID or 133   -- demo = Fireball (a cast) when there's no live suggestion
     if spellID then
@@ -787,7 +787,7 @@ function refresh()
     -- position is what you'll actually see.
     if testMode then
         local id
-        if GetNext then local ok, sid = pcall(GetNext, false); if ok and sid and UIF.CanRead(sid) then id = sid end end
+        if GetNext then local ok, sid = pcall(GetNext, false); if ok and sid and TAP.CanRead(sid) then id = sid end end
         applyGCD(cue, s); applyIconState(cue, s, id or 133)
         if id then showSpell(id, keybindForSpell(id)) else showSpell(133, "S-4") end
         return
@@ -798,7 +798,7 @@ function refresh()
     if s.onlyInCombat and not inCombat then hideCue(); return end
 
     local ok, spellID = pcall(GetNext, s.visibleOnly and true or false)
-    if not ok or spellID == nil or not UIF.CanRead(spellID) then
+    if not ok or spellID == nil or not TAP.CanRead(spellID) then
         hideCue()   -- no suggestion right now
         return
     end
@@ -1336,7 +1336,7 @@ SlashCmdList["TWROTCUE"] = function()
     local ok, id = pcall(GetNext, false)
     if not ok then p("GetNextCastSpell error: " .. tostring(id)); return end
     if id == nil then p("no suggestion right now (are you in/near combat with a target?)"); return end
-    if not UIF.CanRead(id) then p("suggestion is a secret value right now"); return end
+    if not TAP.CanRead(id) then p("suggestion is a secret value right now"); return end
     p("next spell: " .. tostring(id))
     local ms = spellCastMS(id)
     p(("cast time: %s ms -> %s   (C_Spell.GetSpellInfo=%s)"):format(
@@ -1351,7 +1351,7 @@ SlashCmdList["TWROTCUE"] = function()
     if type(slots) ~= "table" then p("FindSpellActionButtons -> " .. tostring(slots)); return end
     if #slots == 0 then p("|cffff6666that spell is not on any action bar slot|r"); return end
     for _, slot in ipairs(slots) do
-        if not UIF.CanRead(slot) then
+        if not TAP.CanRead(slot) then
             p("  slot <secret>")
         else
             local btn = slotToButton[slot]
