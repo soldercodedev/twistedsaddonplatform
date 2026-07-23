@@ -37,11 +37,8 @@ local DISPEL_TIERS = {
     ["When needed"]   = { order = 6, color = "6fb0c9" },
     ["Spare"]         = { order = 8, color = "9aa0ad" },
 }
--- Dispel school -> color (matches the schools used in the catalog dtype strings).
-local SCHOOL_COLOR = {
-    Magic = "3d7bff", Curse = "a05cf0", Poison = "4fd14f", Disease = "b89a3a",
-    Enrage = "ff7a2a", Bleed = "e0403a", Movement = "8b8b8b",
-}
+-- Dispel school -> color (shared with the run-review tiles; see ML.SCHOOL_COLOR).
+local SCHOOL_COLOR = ML.SCHOOL_COLOR
 
 local QMARK = 134400   -- default "question mark" spell icon
 local function spellTex(id)
@@ -79,6 +76,13 @@ local function ensureModel(b)
     if not modelPanel then
         local mp = b.theme:UnitModel(b.content, { width = 220, height = 300, rotatable = true, background = "dusk" })
         -- Show a creature by npc id (not a unit). Re-applied on model-refresh events so it doesn't revert.
+        -- A PlayerModel handed a creature while it has stayed continuously shown often renders NOTHING
+        -- until it passes through a hide->show transition. That is exactly why "click away and back" fixed
+        -- it: leaving the guide hides this panel (Guide.Hide), returning shows it - a real transition. On a
+        -- first in-place selection there is no such transition (the panel was already shown, so the render's
+        -- mp:Show() is a no-op), so the creature is set but never painted. Reproduce the transition on the
+        -- model itself: apply the creature, hide the model now, show it next frame. Guarded so a rapid
+        -- re-selection doesn't reshow a stale creature.
         function mp:SetCreatureId(npcId)
             self._creatureId = npcId
             local m = self.model
@@ -87,6 +91,10 @@ local function ensureModel(b)
             if npcId and m.SetCreature then pcall(m.SetCreature, m, npcId) end
             if m.SetPortraitZoom then pcall(m.SetPortraitZoom, m, 0) end
             if m.SetFacing then pcall(m.SetFacing, m, self._facing or 0.5) end
+            if npcId then
+                m:Hide()
+                C_Timer.After(0, function() if self._creatureId == npcId then m:Show() end end)
+            end
         end
         local origRefresh = mp.Refresh
         function mp:Refresh() if self._creatureId then self:SetCreatureId(self._creatureId) else origRefresh(self) end end

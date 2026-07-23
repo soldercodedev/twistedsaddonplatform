@@ -84,10 +84,6 @@ function Base:EndRun(_) end
 function Base:Reset() end
 -- GetRunStats(ctx) -> normalized { source, sourceVersion, player = {stats}, party = { {identity+stats} } } or nil
 function Base:GetRunStats(_) return nil end
--- GetPlayerDamage(ctx) -> your CUMULATIVE damage-done so far this run (number), or nil. The tracker
--- samples this at each boss's start and kill and divides the delta by the fight length to get a true
--- per-boss DPS (Details' "current combat" during a key is the whole run, so a raw read = overall).
-function Base:GetPlayerDamage(_) return nil end
 
 ----------------------------------------------------------------------
 -- MetadataProvider - always available, supplies no meter data (source NONE). The counters still
@@ -251,29 +247,6 @@ local function readMeterStats(ctx, sourceLabel)
     return result
 end
 Providers.ReadMeterStats = readMeterStats
-
--- Your cumulative damage-done for the whole run (Overall DamageDone total). The tracker diffs this
--- across each boss to isolate per-boss DPS. From C_DamageMeter so it's reliable in Midnight.
-local function readPlayerDamageMeter(ctx)
-    if not (ctx and ctx.player) then return nil end
-    local ok, dmg = pcall(function()
-        local dm = C_DM()
-        if type(dm) ~= "table" or type(dm.GetCombatSessionFromType) ~= "function" then return nil end
-        local ST = _G.Enum and _G.Enum.DamageMeterSessionType
-        local MT = _G.Enum and _G.Enum.DamageMeterType
-        if type(ST) ~= "table" or type(MT) ~= "table" then return nil end
-        local session = dm.GetCombatSessionFromType(ST.Overall or 0, MT.DamageDone or 0)
-        if type(session) ~= "table" or type(session.combatSources) ~= "table" then return nil end
-        for _, src in ipairs(session.combatSources) do
-            if src.isLocalPlayer or ML.ReadStr(src.sourceGUID) == ctx.player.guid then
-                return ML.ReadNum(src.totalAmount)
-            end
-        end
-        return nil
-    end)
-    return ok and dmg or nil
-end
-Providers.ReadPlayerDamage = readPlayerDamageMeter
 
 -- Cumulative TOTAL party deaths so far this run (Overall Deaths summed over the party GUIDs). The
 -- tracker diffs this across each boss to attribute deaths to that boss.
@@ -680,10 +653,6 @@ end
 
 function Blizz:GetRunStats(ctx)
     return readMeterStats(ctx, ML.SOURCE.BLIZZARD)
-end
-
-function Blizz:GetPlayerDamage(ctx)
-    return readPlayerDamageMeter(ctx)
 end
 
 ----------------------------------------------------------------------

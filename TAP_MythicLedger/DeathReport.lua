@@ -61,7 +61,8 @@ local function gatherDeaths(onlyNew, runOverride)
     -- Tracker clears its `current` ~1.5s later when it finalizes.
     local run = runOverride or (ML.Tracker and ML.Tracker.Current and ML.Tracker.Current())
     if not run or not Providers or not Providers.ReadDeathRecaps then return nil end
-    local ctx = { player = run.character, party = run.party or (API.GroupMembers and API.GroupMembers()) or {}, petOwners = {} }
+    local petOwners = (ML.Tracker and ML.Tracker.PetOwners and ML.Tracker.PetOwners()) or {}
+    local ctx = { player = run.character, party = run.party or (API.GroupMembers and API.GroupMembers()) or {}, petOwners = petOwners }
     local recaps = Providers.ReadDeathRecaps(ctx)
     if not recaps then return nil end
     local attrib = (Providers.ReadAttribution and Providers.ReadAttribution(ctx)) or {}
@@ -165,7 +166,7 @@ local function renderInto(f, entries, header, cfg)
     local size = tonumber(cfg.fontSize) or 15
 
     f.title:SetFont(fontPath, size + 2, "OUTLINE")
-    local tc = cfg.titleColor or { 1, 1, 1 }
+    local tc = cfg.titleColor or { 1.00, 0.82, 0.20 }   -- matches the Database.lua default
     f.title:SetTextColor(tc[1], tc[2], tc[3])
     f.title:SetText(header or "Death Report")
 
@@ -186,8 +187,8 @@ local function renderInto(f, entries, header, cfg)
     local w, h = math.max(220, maxW + 44), (-ty) + 8
     f:SetSize(w, h)
     if cfg.background then
-        local bc = cfg.bgColor or { 0, 0, 0, 0.8 }
-        f.bg:SetColorTexture(bc[1], bc[2], bc[3], bc[4] or 0.8); f.bg:Show()
+        local bc = cfg.bgColor or { 0.03, 0.04, 0.06, 0.82 }   -- matches the Database.lua default
+        f.bg:SetColorTexture(bc[1], bc[2], bc[3], bc[4] or 0.82); f.bg:Show()
     else
         f.bg:Hide()
     end

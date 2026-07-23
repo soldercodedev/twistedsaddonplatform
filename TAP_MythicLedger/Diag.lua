@@ -353,7 +353,6 @@ local function readSourceSpells(dm, sessionType, meterType, guid)
     end
     return { total = ML.ReadNum(src.totalAmount), max = ML.ReadNum(src.maxAmount), spells = spells }
 end
-Diag.ReadSourceSpells = readSourceSpells
 
 -- Build the set of spellIDs the AvoidableDamageTaken bucket lists for a source - the RELIABLE avoidable
 -- signal (the per-spell isAvoidable flag reads false even here, so we go by bucket membership instead).

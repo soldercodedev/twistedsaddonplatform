@@ -16,48 +16,35 @@ local UI = {}
 ML.UI = UI
 
 -- Module-local view state (reset via OnSelect / detail back buttons).
-local view = { tab = "overview", season = "current", character = "all", detailRun = nil, detailPlayer = nil, detailDungeon = nil, detailCharacter = nil, review = nil }
+local view = { season = "current", character = "all", detailRun = nil, detailPlayer = nil, detailDungeon = nil, detailCharacter = nil, review = nil }
 -- Per-run player-review target (object refs, so it works for both saved and unsaved/preview runs).
 local reviewRunRef, reviewMemberRef = nil, nil
 
--- Pooled hoverable spell/aura icons for the GROUP UTILITY tiles (real Blizzard tooltip on hover). Its own
--- pool so indices never collide with the breakdown icons.
-local guIconPool = {}
-local function guIcon(theme, parent, i, size)
-    local gi = guIconPool[i]
-    if not gi then gi = theme:GameIcon(parent, { size = size }); guIconPool[i] = gi end
-    if gi:GetParent() ~= parent then gi:SetParent(parent) end
-    gi:SetSize(size, size)
-    return gi
+-- Pooled hoverable GameIcons for the score-card breakdowns (real Blizzard tooltip on hover). Each
+-- surface gets its OWN pool via makeIconPool() so indices never collide during a single render - the
+-- group-utility, interrupt, dispel, and avoidable breakdowns can all draw at once. Returns the pooled
+-- accessor plus its pool table (a caller may hide leftovers from the pool directly).
+local function makeIconPool()
+    local pool = {}
+    return function(theme, parent, i, size)
+        local gi = pool[i]
+        if not gi then gi = theme:GameIcon(parent, { size = size }); pool[i] = gi end
+        if gi:GetParent() ~= parent then gi:SetParent(parent) end
+        gi:SetSize(size, size)
+        return gi
+    end, pool
 end
+local guIcon = makeIconPool()       -- GROUP UTILITY tiles
+local kickIcon = makeIconPool()     -- INTERRUPT breakdown
+local dispIcon = makeIconPool()     -- DISPEL breakdown
+local avoidIcon, avoidIconPool = makeIconPool()   -- AVOIDABLE-damage breakdown (pool hidden directly, ~:3818)
 
--- Pooled icons for the INTERRUPT and DISPEL breakdowns (actual-vs-priority). Separate pools so they never
--- collide with each other, the dispel-coaching, or the group-utility icons in the same render.
-local kickIconPool = {}
-local function kickIcon(theme, parent, i, size)
-    local gi = kickIconPool[i]
-    if not gi then gi = theme:GameIcon(parent, { size = size }); kickIconPool[i] = gi end
-    if gi:GetParent() ~= parent then gi:SetParent(parent) end
-    gi:SetSize(size, size)
-    return gi
-end
-local dispIconPool = {}
-local function dispIcon(theme, parent, i, size)
-    local gi = dispIconPool[i]
-    if not gi then gi = theme:GameIcon(parent, { size = size }); dispIconPool[i] = gi end
-    if gi:GetParent() ~= parent then gi:SetParent(parent) end
-    gi:SetSize(size, size)
-    return gi
-end
--- Its own pool for the AVOIDABLE-damage breakdown (Blizzard spell icons + game tooltips).
-local avoidIconPool = {}
-local function avoidIcon(theme, parent, i, size)
-    local gi = avoidIconPool[i]
-    if not gi then gi = theme:GameIcon(parent, { size = size }); avoidIconPool[i] = gi end
-    if gi:GetParent() ~= parent then gi:SetParent(parent) end
-    gi:SetSize(size, size)
-    return gi
-end
+-- The Builder stat-tile style for the current cardStyle setting (CLEAN/PANEL/COMPACT -> clean/panel/
+-- compact). Nil-safe so every stat-tile surface renders the SAME style: the call sites used to drift
+-- between no fallback and `or "compact"`. In practice cardStyle is always one of the three keys (its
+-- DB default is COMPACT), so this is behaviour-identical - the fallback only hardens a corrupt setting.
+local TILE_STYLE = { CLEAN = "clean", PANEL = "panel", COMPACT = "compact" }
+local function tileStyle() return TILE_STYLE[DB.Settings().cardStyle] or "compact" end
 
 -- Best-effort spell display name (Blizzard API) for inline labels beside a spell icon.
 local function spellNameOf(id)
@@ -733,7 +720,7 @@ local function runsKeyChoices()
     return out
 end
 
-local STATUS_HEX = { TIMED = "33dd66", DEPLETED = "e0a030", ABANDONED = "9098a8" }
+local STATUS_HEX = ML.STATUS_HEX   -- shared; see Constants.lua
 
 -- Rich tooltip data for a run row: dungeon icon header + color-coded stat lines + party list.
 local function runTipData(r)
@@ -1040,10 +1027,10 @@ end
 -- reuses them; a school-coloured 2px border keeps them legible; effects past what the tile can fit
 -- collapse to a "+N" label. `startIdx` threads the shared pool index across both tiles.
 local GU_ICON_SZ = 27   -- 50% larger than the old 18px
-local GU_SCHOOL_COL = {
-    magic   = { 0.31, 0.66, 1.00 }, curse = { 0.75, 0.49, 1.00 }, poison = { 0.29, 0.76, 0.35 },
-    disease = { 0.78, 0.62, 0.40 }, enrage = { 1.00, 0.42, 0.33 },
-}
+-- Group-utility dispel tiles need RGB tables keyed by the catalog's lowercase school (e.type). Derive
+-- them from the shared ML.SCHOOL_COLOR (hex, Capitalized) so the tiles match the Dungeon Guide exactly.
+local GU_SCHOOL_COL = {}
+for name, hex in pairs(ML.SCHOOL_COLOR) do GU_SCHOOL_COL[name:lower()] = _G.UIFoundry.toColor(hex) end
 local function renderGuIcons(b, tile, tileX, tileTopY, tileW, tileH, list, startIdx)
     local n = startIdx
     if type(list) ~= "table" or #list == 0 then return n end
@@ -1695,7 +1682,7 @@ local function renderPlayerDetails(b, C, x, y, w, win)
     local pct = History.timedPct(t)
     local avgK = Util.safeDiv(p.levelSum, p.levelN)
     local avgD = History.avgOf(p.stats, "deaths")
-    local setStyle = ({ CLEAN = "clean", PANEL = "panel", COMPACT = "compact" })[DB.Settings().cardStyle]
+    local setStyle = tileStyle()
     local style = (setStyle == "panel" or not setStyle) and "clean" or setStyle
     local th = 92
     local tw, gap = 150, 12
@@ -2289,11 +2276,11 @@ local function renderSettings(b, C, x, y, w, win)
         .. "Panel = darker WoW-style in-game tiles with a rank meter; Compact = data-rich cards with an "
         .. "extra footer line. (The Overview and Bests hero cards use a fixed style to match the dungeon cards.)"):SetChoices(210, {
         { "CLEAN", "Clean (dashboard)" }, { "PANEL", "Panel (WoW tiles)" }, { "COMPACT", "Compact (data-rich)" },
-    }, function() return s.cardStyle or "PANEL" end, function(v) s.cardStyle = v; win:Refresh() end)
+    }, function() return s.cardStyle or "COMPACT" end, function(v) s.cardStyle = v; win:Refresh() end)
     y = y - 40
     -- Live preview of two stat tiles in the currently-selected style.
     do
-        local pstyle = ({ CLEAN = "clean", PANEL = "panel", COMPACT = "compact" })[s.cardStyle or "COMPACT"] or "compact"
+        local pstyle = tileStyle()
         local tileW = math.min(168, math.floor((COLW - 12) / 2))
         b:StatTile(x, y, { style = pstyle, width = tileW, height = 96, iconSize = 22,
             label = "AVG SCORE", value = "112.4", accent = "a06cf0", icon = "trophy",
@@ -2329,7 +2316,7 @@ local function renderSettings(b, C, x, y, w, win)
 
     local function secScoreboard()
     slider("Scale", 90, 180, 0.5, 3.0, 0.05, "%.2fx",
-        function() return s.scoreboardScale or 1.5 end, function(v) s.scoreboardScale = v end,
+        function() return s.scoreboardScale or 1.05 end, function(v) s.scoreboardScale = v end,
         "How big the end-of-run scoreboard opens (still capped to fit your screen). Also: /ledger scale <n>.")
     -- The tab is full-width, so the controls get generous widths (no wrapped dropdown menus).
     local ddW = math.max(220, math.min(340, COLW - 220))
@@ -3000,7 +2987,7 @@ local function renderCharacterDetails(b, C, x, y, w, win)
     -- Headline stats as responsive hero tiles (the Overview page's look + color scale). Columns reflow
     -- to the page width. DPS/HPS are neutral (absolute throughput isn't rated); scores use the grade color.
     -- Panel style can't host the large right-side icon, so fall back to a large-icon-capable style there.
-    local setStyle = ({ CLEAN = "clean", PANEL = "panel", COMPACT = "compact" })[DB.Settings().cardStyle]
+    local setStyle = tileStyle()
     local style = (setStyle == "panel" or not setStyle) and "clean" or setStyle
     local th = 92
     local tw, gap = 150, 12
@@ -3130,8 +3117,6 @@ end
 function UI.RenderPage(pageId, m, b, x, y, win)
     local C = b.theme.C
     local w = b.contentWidth - 40
-    UI._mod = m               -- module handle (the Settings page offers the enable/disable toggle)
-    view.tab = pageId         -- mirror the active page for internal code that reads view.tab
 
     if not DB.Ready() then
         b:Wrap("Mythic Ledger is still loading...", x, y, w - 20, C.subtext, 12)
@@ -3209,7 +3194,6 @@ local summaryWatcher
 
 -- Big end-of-run scoreboard modal: a Blizzard-M+-summary-style table of every party member's
 -- stats, the result header, and the boss splits. Also reachable from a past run's detail page.
-local SB_STATUS_HEX = { TIMED = "33dd66", DEPLETED = "e0a030", ABANDONED = "9098a8" }
 
 -- Performance-score (ML.Scoring) helpers, shared by the scoreboard AND the run detail so the grade
 -- shows everywhere a run's party breakdown appears. Grade color keys off the letter.
@@ -3512,7 +3496,7 @@ function renderPlayerReview(b, C, x, y, w, win)
     if avoidShare == nil and type(s.avoidableDamageTaken) == "number" and type(s.damageTaken) == "number" and s.damageTaken > 0 then
         avoidShare = s.avoidableDamageTaken / s.damageTaken
     end
-    local heroStyle = ({ CLEAN = "clean", PANEL = "panel", COMPACT = "compact" })[DB.Settings().cardStyle] or "compact"
+    local heroStyle = tileStyle()
     local rows = {
         {
             { label = "DPS",       value = Util.shortNum(s.dps),         icon = "sword" },
@@ -4125,7 +4109,7 @@ function UI.ShowScoreboard(run, opts)
             heroes[#heroes + 1] = { label = h.label, member = m, value = v, fmt = h.fmt, icon = h.icon }
         end
     end
-    local heroStyle = ({ CLEAN = "clean", PANEL = "panel", COMPACT = "compact" })[DB.Settings().cardStyle] or "compact"
+    local heroStyle = tileStyle()
 
     -- Group-utility strip (interrupts + the two dispel axes vs expected). Computed up front so its height
     -- can be reserved in the fixed body layout below; nil / no items => no strip, no reserved space.
@@ -4222,7 +4206,7 @@ function UI.ShowScoreboard(run, opts)
             b:Heading((run.dungeonName or "Dungeon") .. "   " .. Util.keyLabel(run.level), x + 72, y, "h2")
             local result = statusText(run.status) .. "    " .. timeStr .. (remStr and ("   (" .. remStr .. ")") or "")
             if run.keystoneUpgrade and run.keystoneUpgrade > 0 then result = result .. "    +" .. run.keystoneUpgrade end
-            b:Label(result, x + 72, y - 28, theme:Color(SB_STATUS_HEX[run.status] or "cccccc", C.text), 13)
+            b:Label(result, x + 72, y - 28, theme:Color(ML.STATUS_HEX[run.status] or "cccccc", C.text), 13)
             if run.affixNames and #run.affixNames > 0 then
                 b:Label(table.concat(run.affixNames, ", "), x + 72, y - 48, C.subtext, 11)
             end

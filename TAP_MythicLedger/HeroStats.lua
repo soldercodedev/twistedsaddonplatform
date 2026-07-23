@@ -44,7 +44,6 @@ local function isLightTheme()
     if type(bg) ~= "table" then return false end
     return (0.299 * (bg[1] or 0) + 0.587 * (bg[2] or 0) + 0.114 * (bg[3] or 0)) > 0.55
 end
-ML.IsLightTheme = isLightTheme
 
 -- tier: "F"/"D"/"C"/"B"/"A"/"S"/"N". Returns a "RRGGBB" hex for the CURRENT theme (light or dark).
 -- forceDark = always use the bright dark-theme variant (for text over the forced-dark dungeon-art cards).
@@ -59,7 +58,6 @@ local Q = {
     poor = "F", common = "F", uncommon = "D", rare = "C", epic = "B",
     legendary = "A", artifact = "S", danger = "F", neutral = "N",
 }
-ML.QUALITY_COLORS = Q
 
 -- Rating words (do not rely on color alone - shown in the tooltip / accessible label).
 local R = {

@@ -47,6 +47,10 @@ local function samplePets()
     end
 end
 
+-- Live pet->owner GUID map for the active run, so a surface that builds its OWN provider ctx (the
+-- death report) can fold pet rows into their owners exactly like the finalize path does.
+function Tracker.PetOwners() return petOwners end
+
 local function setState(s)
     if state ~= s then ML.Log("state %s -> %s", state, s) end
     state = s

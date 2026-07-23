@@ -47,7 +47,6 @@ local DEFAULTS = {
             trigger           = "JOIN",     -- JOIN (roster change) / READY (ready check) / BOTH
             minShared         = 1,
             history           = "SEASON",   -- SEASON / ALL
-            detail            = "COMPACT",  -- COMPACT / DETAILED / OFF
             includeAverages   = true,
             includeLastResult = false,
             includeNotes      = false,      -- notes are NEVER shown automatically unless opted in
@@ -192,7 +191,6 @@ local function runFingerprint(run)
         tostring(run.completedAt or "?"),
     }, "|")
 end
-DB.RunFingerprint = runFingerprint
 
 function DB.RunExists(run)
     local fp = runFingerprint(run)

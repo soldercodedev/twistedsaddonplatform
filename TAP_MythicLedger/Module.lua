@@ -141,7 +141,7 @@ local function handleSlash(rest)
             s.scoreboardScale = n
             ML.Print("Scoreboard scale set to %.2fx (still capped to fit the screen). Reopen the scoreboard to see it.", n)
         else
-            ML.Print("Scoreboard scale is %.2fx. Usage: /ledger scale <0.5 - 3.0>", s.scoreboardScale or 1.5)
+            ML.Print("Scoreboard scale is %.2fx. Usage: /ledger scale <0.5 - 3.0>", s.scoreboardScale or 1.05)
         end
     elseif cmd == "scoreboard" or cmd == "sb" then
         local runs = ML.DB.Runs()

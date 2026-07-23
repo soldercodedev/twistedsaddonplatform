@@ -46,23 +46,25 @@ ML.ROLE_LABEL = { TANK = "Tank", HEALER = "Healer", DAMAGER = "DPS" }
 
 -- Recap settings enums.
 ML.RECAP_DISPLAY = { CHAT = "CHAT", TOAST = "TOAST", BOTH = "BOTH", OFF = "OFF" }
-ML.RECAP_DETAIL  = { COMPACT = "COMPACT", DETAILED = "DETAILED", OFF = "OFF" }
 ML.RECAP_HISTORY = { SEASON = "SEASON", ALL = "ALL" }
 ML.RECAP_TRIGGER = { JOIN = "JOIN", READY = "READY", BOTH = "BOTH" }   -- when a recap fires
+
+-- Dispel/effect school -> theme hex. ONE source of truth for school colors so the same school reads
+-- the same on both surfaces that show them: the run-review group-utility tiles and the Dungeon Guide.
+ML.SCHOOL_COLOR = {
+    Magic = "3d7bff", Curse = "a05cf0", Poison = "4fd14f", Disease = "b89a3a",
+    Enrage = "ff7a2a", Bleed = "e0403a", Movement = "8b8b8b",
+}
+
+-- Run-result status -> theme hex (timed / depleted / abandoned). Shared so the run lists and the
+-- end-of-run scoreboard can't drift (the scoreboard used to keep its own byte-identical copy).
+ML.STATUS_HEX = { TIMED = "33dd66", DEPLETED = "e0a030", ABANDONED = "9098a8" }
 
 ----------------------------------------------------------------------
 -- Season registry: friendly labels for known season ids. Verify the live season id + dungeon
 -- pool in game (C_MythicPlus.GetCurrentSeason / C_ChallengeMode.GetMapTable); unknown ids fall
 -- back to "Season <n>" and still record every run.
 ----------------------------------------------------------------------
--- NOTE: The Midnight Season 1 dungeon pool below is the ANNOUNCED list, kept for reference and
--- for the Dungeons page ordering. It is NOT used to gate recording - dungeon identity always
--- comes from the challenge map id + the live API name.
-ML.MIDNIGHT_S1_POOL = {
-    "Magisters' Terrace", "Maisara Caverns", "Nexus-Point Xenas", "Windrunner Spire",
-    "Seat of the Triumvirate", "Skyreach", "Pit of Saron", "Algeth'ar Academy",
-}
-
 -- seasonId -> descriptor. Populate verified ids here; anything else uses the fallback.
 ML.SEASON_LABELS = {
     -- [<liveSeasonId>] = { label = "Midnight Season 1", expansion = "Midnight", short = "M S1" },
@@ -75,28 +77,11 @@ function ML.SeasonLabel(seasonId)
     return "Season " .. tostring(seasonId)
 end
 
-function ML.SeasonShort(seasonId)
-    if seasonId == nil then return "??" end
-    local d = ML.SEASON_LABELS[seasonId]
-    if d and d.short then return d.short end
-    return "S" .. tostring(seasonId)
-end
-
 ----------------------------------------------------------------------
 -- Small utilities (kept dependency-free so every file can use them).
 ----------------------------------------------------------------------
 local Util = {}
 ML.Util = Util
-
-function Util.deepcopy(v, seen)
-    if type(v) ~= "table" then return v end
-    seen = seen or {}
-    if seen[v] then return seen[v] end
-    local out = {}
-    seen[v] = out
-    for k, val in pairs(v) do out[Util.deepcopy(k, seen)] = Util.deepcopy(val, seen) end
-    return out
-end
 
 function Util.count(t)
     local n = 0
@@ -110,25 +95,11 @@ function Util.round(x, decimals)
     return math.floor(x * m + 0.5) / m
 end
 
-function Util.clamp(x, lo, hi)
-    if x < lo then return lo elseif x > hi then return hi else return x end
-end
-
 -- Safe division: returns nil (not 0) when the denominator is missing/zero, so "unavailable"
 -- never masquerades as a real zero.
 function Util.safeDiv(num, den)
     if type(num) ~= "number" or type(den) ~= "number" or den == 0 then return nil end
     return num / den
-end
-
--- Average of a numeric list, ignoring nils. Returns nil for an empty sample.
-function Util.mean(list)
-    local sum, n = 0, 0
-    for _, v in ipairs(list) do
-        if type(v) == "number" then sum = sum + v; n = n + 1 end
-    end
-    if n == 0 then return nil end
-    return sum / n
 end
 
 ----------------------------------------------------------------------
@@ -158,13 +129,6 @@ function Util.duration(sec)
     return string.format("%d:%02d", m, s)
 end
 
--- Signed seconds delta -> "+1:23" over / "-0:45" under. nil -> "-".
-function Util.signedDuration(sec)
-    if type(sec) ~= "number" then return DASH end
-    local sign = sec < 0 and "-" or "+"
-    return sign .. Util.duration(math.abs(sec))
-end
-
 function Util.percent(fraction)
     if type(fraction) ~= "number" then return DASH end
     return string.format("%d%%", Util.round(fraction * 100))
@@ -189,7 +153,6 @@ local function stampPattern()
     local tPat = TIME_PATTERNS[s and s.clockFormat] or TIME_PATTERNS["24H"]
     return dPat .. " " .. tPat
 end
-ML._stampPattern = stampPattern   -- exposed so the settings page can build a live preview
 
 -- epoch seconds -> e.g. "07/14/26 21:33" (date + local time). nil -> "-".
 function Util.dateTime(epoch)
