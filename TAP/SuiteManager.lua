@@ -114,24 +114,6 @@ local function applySavedAppearance()
 end
 applySavedAppearance()
 
--- Bundled TTFs may not be loadable at file-load (WoW only indexes font files at client launch), so
--- the probe in applyFont() can fall back to the game font on login/reload - that's the "my font
--- reset" bug. Re-apply the saved font once we're logged in (and shortly after) when the TTFs are
--- ready, then refresh any open window so the choice actually sticks.
-do
-    local fw = CreateFrame("Frame")
-    fw:RegisterEvent("PLAYER_LOGIN")
-    fw:RegisterEvent("PLAYER_ENTERING_WORLD")
-    local function reapply()
-        applyFont()
-        if _G.TAP and _G.TAP.RefreshWindow then safeHook(_G.TAP.RefreshWindow, _G.TAP) end
-    end
-    fw:SetScript("OnEvent", function(_, ev)
-        reapply()
-        if C_Timer and C_Timer.After then C_Timer.After(1.5, reapply) end   -- one more pass once fonts settle
-        if ev == "PLAYER_ENTERING_WORLD" then fw:UnregisterEvent("PLAYER_ENTERING_WORLD") end
-    end)
-end
 
 ----------------------------------------------------------------------
 -- Shared helpers.
@@ -1293,23 +1275,27 @@ Suite:RegisterCommand({
     handler = function() Suite:SetMinimapButtonShown("TAP", not Suite:IsMinimapButtonShown("TAP")) end,
 })
 
--- First-run hint + a font re-apply. Bundled TTFs often aren't loadable yet during the initial
--- addon load (WoW only indexes font files at client launch), so applySavedAppearance() at file
--- scope can fall back to the default font. Re-applying once we're logged in (and again a moment
--- later, since indexing can lag) makes a saved custom font actually stick after a /reload.
-local hint = CreateFrame("Frame"); hint:RegisterEvent("PLAYER_LOGIN")
-hint:SetScript("OnEvent", function()
-    local total = Suite:Stats()
-    print(("|cffa06cf0Twisteds Addon Platform|r loaded - |cffffffff/tap|r to manage %d module%s.")
-        :format(total, total == 1 and "" or "s"))
-    createAllMinimapButtons()
-
-    -- Re-assert the full saved appearance now that bundled fonts are loadable (and again a moment
-    -- later, since indexing can lag), then refresh the window if it's open.
-    local function reassert()
-        applySavedAppearance()
-        if win and win:IsShown() then win:Refresh() end
+-- Login: print the loaded hint, build the minimap buttons, and re-assert the saved appearance.
+-- Bundled TTFs often aren't loadable yet during the initial addon load (WoW only indexes font files at
+-- client launch), so applySavedAppearance() at file scope can fall back to the default font - the "my
+-- font reset" bug. Re-assert once we're logged in, again a moment later (indexing can lag), and again
+-- on the first world-enter, then refresh any open window so the saved font/shape/palette stick.
+local function reassertAppearance()
+    applySavedAppearance()
+    if win and win:IsShown() then win:Refresh() end
+end
+local hint = CreateFrame("Frame")
+hint:RegisterEvent("PLAYER_LOGIN")
+hint:RegisterEvent("PLAYER_ENTERING_WORLD")
+hint:SetScript("OnEvent", function(_, ev)
+    if ev == "PLAYER_LOGIN" then
+        local total = Suite:Stats()
+        print(("|cffa06cf0Twisteds Addon Platform|r loaded - |cffffffff/tap|r to manage %d module%s.")
+            :format(total, total == 1 and "" or "s"))
+        createAllMinimapButtons()
+    else   -- PLAYER_ENTERING_WORLD: reassert once (world assets/fonts fully ready), then stop
+        hint:UnregisterEvent("PLAYER_ENTERING_WORLD")
     end
-    reassert()
-    C_Timer.After(1, reassert)
+    reassertAppearance()
+    if C_Timer and C_Timer.After then C_Timer.After(1.5, reassertAppearance) end
 end)

@@ -11,6 +11,9 @@
 --       content = function(body, modal) local b = theme:Button(body); ... end,
 --       buttons = { { label = "Close", onClick = function(m) m:Close() end } } })
 --   m:Open()
+--
+-- Modal frames are POOLED per theme and reused (re-bound on each open) instead of created per call,
+-- so opening a confirm dialog dozens of times never leaks frames or grows UISpecialFrames.
 
 local ADDON, TAP = ...
 local Mixin = TAP.ThemeMixin
@@ -46,17 +49,12 @@ local function restack(theme)
     end
 end
 
-function Mixin:Modal(opts)
-    opts = opts or {}
-    local theme, C = self, self.C
-    ensureBackdrop(theme)
-    local w = opts.width or 380
-    local pad = 16
-    local variant = opts.variant and TAP.BADGE_VARIANTS[opts.variant]
-    local accentCol = TAP.toColor(opts.accentColor or opts.color,
-        variant and (type(variant) == "string" and C[variant] or variant) or C.accent)
-
-    local modal = {}
+-- Build the reusable frame + its fixed children ONCE. Everything that varies per open (title text,
+-- icon, footer buttons, body text/content, sizing) is (re)bound in Mixin:Modal; footer buttons and
+-- body text lines are pooled within the modal so repeated opens create no new frames.
+local function makeModal(theme)
+    local C = theme.C
+    local modal = { _btnPool = {}, _fsPool = {} }
     local name = TAP.NextId(theme.id .. "Modal")
     local f = CreateFrame("Frame", name, UIParent)
     modal.frame = f
@@ -64,95 +62,34 @@ function Mixin:Modal(opts)
     theme:StylePanel(f, C.panel, C.border)
     f:EnableMouse(true); f:SetMovable(true)
 
-    local bar = f:CreateTexture(nil, "ARTWORK"); bar:SetPoint("TOPLEFT", 1, -1); bar:SetPoint("TOPRIGHT", -1, -1); bar:SetHeight(3); TAP.paint(bar, accentCol)
+    modal._bar = f:CreateTexture(nil, "ARTWORK")
+    modal._bar:SetPoint("TOPLEFT", 1, -1); modal._bar:SetPoint("TOPRIGHT", -1, -1); modal._bar:SetHeight(3)
 
-    -- Header (drag handle) with optional icon + title + close.
+    -- Header (drag handle) - dragging is gated on the per-open _draggable flag.
     local hd = CreateFrame("Button", nil, f); hd:SetPoint("TOPLEFT", 1, -4); hd:SetPoint("TOPRIGHT", -1, -4); hd:SetHeight(34)
-    if opts.draggable ~= false then
-        hd:RegisterForDrag("LeftButton")
-        hd:SetScript("OnDragStart", function() f:StartMoving() end)
-        hd:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
-    end
-    local titleX = pad
-    if opts.icon then
-        local ic = f:CreateTexture(nil, "ARTWORK"); ic:SetSize(18, 18); ic:SetPoint("TOPLEFT", pad, -13)
-        ic:SetTexture(theme:IconPath(opts.icon) or opts.icon); ic:SetVertexColor(accentCol[1], accentCol[2], accentCol[3])
-        titleX = pad + 26
-    end
-    local title = theme:Heading(f, { text = opts.title or "", role = "h4" }); title:SetPoint("TOPLEFT", titleX, -14)
+    hd:RegisterForDrag("LeftButton")
+    hd:SetScript("OnDragStart", function() if modal._draggable then f:StartMoving() end end)
+    hd:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
 
-    local dismissable = opts.dismissable ~= false
-    if dismissable then
-        local xb = theme:Button(f); xb:Configure("X", 24, 22, "danger", function() modal:Close() end)
-        xb:SetPoint("TOPRIGHT", -6, -8); xb:SetFrameLevel(hd:GetFrameLevel() + 5)
-    end
-    -- dim (default true) darkens the screen behind; closeOnClickOutside (default = dismissable)
-    -- closes when you click off the modal. Set both false for a non-modal, non-dimming dialog.
-    modal._dim = opts.dim ~= false
-    local clickClose = opts.closeOnClickOutside
-    if clickClose == nil then clickClose = dismissable end
-    modal._clickClose = clickClose
+    modal._icon = f:CreateTexture(nil, "ARTWORK"); modal._icon:SetSize(18, 18); modal._icon:SetPoint("TOPLEFT", 16, -13); modal._icon:Hide()
+    modal._title = theme:Heading(f, { text = "", role = "h4" })
+    modal._xb = theme:Button(f); modal._xb:SetPoint("TOPRIGHT", -6, -8); modal._xb:SetFrameLevel(hd:GetFrameLevel() + 5)
+    modal._xb:Configure("X", 24, 22, "danger", function() modal:Close() end)
 
-    local headerH = 42
+    modal.body = CreateFrame("Frame", nil, f)
 
-    -- Footer buttons (right-aligned, right-to-left).
-    local btns = opts.buttons or {}
-    local footerH = (#btns > 0) and 48 or pad
-    if #btns > 0 then
-        local bx = -pad
-        for i = #btns, 1, -1 do
-            local spec = btns[i]
-            local bw = spec.width or 96
-            local btn = theme:Button(f)
-            btn:Configure(spec.label, bw, 26, spec.kind or (i == #btns and "primary" or "default"),
-                function() if spec.onClick then spec.onClick(modal) elseif spec.close ~= false then modal:Close() end end,
-                spec.style)
-            btn:SetPoint("BOTTOMRIGHT", bx, pad - 4)
-            bx = bx - bw - 8
-        end
-    end
-
-    -- Body region + its content.
-    local body = CreateFrame("Frame", nil, f); modal.body = body
-    local bodyH
-    if opts.content then
-        bodyH = opts.bodyHeight or (opts.height and (opts.height - headerH - footerH)) or 140
-    else
-        -- Text body: message string and/or lines list.
-        local lines = {}
-        if opts.message then lines[#lines + 1] = opts.message end
-        if opts.lines then for _, l in ipairs(opts.lines) do lines[#lines + 1] = l end end
-        local y = 0
-        modal._bodyFS = {}
-        for i, l in ipairs(lines) do
-            local txt = type(l) == "table" and l.text or l
-            local col = (type(l) == "table" and l.color) and TAP.toColor(l.color, C.text) or (i == 1 and C.text or C.subtext)
-            if type(l) == "table" and type(l.color) == "string" and C[l.color] then col = C[l.color] end
-            local fs = body:CreateFontString(nil, "OVERLAY")
-            fs:SetFont(theme.FONT, 12); fs:SetJustifyH("LEFT"); fs:SetWordWrap(true); fs:SetWidth(w - 2 * pad)
-            fs:SetText(theme:HL(txt)); fs:SetTextColor(col[1], col[2], col[3])
-            fs:SetPoint("TOPLEFT", 0, y)
-            modal._bodyFS[i] = fs
-            y = y - (fs:GetStringHeight() or 14) - 6
-        end
-        bodyH = math.max(opts.minBodyHeight or 10, -y)
-    end
-    body:SetPoint("TOPLEFT", pad, -headerH); body:SetSize(w - 2 * pad, bodyH)
-
-    f:SetSize(w, headerH + bodyH + footerH)
-    if opts.content then opts.content(body, modal) end
-
-    -- Escape closes a dismissable modal (via UISpecialFrames); keep the stack in sync.
-    if dismissable then tinsert(UISpecialFrames, name) end
+    -- Escape closes it. Registered ONCE (the frame is reused for every dialog), so UISpecialFrames
+    -- never grows past the pool size.
+    tinsert(UISpecialFrames, name)
 
     function modal:_syncClose()
         local stack = theme._modalStack
         for i = #stack, 1, -1 do if stack[i] == self then table.remove(stack, i) end end
         restack(theme)
-        if opts.onClose then opts.onClose(self) end
+        if self._onClose then self._onClose(self) end
     end
-    -- OnHide covers the Escape / UISpecialFrames path; Close() drives the normal path and
-    -- sets _open false first so the resulting OnHide is a no-op (no double removal).
+    -- OnHide covers the Escape / UISpecialFrames path; Close() drives the normal path and sets _open
+    -- false first so the resulting OnHide is a no-op (no double removal).
     f:SetScript("OnHide", function() if modal._open then modal._open = false; modal:_syncClose() end end)
 
     function modal:Open()
@@ -169,6 +106,109 @@ function Mixin:Modal(opts)
         f:Hide()
         self:_syncClose()
     end
+    return modal
+end
+
+-- A free (not currently open) pooled modal for this theme, or a fresh one when all are in use (a
+-- stacked dialog).
+local function acquireModal(theme)
+    theme._modalPool = theme._modalPool or {}
+    for _, m in ipairs(theme._modalPool) do if not m._open then return m end end
+    local m = makeModal(theme)
+    theme._modalPool[#theme._modalPool + 1] = m
+    return m
+end
+
+function Mixin:Modal(opts)
+    opts = opts or {}
+    local theme, C = self, self.C
+    ensureBackdrop(theme)
+    local modal = acquireModal(theme)
+    local f = modal.frame
+    local w = opts.width or 380
+    local pad = 16
+    local variant = opts.variant and TAP.BADGE_VARIANTS[opts.variant]
+    local accentCol = TAP.toColor(opts.accentColor or opts.color,
+        variant and (type(variant) == "string" and C[variant] or variant) or C.accent)
+
+    modal._onClose = opts.onClose
+    modal._draggable = opts.draggable ~= false
+    TAP.paint(modal._bar, accentCol)
+
+    -- Header: optional icon + title.
+    local titleX = pad
+    if opts.icon then
+        modal._icon:SetTexture(theme:IconPath(opts.icon) or opts.icon)
+        modal._icon:SetVertexColor(accentCol[1], accentCol[2], accentCol[3]); modal._icon:Show()
+        titleX = pad + 26
+    else
+        modal._icon:Hide()
+    end
+    theme:_applyHeading(modal._title, opts.title or "", "h4")   -- re-styles (picks up live font) + text
+    modal._title:ClearAllPoints(); modal._title:SetPoint("TOPLEFT", titleX, -14)
+
+    local dismissable = opts.dismissable ~= false
+    modal._xb:SetShown(dismissable)
+    -- dim (default true) darkens the screen behind; closeOnClickOutside (default = dismissable) closes
+    -- when you click off the modal. Set both false for a non-modal, non-dimming dialog.
+    modal._dim = opts.dim ~= false
+    local clickClose = opts.closeOnClickOutside
+    if clickClose == nil then clickClose = dismissable end
+    modal._clickClose = clickClose
+
+    local headerH = 42
+
+    -- Reset anything a previous use of this pooled modal left behind.
+    for _, b in ipairs(modal._btnPool) do b:Hide() end
+    for _, fs in ipairs(modal._fsPool) do fs:Hide(); fs:ClearAllPoints() end
+    for _, ch in ipairs({ modal.body:GetChildren() }) do ch:Hide(); ch:ClearAllPoints() end   -- prior content-callback frames
+
+    -- Footer buttons (right-aligned, right-to-left), pooled per modal.
+    local btns = opts.buttons or {}
+    local footerH = (#btns > 0) and 48 or pad
+    local bx, used = -pad, 0
+    for i = #btns, 1, -1 do
+        local spec = btns[i]
+        local bw = spec.width or 96
+        used = used + 1
+        local btn = modal._btnPool[used]
+        if not btn then btn = theme:Button(f); modal._btnPool[used] = btn end
+        btn:Configure(spec.label, bw, 26, spec.kind or (i == #btns and "primary" or "default"),
+            function() if spec.onClick then spec.onClick(modal) elseif spec.close ~= false then modal:Close() end end,
+            spec.style)
+        btn:ClearAllPoints(); btn:SetPoint("BOTTOMRIGHT", bx, pad - 4); btn:Show()
+        bx = bx - bw - 8
+    end
+
+    -- Body: a custom content region, or text lines (message + optional lines list) drawn on pooled
+    -- fontstrings.
+    local body = modal.body
+    local bodyH
+    if opts.content then
+        bodyH = opts.bodyHeight or (opts.height and (opts.height - headerH - footerH)) or 140
+    else
+        local lines = {}
+        if opts.message then lines[#lines + 1] = opts.message end
+        if opts.lines then for _, l in ipairs(opts.lines) do lines[#lines + 1] = l end end
+        local y, nfs = 0, 0
+        for i, l in ipairs(lines) do
+            local txt = type(l) == "table" and l.text or l
+            local col = (type(l) == "table" and l.color) and TAP.toColor(l.color, C.text) or (i == 1 and C.text or C.subtext)
+            if type(l) == "table" and type(l.color) == "string" and C[l.color] then col = C[l.color] end
+            nfs = nfs + 1
+            local fs = modal._fsPool[nfs]
+            if not fs then fs = body:CreateFontString(nil, "OVERLAY"); modal._fsPool[nfs] = fs end
+            fs:SetFont(theme.FONT, 12); fs:SetJustifyH("LEFT"); fs:SetWordWrap(true); fs:SetWidth(w - 2 * pad)
+            fs:SetText(theme:HL(txt)); fs:SetTextColor(col[1], col[2], col[3])
+            fs:SetPoint("TOPLEFT", 0, y); fs:Show()
+            y = y - (fs:GetStringHeight() or 14) - 6
+        end
+        bodyH = math.max(opts.minBodyHeight or 10, -y)
+    end
+    body:ClearAllPoints(); body:SetPoint("TOPLEFT", pad, -headerH); body:SetSize(w - 2 * pad, bodyH)
+
+    f:SetSize(w, headerH + bodyH + footerH)
+    if opts.content then opts.content(body, modal) end
 
     return modal
 end
@@ -200,4 +240,3 @@ function Mixin:Confirm(opts)
         },
     }):Open()
 end
-
