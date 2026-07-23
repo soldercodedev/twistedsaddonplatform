@@ -37,8 +37,6 @@ files["TAP_MythicLedger/Scoring/Tests.lua"] = { ignore = { "411" } }      -- a t
 globals = {
   -- Namespace exports (also written explicitly as _G.<name>)
   "UIFoundry", "TAP",
-  -- Load-on-demand data exports, consumed via _G in TAP/Suite.lua
-  "TAP_GameDB_Spells", "TAP_GameDB_Items",
   -- SavedVariables (declared in the TOCs; the client populates these as globals)
   "TAPDB", "TAP_CombatAlertsDB", "TAP_CombatAlertsCharDB", "TAP_MythicLedgerDB",
   -- WoW frame we stash private fields on (GameTooltip._tapmlKey/_tapmlOwned); marked writable so the

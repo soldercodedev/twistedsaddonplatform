@@ -7,8 +7,8 @@ The addon's license does not extend to any of it, and no ownership is claimed ov
 Entertainment assets or any third-party file.
 
 The platform ships as one download containing several add-on folders (`TAP`, `TAP_CombatAlerts`,
-`TAP_FocusInterrupt`, `TAP_RotationAssistant`, `TAP_GameDB`). Shared assets - the icon set, fonts,
-and sounds - live in the parent `TAP` folder; the search databases live in `TAP_GameDB`.
+`TAP_FocusInterrupt`, `TAP_RotationAssistant`, `TAP_MythicLedger`). Shared assets - the icon set,
+fonts, and sounds - live in the parent `TAP` folder.
 
 ---
 
@@ -17,8 +17,8 @@ and sounds - live in the parent `TAP` folder; the search databases live in `TAP_
 World of Warcraft, its game client and APIs, and all in-game names, icons, spell and item artwork,
 textures, built-in fonts (`FRIZQT__`, `SKURRI`, `MORPHEUS`), sound kits, and the raid-target
 ("target marker") icon textures are the property of **Blizzard Entertainment, Inc.** The addon
-references these through the game client and does not bundle or redistribute them. Spell/item
-**names and IDs** in the bundled search databases are Blizzard game data. This project is not
+references these through the game client and does not bundle or redistribute them. Spell and item
+**names and IDs** the add-on reads from the client are Blizzard game data. This project is not
 affiliated with or endorsed by Blizzard Entertainment.
 
 ## Tabler Icons
@@ -48,12 +48,6 @@ Community-sourced cue sounds. Several are by **Piffz**, a well-known World of Wa
 sound author. `DoubleWhoosh.ogg` is public domain (qubodup / Iwan Gabovitch). The remainder are
 from assorted community and free-sound sources. Each file remains under its respective author's
 terms.
-
-## wago.tools
-
-The bundled search databases (`TAP_GameDB/SpellDB.lua`, `TAP_GameDB/ItemDB.lua`) are generated
-offline from DB2 CSV exports provided by **wago.tools** (<https://wago.tools>); the underlying data
-is Blizzard game data.
 
 ## WeakAuras
 

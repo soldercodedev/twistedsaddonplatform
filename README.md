@@ -18,7 +18,6 @@ use, and the ones you don't just sit quietly and do nothing.
 | **Rotation Assistant** | Shows the **keybind** of Blizzard's suggested next ability on screen (show-only - it never presses anything), with cast/instant, GCD, range and resource indicators. |
 | **Mythic Ledger** | A private, account-wide Mythic+ journal - records every run, character, party member, boss split, and performance summary, and reminds you who you've run keys with before (recaps stay local, never posted to group chat). |
 | **TAP** (hub) | The shared UI kit + module manager. Always present; this is what `/tap` opens. |
-| **TAP&#95;GameDB** | An optional, load-on-demand spell/item name database used by Combat Alerts' search. |
 
 Each module has its own README in its folder for the details.
 
@@ -27,7 +26,7 @@ Each module has its own README in its folder for the details.
 ## Install
 
 1. Download and extract into `Interface/AddOns/`. You'll get the folders `TAP`, `TAP_CombatAlerts`,
-   `TAP_FocusInterrupt`, `TAP_RotationAssistant`, `TAP_GameDB`, and `TAP_MythicLedger`.
+   `TAP_FocusInterrupt`, `TAP_RotationAssistant`, and `TAP_MythicLedger`.
 2. Launch the game and log in.
 3. Type **`/tap`** to open the manager.
 

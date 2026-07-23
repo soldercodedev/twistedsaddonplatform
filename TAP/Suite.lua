@@ -181,31 +181,6 @@ function Suite:RunCommand(sub, rest)
     return false
 end
 
-----------------------------------------------------------------------
--- Central load-on-demand data. Modules that need a big optional dataset ask the SUITE to load it,
--- so on-demand loading lives in ONE place instead of each module poking C_AddOns itself. (WoW has
--- no real "unload" - an addon stays resident for the session once loaded - so this is load-when-
--- needed; the payload just isn't parsed until something asks for it.)
-----------------------------------------------------------------------
-function Suite:IsDataLoaded(addonName)
-    local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded
-    return isLoaded and isLoaded(addonName) and true or false
-end
-
-function Suite:LoadData(addonName)
-    if self:IsDataLoaded(addonName) then return true end
-    local loader = C_AddOns and C_AddOns.LoadAddOn
-    if not loader then return false end
-    pcall(loader, addonName)
-    return self:IsDataLoaded(addonName)
-end
-
--- The suite's bundled spell / item name database (load-on-demand). Any module can call these; the
--- data addon is only pulled in (and its ~5 MB of strings parsed) the first time one is requested.
-local GAME_DB = "TAP_GameDB"
-function Suite:GetSpellDB() self:LoadData(GAME_DB); return _G.TAP_GameDB_Spells end
-function Suite:GetItemDB()  self:LoadData(GAME_DB); return _G.TAP_GameDB_Items end
-
 -- Counts for the Manager header ("3 modules · 2 active").
 function Suite:Stats()
     local total, active = 0, 0

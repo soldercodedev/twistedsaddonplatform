@@ -15,7 +15,7 @@ situations you care about.
 - **Load rules** so an alert only runs where it should - by class/spec, in/out of combat, group
   state, or content type.
 - A **spell/item search** (the **Find** button) that looks through your spellbook, auras, gear and
-  bags - and, if the optional `TAP_GameDB` add-on is present, the full game database.
+  bags by name; paste a numeric spell or item ID to add anything outside those.
 - **Export / Import** your alert set as a text string to back up or share.
 
 ## Notes
@@ -27,8 +27,7 @@ situations you care about.
 
 ## Requires
 
-The **`TAP`** hub (bundled with the platform download). The spell/item database (`TAP_GameDB`) is
-**optional** - search still works from your spellbook/bags without it.
+The **`TAP`** hub (bundled with the platform download).
 
 ## License
 

@@ -311,23 +311,6 @@ local function openSpellItemSearch(theme, mode, onPick)
                         if num then local i2, n2, c2 = TCC.ResolveSpell(num); if i2 then add(i2, n2 or ("Spell " .. num), c2) end end
                         scanSpells(lower, add)
                     end
-                    -- Full database: loaded ON DEMAND, CENTRALLY, by the suite (only pulled in the
-                    -- first time a search actually needs it). Format is "id\tname" per line.
-                    if #text >= 3 and Suite then
-                        local blob = isItem and (Suite.GetItemDB and Suite:GetItemDB())
-                            or (Suite.GetSpellDB and Suite:GetSpellDB())
-                        if blob then
-                            local hits = 0
-                            for line in blob:gmatch("[^\n]+") do
-                                local sep = line:find("\t", 1, true)
-                                if sep and line:sub(sep + 1):lower():find(lower, 1, true) then
-                                    add(tonumber(line:sub(1, sep - 1)), line:sub(sep + 1))
-                                    hits = hits + 1
-                                    if hits >= 60 then break end
-                                end
-                            end
-                        end
-                    end
                 end
                 for i, r in ipairs(rows) do
                     local res = results[i]

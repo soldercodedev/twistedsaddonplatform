@@ -9,7 +9,6 @@
 # Intentional writable globals:
 #   SLASH_*        - required by WoW's slash-command API (SLASH_<NAME>N)
 #   *DB            - declared ## SavedVariables (the client populates these as globals)
-#   TAP_GameDB_*   - load-on-demand data exports, consumed via _G in TAP/Suite.lua
 # Everything else must be `local`, or an explicit `_G.<name> = ...` intentional export
 # (an explicit _G write compiles to SETTABLE, not SETGLOBAL, so it is never flagged here).
 #
@@ -17,13 +16,12 @@
 set -uo pipefail
 
 LUAC="${LUAC:-luac5.1}"
-FOLDERS="TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_RotationAssistant TAP_GameDB TAP_MythicLedger"
+FOLDERS="TAP TAP_CombatAlerts TAP_FocusInterrupt TAP_RotationAssistant TAP_MythicLedger"
 
 is_allowed() {
   case "$1" in
     SLASH_*)                                              return 0 ;;
     TAPDB|TAP_CombatAlertsDB|TAP_CombatAlertsCharDB|TAP_MythicLedgerDB) return 0 ;;
-    TAP_GameDB_Spells|TAP_GameDB_Items)                   return 0 ;;
     *)                                                    return 1 ;;
   esac
 }
