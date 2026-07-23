@@ -42,11 +42,6 @@ function UIF.ThemeMixin:FontList()
     return self.fonts or UIF.DEFAULT_FONTS
 end
 
--- Path for a font key (or a path passed straight through).
-function UIF.ThemeMixin:FontPath(keyOrPath)
-    return self:ResolveFont(keyOrPath)
-end
-
 -- Label for a font key.
 function UIF.ThemeMixin:FontLabel(key)
     for _, f in ipairs(self:FontList()) do if f.key == key then return f.label end end

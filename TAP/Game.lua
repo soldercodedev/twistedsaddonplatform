@@ -1,7 +1,5 @@
 -- UIFoundry - Game.lua
 -- Widgets that pull live data from the game client:
---   Portrait2D    - a unit's flat 2D portrait (SetPortraitTexture), auto-refreshing.
---   PortraitModel - a 3D head-and-shoulders portrait (PlayerModel, zoomed to the face).
 --   UnitModel     - a full 3D character model (PlayerModel), drag-to-rotate.
 --   GameIcon      - the icon for any spell / buff / debuff / item, with the real game tooltip.
 --
@@ -45,58 +43,7 @@ local function applyBackground(theme, tex, spec)
 end
 
 ----------------------------------------------------------------------
--- Portrait2D: the classic flat portrait texture for a unit.
---   theme:Portrait2D(parent, { unit = "player", size = 48, circular = true, ring = true })
-----------------------------------------------------------------------
-function Mixin:Portrait2D(parent, opts)
-    opts = opts or {}
-    local theme, C = self, self.C
-    local size = opts.size or 48
-    local f = CreateFrame("Frame", nil, parent); f:SetSize(size, size)
-    local inset = 0
-    if opts.ring ~= false then
-        local ring = f:CreateTexture(nil, "BACKGROUND", nil, 0); ring:SetAllPoints(); UIF.paint(ring, UIF.toColor(opts.ringColor, C.accent))
-        inset = opts.ringWidth or 2
-    end
-    -- Optional scene / color / texture behind the portrait (shows at masked/transparent edges).
-    local sceneTex = f:CreateTexture(nil, "BACKGROUND", nil, 1)
-    sceneTex:SetPoint("TOPLEFT", inset, -inset); sceneTex:SetPoint("BOTTOMRIGHT", -inset, inset); sceneTex:Hide()
-    f.sceneTex = sceneTex
-    local glow = f:CreateTexture(nil, "BACKGROUND", nil, 2)
-    glow:SetPoint("TOPLEFT", inset, -inset); glow:SetPoint("BOTTOMRIGHT", -inset, inset); glow:Hide()
-    local gag = glow:CreateAnimationGroup(); gag:SetLooping("REPEAT")
-    local ga1 = gag:CreateAnimation("Alpha"); ga1:SetFromAlpha(0.08); ga1:SetToAlpha(0.30); ga1:SetDuration(1.8); ga1:SetOrder(1); ga1:SetSmoothing("IN_OUT")
-    local ga2 = gag:CreateAnimation("Alpha"); ga2:SetFromAlpha(0.30); ga2:SetToAlpha(0.08); ga2:SetDuration(1.8); ga2:SetOrder(2); ga2:SetSmoothing("IN_OUT")
-    f.sceneGlow, f._glowAnim = glow, gag
-    function f:SetBackground(spec, animated)
-        applyBackground(theme, self.sceneTex, spec)
-        if animated and spec ~= nil then
-            local a = theme.C.accent; self.sceneGlow:SetColorTexture(a[1], a[2], a[3])
-            self.sceneGlow:Show(); if not self._glowAnim:IsPlaying() then self._glowAnim:Play() end
-        else self.sceneGlow:Hide(); self._glowAnim:Stop() end
-    end
-    if opts.background ~= nil then f:SetBackground(opts.background, opts.animated) end
-    local tex = f:CreateTexture(nil, "ARTWORK")
-    tex:SetPoint("TOPLEFT", inset, -inset); tex:SetPoint("BOTTOMRIGHT", -inset, inset)
-    f.tex = tex
-    if opts.circular then
-        if tex.SetMask then pcall(tex.SetMask, tex, "Interface\\CharacterFrame\\TempPortraitAlphaMask")
-        else tex:SetTexCoord(unpack(theme.iconInset)) end
-    end
-    f.unit = opts.unit or "player"
-    function f:SetUnit(u) self.unit = u; self:Refresh() end
-    function f:Refresh()
-        if SetPortraitTexture then SetPortraitTexture(self.tex, self.unit) else self.tex:SetTexture(QMARK) end
-    end
-    f:Refresh()
-    -- Keep it current as the portrait / model changes.
-    f:RegisterEvent("UNIT_PORTRAIT_UPDATE"); f:RegisterEvent("PORTRAITS_UPDATED"); f:RegisterEvent("UNIT_MODEL_CHANGED")
-    f:SetScript("OnEvent", function(self, _, unit) if not unit or unit == self.unit then self:Refresh() end end)
-    return f
-end
-
-----------------------------------------------------------------------
--- Shared 3D model builder used by PortraitModel (face) and UnitModel (full body).
+-- Shared 3D model builder used by UnitModel (full body).
 ----------------------------------------------------------------------
 local function makeModel(theme, parent, opts, defZoom, defW, defH)
     opts = opts or {}
@@ -187,12 +134,6 @@ local function makeModel(theme, parent, opts, defZoom, defW, defH)
         model:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
     end
     return f
-end
-
--- 3D facial portrait (zoomed to the head).
---   theme:PortraitModel(parent, { unit = "player", size = 90 })
-function Mixin:PortraitModel(parent, opts)
-    return makeModel(self, parent, opts, 1, (opts and opts.size) or 90, (opts and opts.size) or 90)
 end
 
 -- Full 3D character model (drag to rotate).

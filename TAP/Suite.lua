@@ -23,7 +23,7 @@
 -- fully stand the feature down (hide frames, unregister events) so a disabled module costs
 -- nothing at runtime. The registration chunk itself stays tiny, so an unwanted feature is
 -- effectively dormant. For a *hard* unload (don't even load the sidecar's Lua), disable the
--- sidecar addon in the Manager's "Installed" page (or Blizzard's AddOns list) - that needs a
+-- sidecar addon from the Manager's Overview page (or Blizzard's AddOns list) - that needs a
 -- reload but keeps the code entirely out of memory.
 
 local ADDON, UIF = ...
@@ -152,7 +152,7 @@ function Suite:GetModule(id) return self.byId[id] end
 ----------------------------------------------------------------------
 -- Slash-command registry. Modules add entries so the Manager's Commands page can list every
 -- command in one place, and (when an entry supplies `sub` + `handler`) so `/tap <sub> ...`
--- dispatches to the module. A module's own slash (e.g. /tcc, /rcue) keeps working alongside this.
+-- dispatches to the module. A module's own slash (e.g. /rcue) keeps working alongside this.
 --   entry = {
 --     cmd     = "/tap alerts",          -- display string
 --     desc    = "Open the alerts manager",
@@ -223,7 +223,12 @@ end
 Suite._listeners = {}
 function Suite:OnChanged(fn) self._listeners[#self._listeners + 1] = fn end
 function Suite:_notify()
-    for _, fn in ipairs(self._listeners) do pcall(fn) end
+    for _, fn in ipairs(self._listeners) do
+        -- Surface a listener error (e.g. the Manager's rebuild/refresh) instead of swallowing it;
+        -- one bad listener still must not block the others, hence the per-listener pcall.
+        local ok, err = pcall(fn)
+        if not ok then geterrorhandler()(("TAP: a registry listener failed: %s"):format(tostring(err))) end
+    end
 end
 
 ----------------------------------------------------------------------

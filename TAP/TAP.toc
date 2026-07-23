@@ -38,7 +38,6 @@ Widgets.lua
 
 # Typography + richer components.
 Headings.lua
-Progress.lua
 Forms.lua
 Selectors.lua
 ClassSpec.lua
@@ -52,7 +51,6 @@ Game.lua
 ColorPicker.lua
 IconPicker.lua
 TextDialog.lua
-KeyCapture.lua
 Toast.lua
 Modal.lua
 
@@ -63,6 +61,3 @@ Window.lua
 # Suite Manager window (/tap): browse, enable/disable, and configure sidecar plugins.
 Changelog.lua
 SuiteManager.lua
-
-# Optional self-test / component gallery (no slash command). Remove this line to ship lib-only.
-Showcase.lua

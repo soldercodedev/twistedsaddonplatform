@@ -1,12 +1,11 @@
 -- UIFoundry - Modal.lua
 -- Centered dialog windows over a dimmed backdrop. One flexible builder (theme:Modal) plus
--- ready-made Alert / Confirm / Prompt helpers. Modals stack, support variants (accent color
+-- ready-made Alert / Confirm helpers. Modals stack, support variants (accent color
 -- + icon), a custom content region, and a footer button row.
 --
 --   theme:Alert({ title = "Saved", message = "Your changes were saved.", variant = "success" })
 --   theme:Confirm({ title = "Delete alert?", message = "This can't be undone.", variant = "danger",
 --                   confirmLabel = "Delete", onConfirm = function() ... end })
---   theme:Prompt({ title = "Rename", value = "Old name", onAccept = function(text) ... end })
 --
 --   local m = theme:Modal({ title = "Settings", width = 460, height = 300, dismissable = true,
 --       content = function(body, modal) local b = theme:Button(body); ... end,
@@ -204,29 +203,3 @@ function Mixin:Confirm(opts)
     }):Open()
 end
 
-function Mixin:Prompt(opts)
-    opts = opts or {}
-    local theme = self
-    local box
-    return self:Modal({
-        title = opts.title or "Enter a value", message = opts.message, variant = opts.variant,
-        width = opts.width or 400, icon = opts.icon, bodyHeight = (opts.message and 54) or 30,
-        content = function(body, modal)
-            box = theme:EditBox(body); box:Configure(body:GetWidth(), 26, opts.value or "", nil)
-            box:SetPoint("BOTTOMLEFT", 0, 0); box:SetPoint("BOTTOMRIGHT", 0, 0)
-            if opts.placeholder and (opts.value == nil or opts.value == "") then
-                local ph = box:CreateFontString(nil, "OVERLAY"); theme:StyleFont(ph, {}, { fontSize = 11, textColor = theme.C.subtext })
-                ph:SetPoint("LEFT", 8, 0); ph:SetText(opts.placeholder)
-                box:SetScript("OnTextChanged", function(self) ph:SetShown(self:GetText() == "") end)
-            end
-            box:SetScript("OnEnterPressed", function(self) modal:Close(); if opts.onAccept then opts.onAccept(self:GetText()) end end)
-            C_Timer.After(0, function() if box then box:SetFocus() end end)
-        end,
-        buttons = {
-            { label = opts.cancelLabel or "Cancel", kind = "default",
-              onClick = function(m) m:Close(); if opts.onCancel then opts.onCancel() end end },
-            { label = opts.acceptLabel or "OK", kind = "primary",
-              onClick = function(m) m:Close(); if opts.onAccept then opts.onAccept(box and box:GetText() or "") end end },
-        },
-    }):Open()
-end

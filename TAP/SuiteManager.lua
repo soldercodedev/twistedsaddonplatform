@@ -31,13 +31,22 @@ local WELCOME_CAMPAIGN = "2026-07-runshare"
 
 local theme = UIF:NewTheme({
     name    = "TAPManager",
-    skin    = DEFAULT_SKIN,   -- dragon-fire palette + accent (overridden by saved appearance)
+    skin    = DEFAULT_SKIN,   -- default color scheme (see DEFAULT_SKIN above; overridden by saved appearance)
     iconDir = ICON_DIR,
 })
 
 -- Expose the manager theme so sidecars can match the suite's selected look for their own chrome
 -- (e.g. transient dialogs). It's the same object the appearance page mutates, so it stays live.
 Suite.uiTheme = theme
+
+-- Fire a module/page lifecycle hook (or callback) and, if it errors, surface it through the game's
+-- error handler (BugSack / default) instead of swallowing it - a broken sidecar enter/leave hook
+-- should be visible, not vanish silently (which once hid real wiring bugs for months). Skips a nil fn.
+local function safeHook(fn, ...)
+    if not fn then return end
+    local ok, err = pcall(fn, ...)
+    if not ok then geterrorhandler()(tostring(err)) end
+end
 
 -- Base command, listed on Help > Commands. Modules add their own via Suite:RegisterCommand.
 Suite:RegisterCommand({ cmd = "/tap", desc = "Open this Manager window", owner = "Platform" })
@@ -115,7 +124,7 @@ do
     fw:RegisterEvent("PLAYER_ENTERING_WORLD")
     local function reapply()
         applyFont()
-        if _G.TAP and _G.TAP.RefreshWindow then pcall(_G.TAP.RefreshWindow, _G.TAP) end
+        if _G.TAP and _G.TAP.RefreshWindow then safeHook(_G.TAP.RefreshWindow, _G.TAP) end
     end
     fw:SetScript("OnEvent", function(_, ev)
         reapply()
@@ -135,8 +144,9 @@ local function addonVersion(addonName)
     return C_AddOns.GetAddOnMetadata(addonName, "Version")
 end
 
--- The suite's own version, with a sane fallback if the .toc metadata isn't ready yet.
-local function suiteVersion() return addonVersion("TAP") or "1.1.1" end
+-- The suite's own version, straight from the .toc metadata (the single source of truth). The "?"
+-- fallback can only show if the metadata API itself is unavailable - never a stale hardcoded number.
+local function suiteVersion() return addonVersion("TAP") or "?" end
 
 local function moduleNavIcon(spec)
     if spec.icon then return theme:ResolveIcon(spec.icon) end
@@ -308,6 +318,27 @@ local function setAddonModulesEnabled(addon, on)
     end
 end
 
+-- Installed sidecar add-ons the user has FULLY disabled (via our "Fully disable" button or Blizzard's
+-- AddOns list) are not registered as modules, so they vanish from the Overview list - with no way back
+-- except Blizzard's menu. Enumerate them here so Overview can offer a one-click re-enable. A sidecar is
+-- any installed add-on that lists TAP as a dependency; we key off Blizzard's own load `reason` == "DISABLED",
+-- so an enabled-but-not-yet-loaded load-on-demand piece (e.g. the bundled game DB) is never mistaken for one.
+local function disabledSidecars()
+    local out = {}
+    if not (C_AddOns and C_AddOns.GetNumAddOns and C_AddOns.GetAddOnInfo and C_AddOns.GetAddOnDependencies) then
+        return out
+    end
+    for i = 1, (C_AddOns.GetNumAddOns() or 0) do
+        local name, title, _, loadable, reason = C_AddOns.GetAddOnInfo(i)
+        if name and not loadable and reason == "DISABLED" then
+            for _, dep in ipairs({ C_AddOns.GetAddOnDependencies(i) }) do
+                if dep == "TAP" then out[#out + 1] = { name = name, title = title or name }; break end
+            end
+        end
+    end
+    return out
+end
+
 -- The default page view to open for an addon's lead module.
 local function overviewDefaultView(mod)
     local pages = mod.spec.pages
@@ -366,7 +397,7 @@ local function pageOverview(b, win)
         statusBadge(b, lead, x + rowW - 200 - rpad, hy - 5)
         b:Toggle(x + rowW - 112 - rpad, hy - 4, enabled, function(v) setAddonModulesEnabled(spec.addon or spec.id, v) end, { color = C.accent })
         b:Button(x + rowW - 66 - rpad, hy, 66, "Open", "default", function()
-            if lead.spec.OnSelect then pcall(lead.spec.OnSelect, lead) end   -- reset module view state, as a sidebar click would
+            safeHook(lead.spec.OnSelect, lead)   -- reset module view state, as a sidebar click would
             win:SelectView(overviewDefaultView(lead))
         end)
         y = y - 34   -- clear gap below the header band so the description doesn't hug the controls
@@ -402,6 +433,35 @@ local function pageOverview(b, win)
         b:Box(x, yTop, rowW, yTop - y, enabled and 0.05 or 0.03, 0, enabled and C.accent or C.card)
         if enabled then b:VRule(x, yTop - 1, y + 1, 0, C.accent) end
         y = y - 16
+    end
+
+    -- Fully-disabled sidecars: offer a one-click re-enable so the user never has to leave /tap for
+    -- Blizzard's AddOns menu (the counterpart to the "Fully disable" button above).
+    local disabled = disabledSidecars()
+    if #disabled > 0 then
+        y = y - 6
+        y = b:Section("DISABLED ADD-ONS", x, y); y = y - 28
+        local _, dh = b:Wrap("Installed but fully switched off. Re-enable one to load it again (reloads the UI).",
+            x + 2, y, rowW - 8, C.subtext, 11)
+        y = y - (dh + 12)
+        for _, ad in ipairs(disabled) do
+            local aname, atitle = ad.name, ad.title
+            b:Glyph(x + 12, y - 3, { icon = "power", size = 18, color = C.subtext })
+            b:Label(atitle, x + 42, y - 5, C.subtext, 13)
+            b:Button(x + rowW - 80 - rpad, y, 80, "Enable", "primary", function()
+                theme:Confirm({
+                    title = "Re-enable " .. atitle .. "?",
+                    message = "This loads the add-on and reloads the UI.",
+                    variant = "info", confirmLabel = "Reload UI",
+                    onConfirm = function()
+                        if C_AddOns and C_AddOns.EnableAddOn then pcall(C_AddOns.EnableAddOn, aname) end
+                        if C_UI and C_UI.Reload then C_UI.Reload() end
+                    end,
+                })
+            end)
+            y = y - 32
+        end
+        y = y - 8
     end
     return y - 8
 end
@@ -604,7 +664,7 @@ local function pageSettings(b, win)
 
     b:Button(x, y, 160, "Reset Appearance", "danger", function()
         managerDB().theme = nil         -- appearanceDB() re-seeds the defaults on next read
-        applySavedAppearance()          -- rounded shape + dragon-fire palette + default font
+        applySavedAppearance()          -- the saved (or DEFAULT_*) shape / palette / font
         win:Refresh()
     end)
     return y - 40
@@ -809,7 +869,7 @@ local builtSig
 -- A signature of the current module set; when it changes we rebuild the window so the sidebar reflects
 -- newly installed / removed plugins. Enable/disable does NOT change the signature: a disabled module
 -- keeps its page rows and renders an in-place "disabled" overlay (see renderPage), so a live Refresh
--- (not a full rebuild) is all that's needed - and it avoids racing ModuleToggle's own win:Refresh().
+-- (not a full rebuild) is all that's needed for a toggle, avoiding a disruptive sidebar rebuild.
 local function moduleSig()
     local ids = {}
     for _, m in ipairs(Suite.modules) do ids[#ids + 1] = m.spec.id end
@@ -908,14 +968,14 @@ end
 -- re-fire when switching between the module's own pages); always fire the page's own onSelect.
 -- `win.view` is still the OUTGOING view at this point (Window fires onSelect before SelectView).
 local function onPageEnter(w, mod, page)
-    if moduleIdOfView(w and w.view) ~= mod.spec.id and mod.spec.OnSelect then pcall(mod.spec.OnSelect, mod) end
-    if page.onSelect then pcall(page.onSelect, w, mod) end
+    if moduleIdOfView(w and w.view) ~= mod.spec.id then safeHook(mod.spec.OnSelect, mod) end
+    safeHook(page.onSelect, w, mod)
 end
 -- Page-leave: always fire the page's onDeselect; fire the MODULE-level OnDeselect only when the
 -- INCOMING view leaves the module (so persistent frames survive inter-page navigation).
 local function onPageLeave(w, mod, page, incoming)
-    if page.onDeselect then pcall(page.onDeselect, w, mod) end
-    if moduleIdOfView(incoming) ~= mod.spec.id and mod.spec.OnDeselect then pcall(mod.spec.OnDeselect, mod) end
+    safeHook(page.onDeselect, w, mod)
+    if moduleIdOfView(incoming) ~= mod.spec.id then safeHook(mod.spec.OnDeselect, mod) end
 end
 
 -- Group modules by addon into accordion categories; each category's rows are the pages of every

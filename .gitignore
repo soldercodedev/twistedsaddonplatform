@@ -13,6 +13,11 @@
 # Reference copy of the old standalone addon (kept locally, never shipped)
 /_TCC_source/
 
+# UIFoundry parts pulled out of the shipped addon to save size: the Showcase demo
+# gallery + reusable components no module uses yet. Kept locally for reference /
+# future re-use, never shipped or pushed.
+/_UIFoundry_lab/
+
 # Dev-only plugin: Mythic Ledger mock-data generator (local testing only, never shipped/pushed)
 /TAP_MythicLedger_Dev/
 
@@ -39,6 +44,8 @@
 
 # Local dev working notes (not shipped/pushed)
 /PATCH_CHANGES.md
+/CODE_QUALITY_AUDIT.md
+/CLEANUP_BATCHES.md
 
 # Local screenshots (dev captures, not part of the shipped addon)
 /ScreenShots/

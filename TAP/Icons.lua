@@ -27,14 +27,6 @@ local function sets()
     return m._sets
 end
 
--- Is a bundled icon available (in the manifest)? variant "filled"/"social"/nil(=outline).
-function Mixin:HasIcon(name, variant)
-    local s = sets(); if not s then return false end
-    if variant == "filled" then return s.filled[name] and true or false end
-    if variant == "social" then return s.social[name] and true or false end
-    return (s.outline[name] or s.social[name]) and true or false
-end
-
 -- Texture path for a bundled icon (nil if there's no iconDir, or the manifest says it's
 -- absent). A missing filled variant transparently falls back to the outline path.
 function Mixin:GetIcon(name, variant)
@@ -95,7 +87,6 @@ function Mixin:Glyph(parent, opts)
         else tex:SetTexCoord(0, 1, 0, 1) end
     end
     function f:SetColor(c) local col = UIF.toColor(c, { 1, 1, 1 }); tex:SetVertexColor(col[1], col[2], col[3], col[4]) end
-    function f:SetSize2(s) self:SetSize(s, s) end
     if opts.icon then f:SetGlyph(opts.icon, opts.variant) end
     f:SetColor(opts.color or { 1, 1, 1 })
     return f

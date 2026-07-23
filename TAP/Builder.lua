@@ -102,32 +102,6 @@ function BuilderMixin:Sub(text, x, y, w)
     d:SetWidth(w or (self.contentWidth - 2 * (x or 0))); d:Show()
 end
 
-----------------------------------------------------------------------
--- Module enable/disable (shared across every suite module's Settings tab)
-----------------------------------------------------------------------
--- The standard "MODULE" enable/disable block for a suite module's Settings tab: a Sub header, an
--- on/off toggle bound to the platform module handle, and a status line. Kept here (not per-module)
--- so every module reads and behaves identically. `mod` is the handle passed to Settings; pass
--- opts.onToggle to react after the enable flips (typically `function() win:Refresh() end` so the
--- disabled overlay on the other tabs appears/clears at once). Returns the y below the block.
-function BuilderMixin:ModuleToggle(x, y, w, mod, opts)
-    opts = opts or {}
-    local C = self.theme.C
-    local on = mod and mod.IsEnabled and mod:IsEnabled() and true or false
-    self:Sub("MODULE", x, y, w and (w - 8) or nil); y = y - 30
-    local tg = self:Toggle(x, y, on, function(v)
-        if mod and mod.SetEnabled then mod:SetEnabled(v) end
-        if opts.onToggle then opts.onToggle(v) end
-    end)
-    if self.theme.SetTip then
-        self.theme:SetTip(tg, "Enable module",
-            opts.tip or "Turn this whole module on or off. Off stops its background work; your settings are kept.")
-    end
-    self:Label(on and "Enabled" or "|cffe0655aDisabled|r", x + 46, y - 2, on and C.text or C.subtext, 13)
-    self:Label(opts.sub or "When off, this module does nothing until you switch it back on.",
-        x + 46, y - 20, C.subtext, 10)
-    return y - 44
-end
 
 -- A centered "MODULE DISABLED" overlay notice, drawn in place of a tab's content when the module
 -- that owns the page is switched off. A dark scrim panel with a red hairline frame, a lock glyph, a
@@ -396,11 +370,9 @@ end
 
 -- Draw-at-(x,y) wrappers for the transient rich components. Return the live component.
 local RICH = {
-    "ProgressBar", "Spinner", "Badge", "Card", "StatTile", "HeroRow", "Separator", "Avatar",
-    "RadioGroup", "SegmentedControl", "Stepper", "SearchBox", "TextArea",
-    "TabBar", "Accordion", "SocialButton", "Glyph",
-    "RangeSlider", "ComboBox", "FontSelect", "TooltipPreview", "ClassSpecButton",
-    "Portrait2D", "PortraitModel", "UnitModel", "GameIcon", "SoundSelect",
+    "Badge", "Card", "StatTile", "Separator", "SearchBox",
+    "SocialButton", "Glyph", "FontSelect", "ClassSpecButton",
+    "UnitModel", "GameIcon", "SoundSelect",
 }
 for _, kind in ipairs(RICH) do
     BuilderMixin[kind] = function(self, x, y, opts)

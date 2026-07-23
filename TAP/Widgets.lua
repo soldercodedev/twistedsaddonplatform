@@ -27,20 +27,18 @@ function Mixin:Toggle(parent)
             UIF.paint(self.track, self._onColor or C.accent)
             self.knob:ClearAllPoints(); self.knob:SetPoint("RIGHT", -2, 0); self.knob:SetColorTexture(0.05, 0.06, 0.08)
         else
-            UIF.paint(self.track, self._offColor or C.border)
+            UIF.paint(self.track, C.border)
             self.knob:ClearAllPoints(); self.knob:SetPoint("LEFT", 2, 0); UIF.paint(self.knob, C.text)
         end
     end
     function f:Configure(checked, cb, opts)
         self.checked = checked and true or false; self.cb = cb
         -- Reset style EVERY time (this widget is pooled): otherwise a toggle reused without opts
-        -- keeps a prior caller's on/off color or size, so toggles render inconsistent colors.
+        -- keeps a prior caller's on color or size, so toggles render inconsistent colors.
         self._onColor  = opts and UIF.toColor(opts.color or opts.onColor) or nil
-        self._offColor = opts and UIF.toColor(opts.offColor) or nil
         self:SetSize((opts and opts.width) or 38, (opts and opts.height) or 18)
         self:_render()
     end
-    function f:ApplyStyle(opts) self:Configure(self.checked, self.cb, opts) end
     f:SetScript("OnClick", function(self)
         self.checked = not self.checked; self:_render()
         if self.cb then self.cb(self.checked) end
@@ -165,7 +163,6 @@ end
 ----------------------------------------------------------------------
 -- Dropdown (button that opens a themed Menu). Three flavors:
 --   :SetChoices(w, { {value,label}, ... }, getVal, setVal)
---   :SetIconChoices(w, { {value,label,icon,coords}, ... }, getVal, setVal)
 --   :SetMenu(w, buildItems, getVal, onPick, labelFor)  -- fully custom item list
 ----------------------------------------------------------------------
 function Mixin:Dropdown(parent)
@@ -192,32 +189,6 @@ function Mixin:Dropdown(parent)
             local items = {}
             for _, c in ipairs(choices) do items[#items + 1] = { label = c[2], value = c[1] } end
             theme:OpenMenu(self, items, getVal, function(v) setVal(v); self.fs:SetText(label()) end)
-        end)
-        return self
-    end
-
-    -- Dropdown where each item carries an icon; the button shows the selected item's icon.
-    function b:SetIconChoices(w, items, getVal, setVal)
-        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/color so a live skin swap sticks
-        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text color too (light themes)
-        self:SetSize(w, 26)
-        self.caret:SetTextColor(theme.C.accent[1], theme.C.accent[2], theme.C.accent[3])
-        local function cur() for _, it in ipairs(items) do if it.value == getVal() then return it end end end
-        local function refresh()
-            local it = cur()
-            if it and it.icon then
-                self.iconTex:SetTexture(theme:IconPath(it.icon) or it.icon)
-                if it.coords then self.iconTex:SetTexCoord(it.coords[1], it.coords[2], it.coords[3], it.coords[4])
-                else self.iconTex:SetTexCoord(unpack(theme.iconInset)) end
-                self.iconTex:Show(); self.fs:SetPoint("LEFT", 28, 0)
-            else
-                self.iconTex:Hide(); self.fs:SetPoint("LEFT", 8, 0)
-            end
-            self.fs:SetText(it and it.label or "?")
-        end
-        refresh()
-        self:SetScript("OnClick", function(self)
-            theme:OpenMenu(self, items, getVal, function(v) setVal(v); refresh() end)
         end)
         return self
     end
