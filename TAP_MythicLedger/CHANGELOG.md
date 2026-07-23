@@ -1,5 +1,13 @@
 # Mythic Ledger - Changelog
 
+## 1.1.2
+
+A small fix-up release - no scoring changes. A couple of display bugs are fixed, and the dispel-school colours are now consistent between the run review and the Dungeon Guide.
+
+- **[BUG FIX]** **Dungeon Guide caster preview** now renders on the first click, instead of staying blank until you clicked away and back.
+- **[BUG FIX]** **Death report pet kills** are attributed to the pet's owner, instead of showing an orphaned pet name.
+- **[CHANGE]** **Consistent dispel-school colours.** The run-review group-utility tiles now use the same colour per school (Magic, Curse, Poison...) as the Dungeon Guide.
+
 ## 1.1.1
 
 A quiet maintenance release - no changes to scoring or to how anything looks. Under the hood, add-on presence checks (Details!, the Encounter Journal) now use the current `C_AddOns` API directly instead of a legacy fallback.

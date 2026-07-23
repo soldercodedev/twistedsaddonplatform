@@ -8,6 +8,28 @@ local Suite = _G.TAP
 Suite.CHANGELOG = [==[
 # Twisteds Addon Platform - Changelog
 
+## 1.6.0
+
+A leaner, sturdier release. Combat Alerts drops its bundled spell/item database in favour of reading names live from your own spellbook, gear and bags - a much smaller download - and its search, test and slash-command rough edges are fixed. The platform can now re-enable a fully-disabled add-on without a trip to Blizzard's menu, and a large under-the-hood clean-up leaves the whole suite lighter.
+
+**Platform**
+
+- **[NEW]** **Re-enable a disabled add-on from /tap.** Fully disabling an add-on used to hide it until you turned it back on from Blizzard's AddOns list. The Overview page now has a **Disabled add-ons** section with a one-click **Enable** (it reloads the UI) for any installed module you've switched off.
+- **[CHANGE]** **Errors surface instead of vanishing.** A crash inside a module's page or on-enable/disable hook is now reported instead of being silently swallowed, so a misbehaving add-on can't fail invisibly.
+
+### Mythic Ledger (1.1.2)
+
+- **[BUG FIX]** **Dungeon Guide caster preview** now renders on the first click, instead of staying blank until you clicked away and back.
+- **[BUG FIX]** **Death report pet kills** are attributed to the pet's owner, instead of showing an orphaned pet name.
+- **[CHANGE]** **Consistent dispel-school colours.** The run-review group-utility tiles now use the same colour per school (Magic, Curse, Poison...) as the Dungeon Guide.
+
+### Combat Alerts (1.1.0)
+
+- **[CHANGE]** **Lighter search, no bundled database.** The optional spell/item name database is gone; the **Find** search now reads live from your spellbook, auras, gear and bags - paste a numeric spell or item **ID** to add anything outside those. Much smaller install, and no data file to parse on first search.
+- **[BUG FIX]** **/tap alerts** opens the manager again (it had stopped doing anything after the navigation move).
+- **[BUG FIX]** **Test cues can be stopped again** - the on-screen **Stop Test** bar is back, so a looping test no longer runs until you /reload.
+- **[CHANGE]** **Test button moved.** The test button now lives in the alert editor's header (reachable from any tab) and is labelled **Test Alert**.
+
 ## 1.5.1
 
 A quiet maintenance release. Every module now talks to the game through the current WoW APIs directly - the old compatibility shims kept around for pre-Midnight clients are gone - and the project gained automated code-quality gates that keep it free of accidental globals and deprecated calls. Nothing changes in how anything looks or plays.

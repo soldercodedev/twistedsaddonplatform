@@ -4,6 +4,15 @@ local _, TCC = ...
 TCC.CHANGELOG = [==[
 # Twisteds Combat Alerts - What's New
 
+## 1.1.0
+
+Combat Alerts drops its bundled spell/item database in favour of reading names live from your own spellbook, gear and bags - a much smaller download - and a few search, test and slash-command rough edges are fixed.
+
+- **[CHANGE]** **Lighter search, no bundled database.** The optional spell/item name database is gone; the **Find** search now reads live from your spellbook, auras, gear and bags - paste a numeric spell or item **ID** to add anything outside those. Much smaller install, and no data file to parse on first search.
+- **[BUG FIX]** **/tap alerts** opens the manager again (it had stopped doing anything after the navigation move).
+- **[BUG FIX]** **Test cues can be stopped again** - the on-screen **Stop Test** bar is back, so a looping test no longer runs until you /reload.
+- **[CHANGE]** **Test button moved.** The test button now lives in the alert editor's header (reachable from any tab) and is labelled **Test Alert**.
+
 ## 1.0.1
 
 - **[CHANGE]** Item and add-on lookups now use the current C_Item / C_AddOns APIs directly; the deprecated GetItemInfo / GetAddOnMetadata fallbacks were removed. No functional change.
