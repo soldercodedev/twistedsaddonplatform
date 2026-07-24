@@ -2742,6 +2742,20 @@ end
 -- box, then an All Runs box (paginated).
 ----------------------------------------------------------------------
 -- One compact run row, clickable through to the full run details.
+-- Column header for the dungeonRunRow tables (character- and dungeon-details "runs" lists). Labels line
+-- up with dungeonRunRow's column offsets below. Returns the y beneath the header band.
+local function dungeonRunHeader(b, C, x, y, rowW)
+    b:Box(x, y + 4, rowW, 22, 0.10, 0, C.accent)
+    hdr(b, C, x + 10,  y - 3, "Date")
+    hdr(b, C, x + 116, y - 3, "Character")
+    hdr(b, C, x + 268, y - 3, "Key")
+    hdr(b, C, x + 310, y - 3, "Result")
+    hdr(b, C, x + 402, y - 3, "Time")
+    hdr(b, C, x + 476, y - 3, "Deaths")
+    hdr(b, C, x + 524, y - 3, "DPS / HPS")
+    return y - 24
+end
+
 local function dungeonRunRow(b, C, x, yTop, rowW, r, i, win)
     local role = r.character and r.character.role
     b:Row(x, yTop, rowW, 26, { index = i, tipData = runTipData(r),
@@ -2889,6 +2903,7 @@ local function renderDungeonDetails(b, C, x, y, w, win)
         b:Label("No runs recorded for this dungeon.", x + 4, y - 2, C.subtext, 11); return y - 20
     end
     local first, last = pagerBar(b, C, x, y, rowW, n, "dungeonRuns", win); y = y - 42
+    y = dungeonRunHeader(b, C, x, y, rowW)
     b:Box(x, y + 6, rowW, (last - first + 1) * 28 + 6, 0.03, 0, C.card)
     for i = first, last do
         dungeonRunRow(b, C, x, y, rowW, rows[i], i, win)
@@ -3036,6 +3051,7 @@ local function renderCharacterDetails(b, C, x, y, w, win)
     y = b:Section(string.format("RUNS (%d)", #runs), x, y); y = y - 24
     if #runs == 0 then b:Label("No runs recorded.", x + 4, y - 2, C.subtext, 11); return y - 20 end
     local first, last = pagerBar(b, C, x, y, rowW, #runs, "charRuns", win); y = y - 42
+    y = dungeonRunHeader(b, C, x, y, rowW)
     b:Box(x, y + 6, rowW, (last - first + 1) * 28 + 6, 0.03, 0, C.card)
     for i = first, last do
         dungeonRunRow(b, C, x, y, rowW, runs[i], i, win)
