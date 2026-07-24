@@ -3798,10 +3798,11 @@ function renderPlayerReview(b, C, x, y, w, win)
             b:Box(LX + 160, y - 73, 170, 9, 0.16, 1, C.border)
             b:Box(LX + 160, y - 73, 170 * math.max(0, math.min(1, pen / 100)), 9, 0.95, 2, theme:Color("e0655a"))
             b:Label(string.format("-%d", pen), LX + 342, y - 70, theme:Color("e0655a"), 12)
-            b:Label(hlNums(string.format("%d teammate death%s from a mob %s lost or never had threat on · %d forgiven",
-                ltd, ltd == 1 and "" or "s", m.isPlayer and "you" or "they", forg)), LX + 392, y - 70, C.subtext, 10)
+            local forgTxt = (forg > 0) and string.format(" · %d forgiven", forg) or ""
+            b:Label(hlNums(string.format("%d teammate death%s from a mob %s lost or never had threat on%s",
+                ltd, ltd == 1 and "" or "s", m.isPlayer and "you" or "they", forgTxt)), LX + 392, y - 70, C.subtext, 10)
             if b.theme.SetTipData then b.theme:SetTipData(b:Hit(LX, y, CW, H),
-                { title = "Survival", lines = { { text = "Your avoidable-damage score, then docked for teammate deaths from a mob you lost or never had threat on (the first each run is forgiven).", color = "subtext" } } }) end
+                { title = "Survival", lines = { { text = "Your avoidable-damage score, then docked for every teammate death from a mob you lost or never had threat on.", color = "subtext" } } }) end
             y = y - H - 8
         else
             card("Survival", sv.score, (shr and string.format("%.1f%% of dmg taken avoidable", shr * 100)

@@ -15,7 +15,8 @@ Uses less memory over long sessions, Combat Alerts is a smaller download, and yo
 
 ### Mythic Ledger (1.1.2)
 
-- **[CHANGE]** Tanks are now graded on threat control: teammate deaths from a mob you lost or never grabbed dock your Survival, though the first one each run is forgiven. Tanks used to score near-perfect regardless; now holding the group together shows in the score. Your existing runs re-score on login.
+- **[CHANGE]** Tanks are now graded on threat control: every teammate death from a mob you lost or never grabbed docks your Survival. Tanks used to score near-perfect regardless; now holding the group together shows in the score. Your existing runs re-score on login.
+- **[CHANGE]** Tanks are held to a much tighter avoidable-damage standard than other roles. A tank eats the brunt of every pull, so even a small share of avoidable damage taken now costs real Survival points, where the shared grace band used to park every tank at 100.
 - **[CHANGE]** Throughput no longer maxes out just for pulling your fair share. Meeting your expected share is a strong score and beating it a little tops out, so the DPS/HPS bar tells good from average better.
 - **[CHANGE]** Kick expectations for Seat of the Triumvirate and Nexus-Point Xenas were recalibrated to what real runs actually kick.
 - **[CHANGE]** Several often-kicked casts (Arcane Bolt, Shadow Bolt, Holy Bolt, Umbra Bolt, Shadowfrost Blast) now show as Should Kick instead of Spare in the Dungeon Guide.

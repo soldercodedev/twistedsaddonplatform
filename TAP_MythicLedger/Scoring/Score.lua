@@ -182,7 +182,7 @@ function Score.Explain(score)
         end
         -- Tank threat deaths (v45): teammate deaths from a mob that wasn't tanked now DOCK Survival.
         if score.role == "TANK" and (de.groupLooseThreatDeaths or 0) > 0 then
-            d[#d + 1] = string.format("Loose-mob deaths: %d teammate death(s) came from a mob you lost or never had threat on - these dock your Survival (the first each run is forgiven).",
+            d[#d + 1] = string.format("Loose-mob deaths: %d teammate death(s) came from a mob you lost or never had threat on - each one docks your Survival.",
                 de.groupLooseThreatDeaths)
         end
     end

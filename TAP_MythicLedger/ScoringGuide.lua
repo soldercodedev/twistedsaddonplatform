@@ -164,7 +164,7 @@ local function renderGuide(mod, b, x, y, w, win)
 
     -- Tank note (full width) + footer.
     y = card(b, C, x, y, w, MET.survival, "For tanks", nil,
-        "Teammate deaths from a mob you lost or never had threat on are folded into your Survival score " .. EN .. " a tank's job is holding threat. The first such death each run is forgiven.", nil) - 12
+        "Teammate deaths from a mob you lost or never had threat on are folded into your Survival score " .. EN .. " a tank's job is holding threat, so every one of them docks it. Tanks are also held to a much tighter avoidable-damage standard, since they take the brunt of the damage.", nil) - 12
 
     local _, fh = b:Wrap(string.format(
         "This is exactly how the current engine (v%d) scores your runs " .. EN .. " honest, spec-aware feedback to help you improve. It's never a ranking, and it's never shared anywhere.",

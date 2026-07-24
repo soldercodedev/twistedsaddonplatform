@@ -172,7 +172,13 @@ Scoring.Config = Config
 --      interruptible cast, the death is Kickable even when earlier avoidable/other chip damage held the
 --      dominant share (completes the v41 killing-blow rule; from a reviewed reclassification). Retroactive
 --      rescore.
-Config.version = 45
+-- v46: TANK Survival hardened. (1) A dedicated, much steeper avoidable-share curve for tanks
+--      (survival.tankAvoidableShareCurve): tanks take the brunt of the damage, so their tolerance is far
+--      tighter - perfect only at/under 1% avoidable share, dropping front-loaded to zero by 10% (the
+--      shared curve's 3.5% grace let every tank sit at 100). (2) The tank loose-mob-death grace is removed
+--      (tankThreatDeathGrace 1 -> 0): the FIRST teammate death from a mob the tank lost or never grabbed
+--      now docks Survival too. Retroactive rescore.
+Config.version = 46
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -708,14 +714,28 @@ Config.survival = {
         { v = 0.50,  s = 0 },     -- 50% of your damage taken was avoidable -> zero
     },
     neutralScore = 80,   -- used only when avoidable or taken data is missing entirely
+    -- v46: TANK-only avoidable-share curve. Tanks eat the brunt of a pull's damage, so a tiny avoidable
+    -- share is a much bigger tell than it is for a DPS/healer - and the shared curve's 3.5% grace parked
+    -- every tank at 100. This one is far tighter: flat 100 only at/under 1% share, then a front-loaded
+    -- drop to 0 by a 10% share (2% already costs ~22 points, 4% ~55). interp() clamps the ends.
+    tankAvoidableShareCurve = {
+        { v = 0.000, s = 100 },
+        { v = 0.010, s = 100 },   -- 1% and under -> still perfect
+        { v = 0.020, s = 78 },    -- ...then it bites hard
+        { v = 0.030, s = 60 },
+        { v = 0.040, s = 45 },
+        { v = 0.050, s = 32 },
+        { v = 0.060, s = 22 },
+        { v = 0.080, s = 8 },
+        { v = 0.100, s = 0 },     -- 10% of your damage taken was avoidable -> zero
+    },
     -- v45: TANK threat accountability. A tank's core job is holding threat, which the avoidable-share
-    -- metric can't see (their huge unavoidable damage dilutes any avoidable share to ~0, so tanks nearly
-    -- always score 100). So for tanks we fold in the party's "threat" deaths (a teammate killed by melee
-    -- after a mob was lost or never tanked): forgive the first `tankThreatDeathGrace` per run (bad luck
-    -- happens), then dock `tankThreatDeathPenalty` Survival points for each one after. TANK only; clamped
-    -- at 0. penalty 0 disables.
+    -- metric can't see (their huge unavoidable damage dilutes any avoidable share to ~0). So for tanks we
+    -- fold in the party's "threat" deaths (a teammate killed by melee after a mob was lost or never
+    -- tanked) and dock `tankThreatDeathPenalty` Survival points for EACH one. TANK only; clamped at 0.
+    -- v46: the one-death grace is removed (grace 0) - the first loose-mob death docks too. penalty 0 disables.
     tankThreatDeathPenalty = 10,
-    tankThreatDeathGrace   = 1,
+    tankThreatDeathGrace   = 0,
 }
 
 ----------------------------------------------------------------------

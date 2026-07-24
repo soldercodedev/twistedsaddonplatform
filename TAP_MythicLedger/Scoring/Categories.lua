@@ -326,18 +326,22 @@ function Cat.Survival(norm, runCtx)
     local taken = norm.damageTaken
     local av = norm.avoidableDamageTaken
     local s, conf, detail, note
+    -- Tanks get a dedicated, much steeper avoidable-share curve (v46): they eat the brunt of the damage,
+    -- so a small avoidable share is a far bigger tell, and the shared curve's grace band parked every tank
+    -- at 100. Everyone else uses the standard curve.
+    local curve = (norm.role == "TANK" and Cfg.survival.tankAvoidableShareCurve) or Cfg.survival.avoidableShareCurve
     -- A confirmed ZERO avoidable damage is a 0% share = perfect survival, regardless of total taken
     -- (0 / anything = 0). On a tracked run, "no avoidable rows" is normalized to 0 (see Normalize), so
     -- this is a confident 100, not a neutral "no data" estimate.
     if av == 0 then
-        s = Cfg.clamp(Cfg.interp(Cfg.survival.avoidableShareCurve, 0, "v", "s"), 0, 100)
+        s = Cfg.clamp(Cfg.interp(curve, 0, "v", "s"), 0, 100)
         conf = 1; detail = { avoidableShare = 0, shareScore = s }
     elseif av == nil or not taken or taken <= 0 then
         s = Cfg.survival.neutralScore; conf = 0; detail = {}
         note = "No avoidable-damage data was recorded; using a neutral estimate."
     else
         local share = av / taken
-        s = Cfg.clamp(Cfg.interp(Cfg.survival.avoidableShareCurve, share, "v", "s"), 0, 100)
+        s = Cfg.clamp(Cfg.interp(curve, share, "v", "s"), 0, 100)
         conf = 0.7; detail = { avoidableShare = share, shareScore = s }
     end
     -- v45 TANK threat accountability: the avoidable-share metric can't see a tank's real job (holding
