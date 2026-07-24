@@ -544,7 +544,11 @@ local function finalizeRun(stats)
     -- breakdowns; `recaps` = raw death-recap fatal-hit timelines. Both stored raw in the run log so no run
     -- ever has to be re-played for a missing piece; both nil-safe (nil on the abandoned/metadata path).
     local attrib = Providers.ReadAttribution and Providers.ReadAttribution(runCtx())
-    local recaps, feignCounts = Providers.ReadDeathRecaps and Providers.ReadDeathRecaps(runCtx())
+    -- ReadDeathRecaps returns TWO values (recaps, feignCounts). Guard with an `if`, not `and`: an
+    -- `x and f()` expression truncates f()'s multi-return to a single value, which would leave
+    -- feignCounts nil and silently skip the feign death-count subtraction below.
+    local recaps, feignCounts
+    if Providers.ReadDeathRecaps then recaps, feignCounts = Providers.ReadDeathRecaps(runCtx()) end
     run.party           = mergePartyStats(run.party, stats, run.dispelCapture, attrib, recaps)
     -- Feign Death fix: the meter logs a Hunter's Feign Death as a death (no killing blow, never near-
     -- lethal). Subtract those so a hunter isn't docked for feigning. The recaps handed to mergePartyStats

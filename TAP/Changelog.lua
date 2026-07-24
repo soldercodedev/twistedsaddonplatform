@@ -2,7 +2,7 @@
 -- The platform's in-game "What's New" text, shown on the Help > Changelog page. Mirrors the root
 -- CHANGELOG.md (kept in sync by hand, same as each module's Changelog.lua mirrors its CHANGELOG.md).
 -- Parsed by the Suite Manager: `## version`, `### sub`, `**Platform**`, `- **[TAG]** text`.
-local ADDON, TAP = ...
+local ADDON = ...
 local Suite = _G.TAP
 
 Suite.CHANGELOG = [==[

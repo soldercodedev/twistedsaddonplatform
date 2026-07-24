@@ -740,7 +740,7 @@ end
 -- PROFILES page: which alert set this character uses, + copy alerts between profiles.
 local function renderProfiles(mod, b, x, y, w, win)
     local C = b.theme.C
-    local d = TCC.db    local P = newPen(b, win, x, w)
+    local P = newPen(b, win, x, w)
 
     -- PROFILE (which alert set this character uses, + copy alerts between profiles)
     b:Sub("PROFILE", x, y); y = y - 36
