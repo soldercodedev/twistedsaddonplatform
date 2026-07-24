@@ -10,9 +10,13 @@ if not Suite then return end
 local CHANGELOG = [==[
 # Focus Target Interrupt - What's New
 
-## 1.1.0-beta.1
+## 1.1.1
 
-Part of the platform's new **two-tier navigation** (TAP 1.5.0-beta.1).
+- **[CHANGE]** Loading Blizzard's macro UI now uses the current **C_AddOns** API directly. No functional change.
+
+## 1.1.0
+
+Part of the platform's **two-tier navigation** (TAP 1.5.0).
 
 - **[NEW]** **Announce by class/spec.** The **Announce** page adds a **Class / Spec** picker: focus and ready-check call-outs now fire only while you're playing one of the chosen specs. Leave it empty to announce on every character.
 - **[CHANGE]** **Pages moved to the sidebar.** Macros, Marker Palette, Announce and Settings are now sub-rows under the **Focus Target Interrupt** category in the `/tap` sidebar, each full-width. The enable toggle moved to the platform **Overview**.

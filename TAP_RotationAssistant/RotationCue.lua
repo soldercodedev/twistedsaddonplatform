@@ -1214,6 +1214,10 @@ end
 local CHANGELOG = [==[
 # Rotation Assistant - What's New
 
+## 1.0.1
+
+- **[CHANGE]** Spell cooldown, cast, and icon lookups now use the current **C_Spell** API directly; the legacy global fallbacks were removed. No functional change.
+
 ## 1.0.0
 
 - **[CHANGE]** Out of beta - Rotation Assistant is now a stable 1.0 release.
