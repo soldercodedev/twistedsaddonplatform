@@ -195,7 +195,7 @@ HERO_STATS.averageKey = descStat({
 })
 
 -- Raw average duration can't say "good" or "bad" (dungeon timers differ), so it stays
--- neutral until per-dungeon timer normalisation exists. See getNormalizedTimeColor below.
+-- neutral until per-dungeon timer normalisation exists.
 HERO_STATS.averageTime = {
     key = "averageTime", label = "Avg Time", icon = "clock",
     desc = "Average dungeon duration.",
@@ -303,21 +303,6 @@ function ML.HeroStatSubtext(key, o, scopeLabel)
         return { sub = "Unique teammates", footer = { "Unique teammates" } }
     end
     return { sub = nil, footer = {} }
-end
-
-----------------------------------------------------------------------
--- Future work: normalised time color. Only usable once per-run dungeon
--- timers are recorded and we can compute (elapsed / dungeon timer). Kept
--- here so the threshold policy lives with the rest of the scale.
-----------------------------------------------------------------------
-function ML.getNormalizedTimeColor(timerUsagePercent)
-    if type(timerUsagePercent) ~= "number" then return ML.TierColor("N"), R.neutral end
-    if timerUsagePercent < 70  then return ML.TierColor("A"), R.exceptional end
-    if timerUsagePercent < 80  then return ML.TierColor("B"), R.excellent end
-    if timerUsagePercent < 90  then return ML.TierColor("C"), R.veryGood end
-    if timerUsagePercent <= 100 then return ML.TierColor("D"), R.good end
-    if timerUsagePercent <= 110 then return ML.TierColor("F"), R.neutral end
-    return ML.TierColor("F"), R.concerning
 end
 
 ----------------------------------------------------------------------

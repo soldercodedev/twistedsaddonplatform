@@ -178,7 +178,7 @@ Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
 ----------------------------------------------------------------------
 -- Category weights per role (must each sum to 1.0; validated at load). Six categories:
--- throughput, interrupts, dispels, survival, deaths, roleContribution. "Utility" in the brief =
+-- throughput, interrupts, dispels, survival, deaths. "Utility" in the brief =
 -- interrupts + dispels. When a utility category is N/A for a spec these are redistributed
 -- deterministically by Weights.lua.
 ----------------------------------------------------------------------
@@ -189,9 +189,9 @@ Config.roles = { "TANK", "HEALER", "DAMAGER" }
 -- retired to 0 weight (its targets can be reintroduced via knobs later without touching these weights).
 -- Survival and Death Impact stay EXACTLY equal (Weights.Resolve averages them after any redistribution).
 Config.roleWeights = {
-    DAMAGER = { throughput = 0.35, interrupts = 0.125, dispels = 0.125, survival = 0.20, deaths = 0.20, roleContribution = 0.00 },
-    TANK    = { throughput = 0.35, interrupts = 0.125, dispels = 0.125, survival = 0.20, deaths = 0.20, roleContribution = 0.00 },
-    HEALER  = { throughput = 0.35, interrupts = 0.125, dispels = 0.125, survival = 0.20, deaths = 0.20, roleContribution = 0.00 },
+    DAMAGER = { throughput = 0.35, interrupts = 0.125, dispels = 0.125, survival = 0.20, deaths = 0.20 },
+    TANK    = { throughput = 0.35, interrupts = 0.125, dispels = 0.125, survival = 0.20, deaths = 0.20 },
+    HEALER  = { throughput = 0.35, interrupts = 0.125, dispels = 0.125, survival = 0.20, deaths = 0.20 },
 }
 
 -- Deterministic redistribution when a utility category is not applicable. Fractions of the freed
@@ -505,30 +505,8 @@ Config.contributionCurve = {
 Config.confidence = {
     interrupt = { neutralScore = 75, minGroupSample = 15 },
     dispel    = { neutralScore = 70, minGroupSample = 8 },
-    throughput = { minGroupSample = 1 },   -- throughput confidence handled via baseline sample (Baselines.lua)
 }
 
-----------------------------------------------------------------------
--- Group-composition modifier for expected utility. BOUNDED and small: comp nudges expectations, it
--- never dominates. A high-control tank/short-CD interrupter SLIGHTLY LOWERS others' expected
--- interrupt contribution (fewer casts left for them) - it never raises anyone else's expectation and
--- never directly changes another player's score.
-----------------------------------------------------------------------
-Config.composition = {
-    min = 0.85, max = 1.15,
-    interrupt = {
-        base = 1.00,
-        perExtraInterrupter   = -0.03,  -- each OTHER interrupt-capable player beyond the first
-        perShortCdInterrupter = -0.02,  -- extra reduction for each OTHER short-CD/high-control kicker
-        perHighControlTank    = -0.05,  -- a high-control tank soaks casts -> others expected slightly less
-        loneInterrupterBonus  =  0.10,  -- if this player is the ONLY conventional interrupter, expect a bit more
-    },
-    dispel = {
-        base = 1.00,
-        perExtraDispeller = -0.03,      -- each OTHER player who can cover the same dispel role
-        loneDispellerBonus = 0.08,
-    },
-}
 
 ----------------------------------------------------------------------
 -- Throughput. Role-specific. DPS/tanks primarily judged on damage (per-role), healers on healing
@@ -773,17 +751,6 @@ Config.grades = {
     { min = 85, grade = "A-" }, { min = 80, grade = "B+" }, { min = 75, grade = "B"  },
     { min = 70, grade = "B-" }, { min = 65, grade = "C+" }, { min = 60, grade = "C"  },
     { min = 50, grade = "D"  }, { min = 0,  grade = "F"  },
-}
-
-----------------------------------------------------------------------
--- Learned baselines. Blend static -> learned as comparable-sample count grows. Not abrupt.
-----------------------------------------------------------------------
-Config.learned = {
-    minSamples = 20,          -- full confidence in the learned median at/after this many comparable runs
-    minBucketSamples = 3,     -- a learned bucket needs at least this many samples before it's used at all
-    -- learnedConfidence = clamp(n / minSamples). final = static*(1-c) + learnedMedian*c.
-    keyBrackets = { 0, 5, 8, 11, 14, 17, 20 },        -- lower bounds; a run maps to its bracket floor
-    durationBracketsMin = { 0, 20, 28, 36 },          -- minutes; lower bounds
 }
 
 -- Interpolate a value across an ordered list of {x=,y=} (or {ratio=,score=}/{v=,s=}) points.

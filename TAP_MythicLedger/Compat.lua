@@ -499,11 +499,3 @@ function API.IdentityKey(member)
     if member.fullName and member.fullName:find("-", 1, true) then return member.fullName end
     return nil   -- unqualified name only -> refuse to key (caller drops it)
 end
-
--- Whether Details! (the addon) is present and loaded.
-function API.IsDetailsLoaded()
-    local loaded = C_AddOns and C_AddOns.IsAddOnLoaded
-    if not loaded then return false end
-    local ok, res = pcall(loaded, "Details")
-    return ok and res and true or false
-end

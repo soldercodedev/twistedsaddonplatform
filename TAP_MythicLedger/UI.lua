@@ -3403,12 +3403,6 @@ function scoreTipLines(sc)   -- forward-declared above
         end
     end
 
-    -- Role contribution (only when it carries weight).
-    local rc = cats.roleContribution
-    if rc and (rc.weight or 0) > 0 then
-        block("Role Contribution", rc.score, false, "survival + utility composite" .. wt(rc.weight))
-    end
-
     -- Compact color-scale legend so the score colors are self-explaining wherever this tooltip shows
     -- (the full ranged legend lives on the grade tile / breakdown-card hovers).
     lines[#lines + 1] = { sep = true }

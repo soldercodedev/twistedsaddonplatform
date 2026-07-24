@@ -374,16 +374,5 @@ function Cat.Deaths(norm)
     return { applicable = true, score = Cfg.deaths.baseScore - pen, deaths = d, penalty = pen, confidence = 1 }
 end
 
-----------------------------------------------------------------------
--- Role contribution. A small, honest composite of survival + utility execution (not new data). Only
--- meaningfully weighted for tanks/healers; DPS weight is 0. Kept low-impact and clearly derived.
-----------------------------------------------------------------------
-function Cat.RoleContribution(norm, cats)
-    local vals = {}
-    if cats.survival and cats.survival.applicable then vals[#vals + 1] = math.min(cats.survival.score, 100) end
-    if cats.interrupts and cats.interrupts.applicable and cats.interrupts.actual ~= nil then vals[#vals + 1] = math.min(cats.interrupts.score, 100) end
-    if cats.dispels and cats.dispels.applicable and cats.dispels.actual ~= nil then vals[#vals + 1] = math.min(cats.dispels.score, 100) end
-    if #vals == 0 then return { applicable = true, score = 75, confidence = 0, derived = true } end
-    local s = 0; for _, v in ipairs(vals) do s = s + v end
-    return { applicable = true, score = s / #vals, confidence = 0.5, derived = true, from = #vals }
-end
+-- (The roleContribution category was retired to 0 weight in v20 and removed; role execution is already
+-- captured by survival + interrupts + dispels.)

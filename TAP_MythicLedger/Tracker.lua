@@ -61,11 +61,6 @@ function Tracker.Current() return current end
 ----------------------------------------------------------------------
 -- Helpers.
 ----------------------------------------------------------------------
-local function guidSet(party)
-    local out = {}
-    for _, m in ipairs(party or {}) do if m.guid then out[#out + 1] = m.guid end end
-    return out
-end
 
 local function statBlock(src)
     local s = {}
@@ -181,14 +176,7 @@ local function partyDeathTotal()
     if type(cm) == "number" then return cm end
     local m = Providers.ReadPartyDeaths and Providers.ReadPartyDeaths(runCtx())
     if type(m) == "number" then return m end
-    local total = 0
-    for _, mem in ipairs(current.party or {}) do
-        if mem.guid then
-            local c = Providers.Counters.Get(mem.guid)
-            if c and c.deaths then total = total + c.deaths end
-        end
-    end
-    return total
+    return 0   -- no combat-log fallback in Midnight; deaths come from ChallengeModeDeaths / C_DamageMeter above
 end
 
 local function persistRecovery()
@@ -209,7 +197,6 @@ local function cancelTimers()
 end
 
 local function cleanup()
-    Providers.Counters.Stop()
     cancelTimers()
     current, encounters, provider, retries, combatWaits = nil, nil, nil, 0, 0
 end
@@ -284,11 +271,7 @@ function Tracker.BeginRun()
     petOwners = {}; samplePets()   -- fresh pet->owner map for this run; seed with whatever's out now
     provider = Providers.Select()
     run.provider = provider:GetSource()
-    run.providerVersion = provider:GetVersion()
-    Providers.Counters.SetParty(guidSet(run.party))
-    Providers.Counters.Reset()
-    Providers.Counters.Start()
-    local ok = pcall(function() provider:BeginRun(run) end)
+    run.providerVersion = provider:GetVersion()    local ok = pcall(function() provider:BeginRun(run) end)
     if not ok then ML.Log("provider:BeginRun errored (continuing)") end
     setState(STATE.ACTIVE)
     persistRecovery()
@@ -306,7 +289,6 @@ end
 local function refreshRoster()
     if state ~= STATE.ACTIVE or not current then return end
     current.party = API.GroupMembers()
-    Providers.Counters.SetParty(guidSet(current.party))
 end
 
 function Tracker.OnRosterUpdate()
@@ -517,8 +499,6 @@ end
 local function finalizeRun(stats)
     local run = current
     if not run then return end
-    Providers.Counters.Stop()
-
     -- Close any still-open combat segment (the key usually completes right after a fight).
     if run._combatOpen then
         run.combat = run.combat or {}
@@ -718,9 +698,7 @@ function Tracker.AbandonRun(reason)
         DB.ClearActiveRun(); cleanup(); setState(STATE.IDLE)
         return
     end
-    local run = current
-    Providers.Counters.Stop()
-    run.completedAt = time()
+    local run = current    run.completedAt = time()
     run.duration    = run.completedAt - (run.startedAt or run.completedAt)
     run.status      = STATUS.ABANDONED
     run.confidence  = "partial"
@@ -749,11 +727,7 @@ local function restoreFromRecord(rec)
     encounters = {}
     petOwners = {}; samplePets()   -- pre-reload pet history is lost; seed from whatever's out now
     provider = Providers.Select()
-    run.provider = provider:GetSource()
-    Providers.Counters.SetParty(guidSet(run.party))
-    Providers.Counters.Reset()
-    Providers.Counters.Start()
-    setState(STATE.ACTIVE)
+    run.provider = provider:GetSource()    setState(STATE.ACTIVE)
     persistRecovery()
     ML.Log("Recovered in-progress run: %s +%s", tostring(run.dungeonName), tostring(run.level))
 end
@@ -859,8 +833,6 @@ end
 
 function Tracker.Stop()
     if frame then frame:UnregisterAllEvents() end
-    cancelTimers()
-    Providers.Counters.Stop()
-    -- Keep `current`/recovery record intact so a re-enable (or reload) can still finalize it.
+    cancelTimers()    -- Keep `current`/recovery record intact so a re-enable (or reload) can still finalize it.
     ML.Log("Tracker stopped")
 end

@@ -67,11 +67,9 @@ function Store.Summary(run)
 end
 
 -- Retroactively (re)score EVERY saved run - the migration path for scoring-logic / version changes.
--- Refreshes the learned medians first, clears caches, recomputes, and rewrites the persisted
--- summaries. Returns count, version.
+-- Clears caches, recomputes, and rewrites the persisted summaries. Returns count, version.
 function Store.RescoreAll()
     wipe(fullMemo)
-    if Scoring.Learned then Scoring.Learned.Invalidate() end
     local sc = scoreCache()
     if sc then sc.runs = {} end
     local n = 0
@@ -106,7 +104,6 @@ end
 -- and re-marks best runs.
 function Store.InvalidateAll()
     wipe(fullMemo)
-    if Scoring.Learned then Scoring.Learned.Invalidate() end
     local sc = scoreCache()
     if sc then sc.runs = {} end
 end

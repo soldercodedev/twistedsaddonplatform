@@ -41,7 +41,6 @@ function Score.ScoreNormalized(norm, summary, groupTotals, dist, healModel, runC
     cats.dispels    = Cat.Dispel(norm, summary, groupTotals.dispels, dist and dist.dispel)
     cats.survival   = Cat.Survival(norm)
     cats.deaths     = Cat.Deaths(norm)
-    cats.roleContribution = Cat.RoleContribution(norm, cats)
 
     -- Tank awareness (v42): surface how many teammate deaths came from a mob that wasn't tanked (a "threat"
     -- death = a non-tank killed by melee after losing/never having aggro). Shown on the tank's review for
@@ -185,13 +184,6 @@ function Score.Explain(score)
             d[#d + 1] = string.format("Loose-mob deaths: %d teammate death(s) came from a mob you lost or never had threat on - shown for awareness, not scored.",
                 de.groupLooseThreatDeaths)
         end
-    end
-
-    -- Role contribution (only mention when it carries weight).
-    local rc = cats.roleContribution
-    if rc and (rc.weight or 0) > 0 then
-        d[#d + 1] = string.format("Role Contribution: %d  (composite of survival + utility; weight %d%%)",
-            round(rc.score), pct(rc.weight))
     end
 
     local short = string.format("%s (%d)", score.grade, score.overall)

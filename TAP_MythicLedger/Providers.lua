@@ -25,45 +25,7 @@ local function emptyStats()
         interrupts = nil, dispels = nil, crowdControls = nil, deaths = nil,
     }
 end
-Providers.emptyStats = emptyStats
 
-----------------------------------------------------------------------
--- CombatCounters: legacy per-GUID tallies. In MIDNIGHT the combat log is RESTRICTED for addons -
--- registering COMBAT_LOG_EVENT_UNFILTERED is a forbidden action that trips a taint block (even at
--- load), and it never delivered events anyway (that was the "CLEU seen 0/0/0"). So we no longer
--- register it at all. Deaths / interrupts / dispels now come entirely from C_DamageMeter. The table
--- and its API are kept as inert stubs so callers (Tracker, backfill) don't need to change.
-----------------------------------------------------------------------
-local Counters = {
-    active = false,
-    party  = {},   -- guid -> true
-    data   = {},   -- guid -> { deaths, interrupts, dispels } (stays empty; no CLEU in Midnight)
-}
-Providers.Counters = Counters
-
-function Counters.Reset() wipe(Counters.data) end
-function Counters.SetParty(guids)
-    wipe(Counters.party)
-    if type(guids) == "table" then
-        for _, g in ipairs(guids) do if g then Counters.party[g] = true end end
-    end
-end
-function Counters.Start() Counters.active = true end   -- intentionally does NOT touch the combat log
-function Counters.Stop()  Counters.active = false end
-function Counters.Get(guid) return Counters.data[guid] end
-
--- Backfill nil metrics from the counters. A no-op now that they stay empty (kept for the metadata
--- provider and any pre-Midnight client where the counters could still carry data).
-local function backfillFromCounters(stats, guid)
-    if not (stats and guid) then return stats end
-    local c = Counters.Get(guid)
-    if not c then return stats end
-    if stats.deaths     == nil then stats.deaths = c.deaths end
-    if stats.interrupts == nil then stats.interrupts = c.interrupts end
-    if stats.dispels    == nil then stats.dispels = c.dispels end
-    return stats
-end
-Providers.backfillFromCounters = backfillFromCounters
 
 ----------------------------------------------------------------------
 -- ProviderBase - the interface every provider fulfils. Methods no-op by default.
@@ -80,8 +42,6 @@ function Base:GetSource() return self._source end
 function Base:GetVersion() return nil end
 function Base:IsAvailable() return false end
 function Base:BeginRun(_) end
-function Base:EndRun(_) end
-function Base:Reset() end
 -- GetRunStats(ctx) -> normalized { source, sourceVersion, player = {stats}, party = { {identity+stats} } } or nil
 function Base:GetRunStats(_) return nil end
 
@@ -99,11 +59,9 @@ function Metadata:GetRunStats(ctx)
             local s = emptyStats()
             s.guid, s.name, s.realm, s.fullName = m.guid, m.name, m.realm, m.fullName
             s.classId, s.classFile, s.specId, s.role = m.classId, m.classFile, m.specId, m.role
-            backfillFromCounters(s, m.guid)
             out.party[#out.party + 1] = s
         end
     end
-    if ctx and ctx.player then backfillFromCounters(out.player, ctx.player.guid) end
     return out
 end
 
@@ -246,7 +204,6 @@ local function readMeterStats(ctx, sourceLabel)
     end
     return result
 end
-Providers.ReadMeterStats = readMeterStats
 
 -- Cumulative TOTAL party deaths so far this run (Overall Deaths summed over the party GUIDs). The
 -- tracker diffs this across each boss to attribute deaths to that boss.
@@ -374,8 +331,6 @@ Providers.ReadPartyDamageMap = readPartyDamageMap
 local ATTR_CAP = nil                       -- FULLY UNCAPPED (user: log ALL raw spell rows for rescoring /
                                            -- tuning). topByAmt still sorts biggest-first; nil = never trim.
 local MELEE_SPELLS = { [6603] = true }     -- 6603 = Auto Attack; a non-tank death to melee => threat/aggro
-Providers.ATTR_CAP = ATTR_CAP
-Providers.MELEE_SPELLS = MELEE_SPELLS
 
 -- One GetCombatSessionSourceFromType(sessionType, meterType, guid) record -> normalized spell list.
 -- `keepSrc` also records the dealing unit's name (useful for damage-taken / avoidable). `.ok` is only

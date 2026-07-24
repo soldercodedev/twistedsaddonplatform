@@ -308,10 +308,6 @@ function Cap.DispelProfile(specID, role)
     local p = Cap.Get(specID, role)
     return (p.dispel and p.dispel.profile) or "NONE"
 end
-function Cap.IsHighControl(specID, role)
-    local p = Cap.Get(specID, role)
-    return p.highControl and true or false
-end
 
 -- The OFFENSIVE dispel ability (Purge / Soothe / Spellsteal / ...) per class - the spell used to strip a
 -- BUFF off an enemy or Soothe an enrage, as opposed to the per-spec DEFENSIVE dispel in the record

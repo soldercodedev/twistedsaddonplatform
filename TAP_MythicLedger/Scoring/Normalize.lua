@@ -95,16 +95,6 @@ function Norm.Player(run, member)
     if n.interrupts == nil and tracked then n.interrupts = 0 end
     if n.dispels == nil and tracked then n.dispels = 0 end
 
-    -- Effective/active seconds is NOT stored by the meter; approximate from damage/dps when both
-    -- exist (Blizzard's dps is over effective combat time). Marked as an estimate for the UI.
-    if n.damageDone and n.dps and n.dps > 0 then
-        n.activeSeconds = n.damageDone / n.dps
-        n.activeSecondsEstimated = true
-    else
-        n.activeSeconds = n.durationSeconds
-        n.activeSecondsEstimated = (n.durationSeconds ~= nil)
-    end
-
     local present = 0
     for _, f in ipairs(SCORED_FIELDS) do if n[f] ~= nil then present = present + 1 end end
     n.dataCompleteness = present / #SCORED_FIELDS

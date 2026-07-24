@@ -24,10 +24,8 @@ local function round(v) return math.floor((v or 0) + 0.5) end
 
 local LABELS = {
     throughput = "Throughput", interrupts = "Interrupts", dispels = "Dispels",
-    survival = "Survival", deaths = "Deaths", roleContribution = "Role Contribution",
+    survival = "Survival", deaths = "Deaths",
 }
--- roleContribution is a derived composite - coaching its inputs directly is clearer than coaching the
--- average, so it's excluded from strengths/improvements (it still appears in `verdicts` for completeness).
 
 ----------------------------------------------------------------------
 -- The state machine: a 0..100 category (or overall) score -> named band.

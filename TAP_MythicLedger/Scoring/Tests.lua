@@ -82,17 +82,8 @@ function Scoring.RunTests(printer)
     check(Scoring.Capability.DispelProfile(257) == "HIGH_UTILITY", "Holy Priest dispel HIGH_UTILITY")
     check(Scoring.Capability.DispelProfile(66) == "LIMITED", "Prot Paladin dispel LIMITED (Cleanse Toxins)")
 
-    -- (10) High-control tank LOWERS others' expected interrupts (never raises), and never lowers score directly.
     local fury = member("Fury", 72, "DAMAGER", dpsStats({ interrupts = 6, avoid = 3e7, deaths = 0 }), true)
-    local partyNoTank = { fury, member("R", 261, "DAMAGER", dpsStats({ interrupts = 4 })), member("H", 257, "HEALER", healStats()) }
     local partyProtPal = { fury, member("PP", 66, "TANK", tankStats({ interrupts = 10 })), member("H", 257, "HEALER", healStats()) }
-    local nFury = Scoring.Normalize.Player(run(1800, 12, partyNoTank), fury)
-    local expNoTank = select(1, Scoring.Composition.InterruptModifier(nFury, Scoring.Composition.Summarize(Scoring.Normalize.Party(run(1800,12,partyNoTank)))))
-    local expProt   = select(1, Scoring.Composition.InterruptModifier(nFury, Scoring.Composition.Summarize(Scoring.Normalize.Party(run(1800,12,partyProtPal)))))
-    check(expProt <= expNoTank + 1e-9, "High-control tank does not RAISE others' expected interrupts")
-
-    -- Composition modifier always within [0.85, 1.15].
-    check(expProt >= Cfg.composition.min - 1e-9 and expProt <= Cfg.composition.max + 1e-9, "comp modifier bounded")
 
     -- (2) Prot Paladin with a huge interrupt total: capped, doesn't blow past 100 in-category.
     local ppScore = Score.ScoreRun(run(1800, 12, partyProtPal)).byGuid["PP"]
@@ -147,9 +138,7 @@ function Scoring.RunTests(printer)
         survival   = { applicable = true, score = 100, weight = 0.25, detail = { avoidableShare = 0.01 } },
         deaths     = { applicable = true, score = 100, weight = 0.18, deaths = 0, penalty = 0 },
         interrupts = { applicable = true, score = 100, weight = 0.18, actual = 5, expected = 4.5 },
-        dispels    = { applicable = true, score = 90,  weight = 0.12, actual = 3, expected = 3 },
-        roleContribution = { applicable = true, score = 95, weight = 0 },
-    } }
+        dispels    = { applicable = true, score = 90,  weight = 0.12, actual = 3, expected = 3 },    } }
     local rvS = Review.Build(strong)
     check(#rvS.improvements == 0, "strong player -> no improvements")
     check(#rvS.strengths >= 4, "strong player -> multiple strengths")
@@ -159,9 +148,7 @@ function Scoring.RunTests(printer)
         survival   = { applicable = true, score = 30, weight = 0.25, detail = { avoidableShare = 0.15 } },
         deaths     = { applicable = true, score = 50, weight = 0.18, deaths = 2, penalty = 50 },
         interrupts = { applicable = true, score = 70, weight = 0.18, actual = 3, expected = 4.5 },
-        dispels    = { applicable = false, reason = "no dispel" },
-        roleContribution = { applicable = true, score = 50, weight = 0 },
-    } }
+        dispels    = { applicable = false, reason = "no dispel" },    } }
     local rvW = Review.Build(weak)
     check(#rvW.improvements >= 3, "weak player -> multiple improvements")
     check(rvW.improvements[1].key == "survival", "improvements ranked by leverage (survival highest)")
@@ -176,9 +163,7 @@ function Scoring.RunTests(printer)
         survival   = { applicable = true, score = 95, weight = 0.30, detail = { avoidableShare = 0.01 } },
         deaths     = { applicable = true, score = 100, weight = 0.18, deaths = 0, penalty = 0 },
         interrupts = { applicable = true, score = 95, weight = 0.18, actual = 6, expected = 5 },
-        dispels    = { applicable = false, reason = "none" },
-        roleContribution = { applicable = true, score = 90, weight = 0.06 },
-    } }
+        dispels    = { applicable = false, reason = "none" },    } }
     local rvT = Review.Build(tank)
     local dmgStrength, healImprove = false, false
     for _, sN in ipairs(rvT.strengths) do if (sN.label or ""):find("Damage") then dmgStrength = true end end

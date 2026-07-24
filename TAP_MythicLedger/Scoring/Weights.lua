@@ -10,7 +10,7 @@ local Weights = {}
 Scoring.Weights = Weights
 local Cfg = Scoring.Config
 
-local CATS = { "throughput", "interrupts", "dispels", "survival", "deaths", "roleContribution" }
+local CATS = { "throughput", "interrupts", "dispels", "survival", "deaths" }
 
 -- applicable: { interrupts = bool, dispels = bool } (others assumed applicable). role: TANK/HEALER/DAMAGER.
 -- Returns weights (all six, sum 1.0) and a redistribution log { {from, to, amount}, ... }.

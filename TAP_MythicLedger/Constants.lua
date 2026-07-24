@@ -35,13 +35,11 @@ ML.STATE = {
 
 -- Combat-stat provider source tags (saved with each run).
 ML.SOURCE = {
-    DETAILS  = "DETAILS",
     BLIZZARD = "BLIZZARD",
     NONE     = "NONE",
 }
 
--- Roles (match Blizzard's role tokens so we can pass them straight through).
-ML.ROLES = { "TANK", "HEALER", "DAMAGER" }
+-- Role token -> display label.
 ML.ROLE_LABEL = { TANK = "Tank", HEALER = "Healer", DAMAGER = "DPS" }
 
 -- Recap settings enums.

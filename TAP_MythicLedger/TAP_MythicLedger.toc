@@ -41,7 +41,6 @@ Scoring\Healing.lua
 Scoring\Categories.lua
 Scoring\Weights.lua
 Scoring\Score.lua
-# Scoring\Learned.lua  -- DISABLED: self-learning removed; baselines are group-relative & deterministic (see Baselines.lua)
 # Deterministic coaching review: category states -> "did well / work on" + recommendations.
 Scoring\Review.lua
 Scoring\Store.lua

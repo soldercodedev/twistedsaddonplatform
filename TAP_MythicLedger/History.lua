@@ -261,10 +261,6 @@ function History.OnRunSaved(run)
     -- Re-decide the crown (best-scoring run per dungeon+key+spec): a new higher-scoring run takes it and
     -- the previous holder is un-flagged. The run was already scored at finalize, so its summary is ready.
     if DB.MarkBestRuns then DB.MarkBestRuns() end
-    -- New data shifts the learned throughput medians; invalidate so later scorings use them. Existing
-    -- runs' cached scores are left as-is (a single new run barely moves a median) until a version bump
-    -- or an explicit RescoreAll - see Scoring/Store.lua.
-    if ML.Scoring and ML.Scoring.Learned then ML.Scoring.Learned.Invalidate() end
 end
 
 function History.RebuildAll()
@@ -282,8 +278,7 @@ function History.RebuildAll()
         updateBests(run)
     end
     if DB.MarkKeepers then DB.MarkKeepers() end   -- best-per-dungeon + top-10 (retention keepers)
-    if ML.Scoring and ML.Scoring.Learned then ML.Scoring.Learned.Invalidate() end   -- run set changed
-    if DB.MarkBestRuns then DB.MarkBestRuns() end -- crown: best score per dungeon+key+spec (fresh medians)
+    if DB.MarkBestRuns then DB.MarkBestRuns() end -- crown: best score per dungeon+key+spec
     ML.Log("Rebuilt caches: %d character(s), %d player(s)", Util.count(root.characters), Util.count(root.playerIndex))
 end
 

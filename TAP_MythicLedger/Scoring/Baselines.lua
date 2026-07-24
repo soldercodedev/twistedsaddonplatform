@@ -14,16 +14,6 @@ local Base = {}
 Scoring.Baselines = Base
 local Cfg = Scoring.Config
 
--- The primary metric a role is judged on (used by explanations / legacy callers).
-function Base.Metric(role)
-    return (role == "HEALER") and "hps" or "dps"
-end
-
--- The throughput blend {dps=, hps=} for a role/spec (tanks lean on HPS by spec healiness).
-function Base.Mix(role, specID)
-    return Cfg.ThroughputMix(role, specID)
-end
-
 -- Cap the group totals used AS THE BASELINE so an overperformer's excess doesn't inflate everyone's
 -- expected value. Each player's contribution to the group total is capped at their OWN expected share
 -- (computed from the raw total); damage/healing beyond your share simply doesn't count toward the
