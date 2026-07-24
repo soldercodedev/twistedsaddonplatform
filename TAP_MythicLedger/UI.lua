@@ -83,6 +83,7 @@ local SB_PALETTE = {
 }
 local runFilter    = { character = nil, mapId = nil, status = nil, playerKey = nil, level = nil, role = nil }
 local runSort      = { key = "date", dir = "desc" }
+local dungeonRunSort = { key = "date", dir = "desc" }   -- shared sort for the character/dungeon detail run tables
 local playerFilter = { search = "", role = nil, favorite = false, minShared = 1, class = nil, spec = nil }
 local playerSort   = { key = "runs", dir = "desc" }
 local retentionPending = nil   -- staged retention cap; committed only via the Settings "Apply" button
@@ -685,27 +686,39 @@ end
 ----------------------------------------------------------------------
 -- Runs list.
 ----------------------------------------------------------------------
+-- One run's sortable value for `key`. "metric" is the row's PRIMARY output (HPS for healers, else DPS) -
+-- used by the detail tables' combined DPS/HPS column. Unknown keys (and "date") fall back to the date.
+local function runSortValue(r, key)
+    if key == "key" then return r.level or 0
+    elseif key == "duration" then return r.duration or 0
+    elseif key == "deaths" then return r.deaths or -1
+    elseif key == "dps" then return r.playerStats and r.playerStats.dps or -1
+    elseif key == "hps" then return r.playerStats and r.playerStats.hps or -1
+    elseif key == "metric" then
+        local s = r.playerStats; if not s then return -1 end
+        return ((r.character and r.character.role) == "HEALER") and (s.hps or -1) or (s.dps or -1)
+    end
+    return r.completedAt or 0
+end
+
+-- Sort a run list in place by a { key, dir } state. Ties break toward the more recent run.
+local function sortRuns(runs, sort)
+    local key, mult = sort.key, (sort.dir == "desc") and 1 or -1
+    table.sort(runs, function(a, bb)
+        local av, bv = runSortValue(a, key), runSortValue(bb, key)
+        if av == bv then return (a.completedAt or 0) > (bb.completedAt or 0) end
+        return (av > bv) == (mult == 1)
+    end)
+    return runs
+end
+
 local function sortedRuns()
     local runs = History.FilterRuns({
         seasonId = scopeSeason(), character = runFilter.character, mapId = runFilter.mapId,
         status = runFilter.status, playerKey = runFilter.playerKey, role = runFilter.role,
         keyMin = runFilter.level, keyMax = runFilter.level,   -- a specific key level (nil = any)
     })
-    local key, dir = runSort.key, runSort.dir
-    local mult = (dir == "desc") and 1 or -1
-    table.sort(runs, function(a, bb)
-        local av, bv
-        if key == "date" then av, bv = (a.completedAt or 0), (bb.completedAt or 0)
-        elseif key == "key" then av, bv = (a.level or 0), (bb.level or 0)
-        elseif key == "duration" then av, bv = (a.duration or 0), (bb.duration or 0)
-        elseif key == "deaths" then av, bv = (a.deaths or -1), (bb.deaths or -1)
-        elseif key == "dps" then av, bv = (a.playerStats and a.playerStats.dps or -1), (bb.playerStats and bb.playerStats.dps or -1)
-        elseif key == "hps" then av, bv = (a.playerStats and a.playerStats.hps or -1), (bb.playerStats and bb.playerStats.hps or -1)
-        else av, bv = (a.completedAt or 0), (bb.completedAt or 0) end
-        if av == bv then return (a.completedAt or 0) > (bb.completedAt or 0) end
-        return (av > bv) == (mult == 1)
-    end)
-    return runs
+    return sortRuns(runs, runSort)
 end
 
 -- Distinct dungeon choices (from runs in the current season scope), for the Runs filter.
@@ -2744,15 +2757,15 @@ end
 -- One compact run row, clickable through to the full run details.
 -- Column header for the dungeonRunRow tables (character- and dungeon-details "runs" lists). Labels line
 -- up with dungeonRunRow's column offsets below. Returns the y beneath the header band.
-local function dungeonRunHeader(b, C, x, y, rowW)
+local function dungeonRunHeader(b, C, x, y, rowW, sort, win)
     b:Box(x, y + 4, rowW, 22, 0.10, 0, C.accent)
-    hdr(b, C, x + 10,  y - 3, "Date")
+    sortHdr(b, C, x + 10,  y - 3, 52, "Date",      "date",     sort, win)
     hdr(b, C, x + 116, y - 3, "Character")
-    hdr(b, C, x + 268, y - 3, "Key")
+    sortHdr(b, C, x + 268, y - 3, 30, "Key",       "key",      sort, win)
     hdr(b, C, x + 310, y - 3, "Result")
-    hdr(b, C, x + 402, y - 3, "Time")
-    hdr(b, C, x + 476, y - 3, "Deaths")
-    hdr(b, C, x + 524, y - 3, "DPS / HPS")
+    sortHdr(b, C, x + 402, y - 3, 40, "Time",      "duration", sort, win)
+    sortHdr(b, C, x + 476, y - 3, 48, "Deaths",    "deaths",   sort, win)
+    sortHdr(b, C, x + 524, y - 3, 62, "DPS / HPS", "metric",   sort, win)
     return y - 24
 end
 
@@ -2902,8 +2915,9 @@ local function renderDungeonDetails(b, C, x, y, w, win)
     if n == 0 then
         b:Label("No runs recorded for this dungeon.", x + 4, y - 2, C.subtext, 11); return y - 20
     end
+    sortRuns(rows, dungeonRunSort)
     local first, last = pagerBar(b, C, x, y, rowW, n, "dungeonRuns", win); y = y - 42
-    y = dungeonRunHeader(b, C, x, y, rowW)
+    y = dungeonRunHeader(b, C, x, y, rowW, dungeonRunSort, win)
     b:Box(x, y + 6, rowW, (last - first + 1) * 28 + 6, 0.03, 0, C.card)
     for i = first, last do
         dungeonRunRow(b, C, x, y, rowW, rows[i], i, win)
@@ -3050,8 +3064,9 @@ local function renderCharacterDetails(b, C, x, y, w, win)
     local runs = History.FilterRuns({ character = key, seasonId = scopeSeason() })
     y = b:Section(string.format("RUNS (%d)", #runs), x, y); y = y - 24
     if #runs == 0 then b:Label("No runs recorded.", x + 4, y - 2, C.subtext, 11); return y - 20 end
+    sortRuns(runs, dungeonRunSort)
     local first, last = pagerBar(b, C, x, y, rowW, #runs, "charRuns", win); y = y - 42
-    y = dungeonRunHeader(b, C, x, y, rowW)
+    y = dungeonRunHeader(b, C, x, y, rowW, dungeonRunSort, win)
     b:Box(x, y + 6, rowW, (last - first + 1) * 28 + 6, 0.03, 0, C.card)
     for i = first, last do
         dungeonRunRow(b, C, x, y, rowW, runs[i], i, win)
