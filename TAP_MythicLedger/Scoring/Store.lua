@@ -108,3 +108,15 @@ function Store.InvalidateAll()
     if sc then sc.runs = {} end
 end
 Scoring.InvalidateScores = Store.InvalidateAll
+
+-- Drop persisted per-run summaries for runs that no longer exist. `summaryCache.scores.runs` is keyed by
+-- run id and only ever grows on the write path (Store.Full), so deleting or retention-pruning a run would
+-- otherwise leave its summary orphaned until the next Config.version bump. Call after any run removal;
+-- one cheap pass, no recompute.
+function Store.PruneOrphans()
+    local sc = DB.root and DB.root.summaryCache and DB.root.summaryCache.scores
+    if type(sc) ~= "table" or type(sc.runs) ~= "table" then return end
+    local live = {}
+    for _, run in ipairs(DB.Runs()) do if run.id then live[run.id] = true end end
+    for id in pairs(sc.runs) do if not live[id] then sc.runs[id] = nil end end
+end

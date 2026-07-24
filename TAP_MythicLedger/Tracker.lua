@@ -28,6 +28,9 @@ local finalizeTimer, rosterTimer
 local frame
 local runT0                -- GetTime() at run start, so boss kills can be stamped seconds-into-run
 local runStartScore        -- your M+ score at run start, to compute this run's score gain
+local oocDamageMap = {}     -- last out-of-combat cumulative snapshot; boss-diff base fallback (see readOverallMap).
+                            -- Declared here (not at first use) so per-run cleanup can clear it - otherwise a new
+                            -- run's first boss could fall back to the PREVIOUS run's snapshot.
 
 -- Pet -> owner GUID map, built LIVE across the whole run. C_DamageMeter attributes a pet's interrupts
 -- (and pet dispels like Devour Magic) to the PET's sourceGUID, not the player - and a pet that dies and
@@ -199,6 +202,11 @@ end
 local function cleanup()
     cancelTimers()
     current, encounters, provider, retries, combatWaits = nil, nil, nil, 0, 0
+    -- Release the remaining per-run working tables so nothing carries into the next run (petOwners is
+    -- also reset at BeginRun; oocDamageMap must not seed the next run's first-boss base; _encSeq restarts).
+    wipe(petOwners)
+    oocDamageMap = {}
+    Tracker._encSeq = nil
 end
 
 ----------------------------------------------------------------------
@@ -353,7 +361,7 @@ end
 --   * ENCOUNTER_END   -> mark the boss pending (record its kill duration); do NOT read - locked in combat.
 --   * combat DROPS     -> read the now-readable cumulative; diff base->now = the fight's contribution.
 -- ENCOUNTER_START only fires for real bosses, so this is inherently boss-only (trash never triggers it).
-local oocDamageMap = {}
+-- (oocDamageMap is declared up top so per-run cleanup can clear it.)
 local function readOverallMap()
     return (Providers.ReadPartyDamageMap and Providers.ReadPartyDamageMap(runCtx())) or {}
 end

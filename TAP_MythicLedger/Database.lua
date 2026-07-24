@@ -222,6 +222,7 @@ function DB.DeleteRun(id)
     for i = #runs, 1, -1 do
         if runs[i].id == id then table.remove(runs, i) end
     end
+    if ML.Scoring and ML.Scoring.Store and ML.Scoring.Store.PruneOrphans then ML.Scoring.Store.PruneOrphans() end
     if ML.History and ML.History.RebuildAll then pcall(ML.History.RebuildAll) end
 end
 
@@ -230,6 +231,11 @@ end
 --   2. the overall TOP 10 TIMED runs (by key, then time).
 -- Sets run.pinned on keepers, clears it on the rest. The UI shows a crown on pinned runs.
 DB.TOP_KEEP = 10
+-- Hard safety ceiling on total stored runs. Retention ships OFF (scope ALL + no cap) so users don't lose
+-- data unexpectedly, but "off" must not mean "unbounded" - past this many runs the oldest UN-protected
+-- ones are trimmed (keepers - best-per-dungeon, top 10, crowned best-of-kind - are always spared). Set
+-- generously so it never bites a normal or even heavy user; it only bounds pathological accumulation.
+DB.SAFETY_CAP = 5000
 function DB.MarkKeepers()
     if not DB.root then return end
     local best, timed = {}, {}
@@ -298,7 +304,11 @@ function DB.ApplyRetention()
     local scope   = st.retentionScope or "ALL"
     local cap     = tonumber(st.retentionRuns) or 0
     local keepTop = st.retentionKeepTop ~= false   -- default true
-    if scope == "ALL" and cap <= 0 then return end  -- nothing to enforce
+    -- The numeric cap to enforce: the user's if they set one, otherwise the hard SAFETY ceiling (so
+    -- retention "off" still can't grow unbounded). With no scope prune and room under the ceiling there
+    -- is nothing to do - bail cheaply (this is the common path on every save).
+    local effCap = (cap > 0) and cap or DB.SAFETY_CAP
+    if scope == "ALL" and #DB.root.runs <= effCap then return end
 
     local runs = DB.root.runs
     -- Refresh keeper flags so the top-run guard is accurate before we prune anything.
@@ -330,19 +340,22 @@ function DB.ApplyRetention()
         end
     end
 
-    -- Phase 2: numeric CAP - oldest un-protected runs first.
-    if cap > 0 and #runs > cap then
+    -- Phase 2: numeric CAP (the user's cap if set, else the safety ceiling) - oldest un-protected first.
+    if #runs > effCap then
         table.sort(runs, function(a, b)
             return (a.completedAt or a.startedAt or 0) < (b.completedAt or b.startedAt or 0)
         end)
-        local removeCount, i = #runs - cap, 1
+        local removeCount, i = #runs - effCap, 1
         while removeCount > 0 and i <= #runs do
             if not protected(runs[i]) then table.remove(runs, i); removeCount = removeCount - 1; removed = removed + 1
             else i = i + 1 end   -- keepers survive; step over them
         end
     end
 
-    if removed > 0 and ML.History and ML.History.RebuildAll then pcall(ML.History.RebuildAll) end
+    if removed > 0 then
+        if ML.Scoring and ML.Scoring.Store and ML.Scoring.Store.PruneOrphans then ML.Scoring.Store.PruneOrphans() end
+        if ML.History and ML.History.RebuildAll then pcall(ML.History.RebuildAll) end
+    end
     ML.Log("Retention applied: scope=%s cap=%d keepTop=%s -> %d kept, %d removed",
         scope, cap, tostring(keepTop), #runs, removed)
 end
@@ -354,6 +367,7 @@ function DB.WipeHistory()
     DB.root.playerIndex = {}
     DB.root.personalBests = {}
     DB.root.summaryCache = {}
+    DB.root.playerMeta = {}   -- a full wipe clears annotations too (they only survive cache REBUILDS, not this)
     DB.root.activeRun = nil
     DB.root._runSeq = 0
     if ML.History and ML.History.RebuildAll then pcall(ML.History.RebuildAll) end
