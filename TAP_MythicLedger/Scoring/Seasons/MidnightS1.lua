@@ -41,7 +41,7 @@ S.SeasonData["MidnightS1"] = {
                 { id = 1254294, name = "Pyroblast", tier = "Must kick", npc = "Blazing Pyromancer", npcId = 251861 },
                 { id = 1248327, name = "Shadow Bolt", tier = "Must kick", npc = "Dreadful Voidwalker", npcId = 234064 },
                 { id = 1264693, name = "Terror Wave", tier = "Must kick", npc = "Void Terror", npcId = 249086 },
-                { id = 468962, name = "Arcane Bolt", tier = "Spare", npc = "Arcane Magister", npcId = 232369 },
+                { id = 468962, name = "Arcane Bolt", tier = "Should kick", npc = "Arcane Magister", npcId = 232369 },
             },
             dispels = {
                 { id = 1282055, name = "Ethereal Shackles", tier = "High", dtype = "Magic", npc = "Arcane Sentry", npcId = 234062, counts = true },
@@ -107,7 +107,7 @@ S.SeasonData["MidnightS1"] = {
                 { id = 388392, name = "Monotonous Lecture", tier = "Must kick", npc = "Unruly Textbook", npcId = 196044 },
                 { id = 1270294, name = "Mystic Brand", tier = "Must kick", npc = "Spectral Invoker", npcId = 196202 },
                 { id = 388862, name = "Surge", tier = "Must kick", npc = "Corrupted Manafiend", npcId = 196045 },
-                { id = 1279627, name = "Arcane Bolt", tier = "Spare", npc = "Spectral Invoker", npcId = 196202 },
+                { id = 1279627, name = "Arcane Bolt", tier = "Should kick", npc = "Spectral Invoker", npcId = 196202 },
             },
             dispels = {
                 { id = 388392, name = "Monotonous Lecture", tier = "Highest", dtype = "Curse/Magic", npc = "Unruly Textbook", npcId = 196044, counts = true },
@@ -140,7 +140,7 @@ S.SeasonData["MidnightS1"] = {
                 { id = 1264186, name = "Shadowbind", tier = "Must kick", npc = "Shade of Krick", npcId = 255037 },
                 { id = 1258436, name = "Ice Bolt", tier = "Should kick", npc = "Rimebone Coldwraith", npcId = 252566 },
                 { id = 1258997, name = "Plungegrip", tier = "Should kick", npc = "Plungetalon Gargoyle", npcId = 252606 },
-                { id = 1258431, name = "Shadow Bolt", tier = "Spare", npc = "Gloombound Shadebringer", npcId = 252567 },
+                { id = 1258431, name = "Shadow Bolt", tier = "Should kick", npc = "Gloombound Shadebringer", npcId = 252567 },
             },
             dispels = {
                 { id = 1261921, name = "Cryoshards", tier = "High", dtype = "Magic", npc = "Forgemaster Garfrost", npcId = 252635, counts = true },
@@ -183,7 +183,7 @@ S.SeasonData["MidnightS1"] = {
             },
             -- <<< CATALOG <<<
             dispelDemandScale = 0.46,   -- only high/must dispels expected
-            trash = { interruptFrequency = 1.81,     -- per-min (obs +10: ~1.8 kicks/min, ~42/run over 21.5m, n=3)
+            trash = { interruptFrequency = 2.2,      -- per-min (v45: recalibrated to observed 2.19 kicks/min over 14 real runs)
                 partyDebuffFrequencies = { magic = 0.213 },
                 targetBuffFrequencies  = { enrage = 0.191, purge = 0.106 } },   -- Battle Rage/Devouring Frenzy soothe, Abyssal Enhancement purge
             bosses = {
@@ -205,7 +205,7 @@ S.SeasonData["MidnightS1"] = {
                 { id = 1259255, name = "Spirit Rend", tier = "Must kick", npc = "Tormented Shade", npcId = 249036 },
                 { id = 1266381, name = "Hooked Snare", tier = "Should kick", npc = "Keen Headhunter", npcId = 242964 },
                 { id = 1259182, name = "Piercing Screech", tier = "Should kick", npc = "Gloomwing Bat", npcId = 253473 },
-                { id = 1264327, name = "Shadowfrost Blast", tier = "Spare", npc = "Hollow Soulrender", npcId = 249024 },
+                { id = 1264327, name = "Shadowfrost Blast", tier = "Should kick", npc = "Hollow Soulrender", npcId = 249024 },
                 { id = 1254010, name = "Eternal Suffering", tier = "unset", npc = "Malignant Soul", npcId = 251674 },
                 { id = 1250708, name = "Necrotic Convergence", tier = "unset", npc = "Vordaza", npcId = 248595 },
             },
@@ -238,8 +238,8 @@ S.SeasonData["MidnightS1"] = {
                 { id = 1285445, name = "Arcane Explosion", tier = "Must kick", npc = "Corewright Arcanist", npcId = 241644 },
                 { id = 1258681, name = "Nullify", tier = "Must kick", npc = "Grand Nullifier", npcId = 251853 },
                 { id = 1282722, name = "Nullify", tier = "Must kick", npc = "Grand Nullifier", npcId = 251031 },
-                { id = 1263892, name = "Holy Bolt", tier = "Spare", npc = "Lightwrought", npcId = 254926 },
-                { id = 1271094, name = "Umbra Bolt", tier = "unset", npc = "Nexus Adept", npcId = 248708 },
+                { id = 1263892, name = "Holy Bolt", tier = "Should kick", npc = "Lightwrought", npcId = 254926 },
+                { id = 1271094, name = "Umbra Bolt", tier = "Should kick", npc = "Nexus Adept", npcId = 248708 },
             },
             dispels = {
                 { id = 1249815, name = "Transference", tier = "High", dtype = "Magic", npc = "Corewright Arcanist", npcId = 241644, counts = true },
@@ -249,7 +249,7 @@ S.SeasonData["MidnightS1"] = {
             },
             -- <<< CATALOG <<<
             dispelDemandScale = 0.44,   -- 44% high/must (Transference removed 100% of the time)
-            trash = { interruptFrequency = 1.40,     -- per-min (obs: ~1.44 trash kicks/min, n=2 real +10; was 0.385 est)
+            trash = { interruptFrequency = 1.63,     -- per-min (v45: recalibrated to observed 1.63 kicks/min over 11 real runs)
                 partyDebuffFrequencies = { magic = 0.19, curse = 0.2 },
                 targetBuffFrequencies  = { purge = 0.2 } },   -- Holy Echo purge (no soothe on trash)
             bosses = {

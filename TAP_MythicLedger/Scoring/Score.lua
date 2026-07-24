@@ -39,12 +39,13 @@ function Score.ScoreNormalized(norm, summary, groupTotals, dist, healModel, runC
     cats.throughput = Cat.Throughput(norm, baseline, healReq, runCtx)
     cats.interrupts = Cat.Interrupt(norm, summary, groupTotals.interrupts, dist and dist.interrupt)
     cats.dispels    = Cat.Dispel(norm, summary, groupTotals.dispels, dist and dist.dispel)
-    cats.survival   = Cat.Survival(norm)
+    cats.survival   = Cat.Survival(norm, runCtx)
     cats.deaths     = Cat.Deaths(norm)
 
-    -- Tank awareness (v42): surface how many teammate deaths came from a mob that wasn't tanked (a "threat"
-    -- death = a non-tank killed by melee after losing/never having aggro). Shown on the tank's review for
-    -- awareness; NOT scored for now (weight 0). The healer outcome floor now lives in Cat.Throughput.
+    -- Tank threat deaths: how many teammate deaths came from a mob that wasn't tanked (a "threat" death =
+    -- a non-tank killed by melee after losing/never having aggro). As of v45 these DOCK the tank's
+    -- Survival score (Cat.Survival, via runCtx.partyThreatDeaths); we still stash the count on the Deaths
+    -- card so the review can show it in context. (The healer outcome floor lives in Cat.Throughput.)
     if role == "TANK" and runCtx and (runCtx.partyThreatDeaths or 0) > 0 and cats.deaths then
         cats.deaths.groupLooseThreatDeaths = runCtx.partyThreatDeaths
     end
@@ -179,9 +180,9 @@ function Score.Explain(score)
             d[#d + 1] = string.format("Death Impact: %d  (%d death(s), -%d penalty; weight %d%%)",
                 round(de.score), de.deaths, de.penalty, pct(de.weight))
         end
-        -- Tank awareness (v42): teammate deaths from a mob that wasn't tanked. Shown, not scored.
+        -- Tank threat deaths (v45): teammate deaths from a mob that wasn't tanked now DOCK Survival.
         if score.role == "TANK" and (de.groupLooseThreatDeaths or 0) > 0 then
-            d[#d + 1] = string.format("Loose-mob deaths: %d teammate death(s) came from a mob you lost or never had threat on - shown for awareness, not scored.",
+            d[#d + 1] = string.format("Loose-mob deaths: %d teammate death(s) came from a mob you lost or never had threat on - these dock your Survival (the first each run is forgiven).",
                 de.groupLooseThreatDeaths)
         end
     end

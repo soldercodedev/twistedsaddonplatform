@@ -322,25 +322,39 @@ end
 -- Survival. Scored purely on the AVOIDABLE SHARE of total damage taken (avoidable / taken): scale-free,
 -- role-agnostic. 2.5% grace = 100, dropping fast to 0 at a 25% share. Missing either input -> neutral.
 ----------------------------------------------------------------------
-function Cat.Survival(norm)
+function Cat.Survival(norm, runCtx)
     local taken = norm.damageTaken
     local av = norm.avoidableDamageTaken
+    local s, conf, detail, note
     -- A confirmed ZERO avoidable damage is a 0% share = perfect survival, regardless of total taken
     -- (0 / anything = 0). On a tracked run, "no avoidable rows" is normalized to 0 (see Normalize), so
     -- this is a confident 100, not a neutral "no data" estimate.
     if av == 0 then
-        local s = Cfg.clamp(Cfg.interp(Cfg.survival.avoidableShareCurve, 0, "v", "s"), 0, 100)
-        return { applicable = true, score = s, confidence = 1,
-                 detail = { avoidableShare = 0, shareScore = s } }
+        s = Cfg.clamp(Cfg.interp(Cfg.survival.avoidableShareCurve, 0, "v", "s"), 0, 100)
+        conf = 1; detail = { avoidableShare = 0, shareScore = s }
+    elseif av == nil or not taken or taken <= 0 then
+        s = Cfg.survival.neutralScore; conf = 0; detail = {}
+        note = "No avoidable-damage data was recorded; using a neutral estimate."
+    else
+        local share = av / taken
+        s = Cfg.clamp(Cfg.interp(Cfg.survival.avoidableShareCurve, share, "v", "s"), 0, 100)
+        conf = 0.7; detail = { avoidableShare = share, shareScore = s }
     end
-    if av == nil or not taken or taken <= 0 then
-        return { applicable = true, score = Cfg.survival.neutralScore, confidence = 0,
-                 note = "No avoidable-damage data was recorded; using a neutral estimate.", detail = {} }
+    -- v45 TANK threat accountability: the avoidable-share metric can't see a tank's real job (holding
+    -- threat), so fold in the party's "threat" deaths - a teammate killed by melee after a mob was lost
+    -- or never tanked - and dock the tank per such death. Surfaced in detail either way for the review.
+    local tdp = Cfg.survival.tankThreatDeathPenalty or 0
+    local ltd = runCtx and runCtx.partyThreatDeaths or 0
+    if norm.role == "TANK" and ltd > 0 and tdp > 0 then
+        -- Forgive the first `tankThreatDeathGrace` loose-threat death per run; dock each one after.
+        local charged = ltd - (Cfg.survival.tankThreatDeathGrace or 0)
+        if charged < 0 then charged = 0 end
+        detail.looseThreatDeaths = ltd
+        detail.threatDeathsCharged = charged
+        detail.threatPenalty = tdp * charged
+        if charged > 0 then s = Cfg.clamp(s - tdp * charged, 0, 100) end
     end
-    local share = av / taken
-    local s = Cfg.clamp(Cfg.interp(Cfg.survival.avoidableShareCurve, share, "v", "s"), 0, 100)
-    return { applicable = true, score = s, confidence = 0.7,
-             detail = { avoidableShare = share, shareScore = s } }
+    return { applicable = true, score = s, confidence = conf, note = note, detail = detail }
 end
 
 ----------------------------------------------------------------------

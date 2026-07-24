@@ -2317,6 +2317,16 @@ local function renderSettings(b, C, x, y, w, win)
     end
 
     local function secScoreboard()
+    toggle("Show post-run summary", function() return s.postRunSummary end, function(v) s.postRunSummary = v end,
+        "Pop a summary after each completed key (queued until out of combat).")
+    if s.postRunSummary then
+        toggle("Show it only after looting the end chest", function() return s.postRunAfterLoot end, function(v) s.postRunAfterLoot = v end,
+            "Wait to pop the summary until you loot the chest at the end of the run, instead of right when it finishes.")
+        slider("Popup delay", 90, 200, 0, 30, 1, "%ds",
+            function() return s.postRunDelay or 5 end, function(v) s.postRunDelay = v end,
+            "How long to wait after the trigger (looting the end chest, or leaving combat) before the summary "
+            .. "pops. 0 = instantly.")
+    end
     slider("Scale", 90, 180, 0.5, 3.0, 0.05, "%.2fx",
         function() return s.scoreboardScale or 1.05 end, function(v) s.scoreboardScale = v end,
         "How big the end-of-run scoreboard opens (still capped to fit your screen). Also: /ledger scale <n>.")
@@ -2462,14 +2472,6 @@ local function renderSettings(b, C, x, y, w, win)
     b:Sub("TRACKING", x, y); y = y - 30
     toggle("Track abandoned runs", function() return s.trackAbandoned end, function(v) s.trackAbandoned = v end,
         "Save keys you leave or reset before completion (kept apart from your timed %).")
-    toggle("Show post-run summary", function() return s.postRunSummary end, function(v) s.postRunSummary = v end,
-        "Pop a summary modal after each completed key (queued until out of combat).")
-    toggle("Show it only after looting the end chest", function() return s.postRunAfterLoot end, function(v) s.postRunAfterLoot = v end,
-        "Wait to pop the summary until you loot the chest at the end of the run, instead of right when it finishes.")
-    slider("Popup delay", 90, 200, 0, 30, 1, "%ds",
-        function() return s.postRunDelay or 5 end, function(v) s.postRunDelay = v end,
-        "How long to wait after the trigger (looting the end chest, or leaving combat) before the summary "
-        .. "pops. 0 = instantly.")
     toggle("Confirm before saving a recovered abandoned run", function() return s.confirmAbandonSave end, function(v) s.confirmAbandonSave = v end,
         "After a reload/disconnect with an unfinished key, ask before saving it as abandoned.")
     end
@@ -2602,7 +2604,8 @@ local function renderSettings(b, C, x, y, w, win)
     b:Label("Keep every run", x + 46, y - 2, C.text)
     y = y - 34
     if not unlimited then
-        b:Label("Keep the newest runs", x, y - 2, C.subtext); y = y - 24
+        b:Label("Keep the newest runs", x, y - 2, C.subtext)
+        y = y - 38   -- extra gap leaves room for the value readout that floats just above the slider
         T(b, b:Slider(x, y), "Runs to keep",
             "Keep at most this many of your newest runs; older ones are removed when you Apply.")
             :Configure(200, 100, 5000, 100, function() return retentionPending end,
@@ -3774,8 +3777,36 @@ function renderPlayerReview(b, C, x, y, w, win)
     local sv = cats.survival
     if sv then
         local shr = sv.detail and sv.detail.avoidableShare
-        card("Survival", sv.score, shr and string.format("%.1f%% of dmg taken avoidable · weight %d%%", shr * 100, pctOf(sv.weight))
-            or ((sv.note or "estimate") .. " · weight " .. pctOf(sv.weight) .. "%"))
+        local pen = (sc.role == "TANK" and sv.detail and (sv.detail.threatPenalty or 0) > 0) and sv.detail.threatPenalty or 0
+        if pen > 0 then
+            -- Split into two sections (like Throughput's DPS/HPS): the avoidable-damage base, then the
+            -- loose-mob-death deduction that docks it.
+            local base = (sv.detail and sv.detail.shareScore) or (sv.score + pen)
+            local ltd  = (sv.detail and sv.detail.looseThreatDeaths) or 0
+            local forg = ltd - ((sv.detail and sv.detail.threatDeathsCharged) or 0)
+            local H = 84
+            b:Box(LX, y, CW, H, 0.45, 0, C.card)
+            b:Box(LX, y, 3, H, 0.95, 2, theme:Color(catScoreHex(sv.score)))
+            b:Label("Survival", LX + 16, y - 16, C.text, 13)
+            b:Label(hlNums("avoidable damage, docked for loose-mob deaths · weight " .. pctOf(sv.weight) .. "%"), LX + 16, y - 34, C.subtext, 10)
+            b:Label(tostring(rnd(sv.score)), LX + CW - 76, y - 20, theme:Color(catScoreHex(sv.score)), 20)
+            b:Label("Avoidable Damage", LX + 20, y - 52, C.subtext, 11)
+            bar(LX + 160, y - 55, 170, base)
+            b:Label(tostring(rnd(base)), LX + 342, y - 52, theme:Color(catScoreHex(base)), 12)
+            b:Label(hlNums(shr and string.format("%.1f%% of dmg taken avoidable", shr * 100) or "no avoidable data"), LX + 392, y - 52, C.subtext, 10)
+            b:Label("Loose-Mob Deaths", LX + 20, y - 70, C.subtext, 11)
+            b:Box(LX + 160, y - 73, 170, 9, 0.16, 1, C.border)
+            b:Box(LX + 160, y - 73, 170 * math.max(0, math.min(1, pen / 100)), 9, 0.95, 2, theme:Color("e0655a"))
+            b:Label(string.format("-%d", pen), LX + 342, y - 70, theme:Color("e0655a"), 12)
+            b:Label(hlNums(string.format("%d teammate death%s from a mob %s lost or never had threat on · %d forgiven",
+                ltd, ltd == 1 and "" or "s", m.isPlayer and "you" or "they", forg)), LX + 392, y - 70, C.subtext, 10)
+            if b.theme.SetTipData then b.theme:SetTipData(b:Hit(LX, y, CW, H),
+                { title = "Survival", lines = { { text = "Your avoidable-damage score, then docked for teammate deaths from a mob you lost or never had threat on (the first each run is forgiven).", color = "subtext" } } }) end
+            y = y - H - 8
+        else
+            card("Survival", sv.score, (shr and string.format("%.1f%% of dmg taken avoidable", shr * 100)
+                or (sv.note or "estimate")) .. " · weight " .. pctOf(sv.weight) .. "%")
+        end
     end
 
     -- Avoidable-damage breakdown: the actual mechanics behind the Survival score, biggest first. Each is a
@@ -3874,21 +3905,6 @@ function renderPlayerReview(b, C, x, y, w, win)
         y = y - H - 8
     end
 
-    -- TANK AWARENESS (v42): teammate deaths that came from a mob the tank lost or never had threat on (a
-    -- party "Threat" death). Shown for awareness on the tank's review only - NOT part of the score for now.
-    local gltd = de and de.groupLooseThreatDeaths
-    if sc.role == "TANK" and type(gltd) == "number" and gltd > 0 then
-        local H = 54
-        b:Box(LX, y, CW, H, 0.45, 0, C.card)
-        b:Box(LX, y, 3, H, 0.95, 2, theme:Color("e0a030"))
-        b:Label("Loose-Mob Deaths (party)", LX + 16, y - 16, C.text, 13)
-        b:Label(hlNums(string.format("%d teammate death%s from a mob %s lost or never had threat on  ·  shown for awareness, not scored",
-            gltd, gltd == 1 and "" or "s", m.isPlayer and "you" or "they")), LX + 16, y - 36, C.subtext, 10)
-        b:Label(tostring(gltd), LX + CW - 76, y - 22, theme:Color("e0a030"), 20)
-        if b.theme.SetTipData then b.theme:SetTipData(b:Hit(LX, y, CW, H),
-            { title = "Loose-mob deaths", lines = { { text = "Teammates who died to melee from a mob that wasn't tanked - lost aggro, or the tank never grabbed it. It reflects on pickup/threat, but is NOT part of the score for now; it's here to help spot threat problems.", color = "subtext" } } }) end
-        y = y - H - 8
-    end
 
     y = y - 10
 

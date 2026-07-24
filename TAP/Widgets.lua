@@ -299,7 +299,13 @@ function Mixin:Slider(parent)
 
     function s:Configure(w, minv, maxv, step, getVal, setVal, fmt)
         fmt = fmt or "%.1f"
-        TAP.paint(self.thumb, theme.C.accent)
+        -- Pooled reset: start from the DEFAULT look every time (this slider frame gets reused). Otherwise a
+        -- prior caller's ApplyStyle - e.g. hideValue - would stick and hide the value readout on the next
+        -- slider. Callers that want a custom style call :ApplyStyle AFTER Configure.
+        self._style = nil
+        TAP.paint(self.thumb, theme.C.accent); TAP.paint(self.track, theme.C.border)
+        self.val:Show(); self.val:SetTextColor(unpack(theme.C.subtext))
+        self.val._base = { theme.C.subtext[1], theme.C.subtext[2], theme.C.subtext[3] }
         self._min, self._max, self._step, self._fmt, self._dec = minv, maxv, step, fmt, stepDecimals(step)
         -- Clear any previous setter FIRST: this slider may be pooled, and SetValue() fires
         -- OnValueChanged. Without this, reuse would run the OLD setter with the new value.
@@ -307,7 +313,6 @@ function Mixin:Slider(parent)
         self:SetSize(w, 16); self:SetMinMaxValues(minv, maxv); self:SetValueStep(step); self:SetObeyStepOnDrag(true)
         self:SetValue(getVal()); self.val:SetText(string.format(fmt, getVal()))
         self:SetScript("OnValueChanged", function(_, v) self.val:SetText(string.format(fmt, v)); setVal(v) end)
-        if self._style then self:ApplyStyle(self._style) end
     end
     -- Override track / thumb / value-text colors per instance.
     function s:ApplyStyle(opts)

@@ -544,8 +544,19 @@ local function finalizeRun(stats)
     -- breakdowns; `recaps` = raw death-recap fatal-hit timelines. Both stored raw in the run log so no run
     -- ever has to be re-played for a missing piece; both nil-safe (nil on the abandoned/metadata path).
     local attrib = Providers.ReadAttribution and Providers.ReadAttribution(runCtx())
-    local recaps = Providers.ReadDeathRecaps and Providers.ReadDeathRecaps(runCtx())
+    local recaps, feignCounts = Providers.ReadDeathRecaps and Providers.ReadDeathRecaps(runCtx())
     run.party           = mergePartyStats(run.party, stats, run.dispelCapture, attrib, recaps)
+    -- Feign Death fix: the meter logs a Hunter's Feign Death as a death (no killing blow, never near-
+    -- lethal). Subtract those so a hunter isn't docked for feigning. The recaps handed to mergePartyStats
+    -- are already feign-filtered, so deathRecaps and the death report drop them too.
+    if feignCounts then
+        for _, m in ipairs(run.party or {}) do
+            local n = m.guid and feignCounts[m.guid]
+            if n and m.stats and type(m.stats.deaths) == "number" then
+                m.stats.deaths = math.max(0, m.stats.deaths - n)
+            end
+        end
+    end
     -- Clean-run deaths: the meter records no death rows for someone who didn't die, so their count comes
     -- back nil. For a player the meter actually TRACKED (real combat numbers), that means ZERO deaths,
     -- not "no data" - store 0 so scoring reads "no deaths" (a confident zero) everywhere instead of "no

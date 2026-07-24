@@ -7,13 +7,19 @@ ML.CHANGELOG = [==[
 
 ## 1.1.2
 
-Hunter Feign Death is no longer miscounted as a death, plus display and housekeeping fixes.
+A scoring calibration pass - fairer tank grading and a firmer throughput bar - plus the Hunter Feign Death fix and housekeeping.
 
+- **[CHANGE]** Tanks are now graded on threat control: teammate deaths from a mob you lost or never grabbed dock your Survival, though the first one each run is forgiven. Tanks used to score near-perfect regardless; now holding the group together shows in the score. Your existing runs re-score on login.
+- **[CHANGE]** Throughput no longer maxes out just for pulling your fair share. Meeting your expected share is a strong score and beating it a little tops out, so the DPS/HPS bar tells good from average better.
+- **[CHANGE]** Kick expectations for Seat of the Triumvirate and Nexus-Point Xenas were recalibrated to what real runs actually kick.
+- **[CHANGE]** Several often-kicked casts (Arcane Bolt, Shadow Bolt, Holy Bolt, Umbra Bolt, Shadowfrost Blast) now show as Should Kick instead of Spare in the Dungeon Guide.
+- **[CHANGE]** The group-utility tiles in the run review use the same color per dispel school as the Dungeon Guide.
+- **[CHANGE]** The post-run summary options (whether it pops, waiting until you loot the end chest, and the popup delay) moved from the Tracking tab to the Scoreboard tab, where they belong.
 - **[BUG FIX]** A Hunter's Feign Death no longer counts as a real death, so hunters aren't penalized for feigning. Your existing runs are corrected on login.
 - **[BUG FIX]** The run lists on the Characters and Dungeons pages were missing their column headers. They're back, and now sortable by date, key, time, deaths or DPS/HPS.
 - **[BUG FIX]** The Dungeon Guide's caster preview shows on the first click instead of staying blank until you click away and back.
 - **[BUG FIX]** The scoreboard and browsing lots of runs no longer slowly use more memory over a long session.
-- **[CHANGE]** The group-utility tiles in the run review use the same color per dispel school as the Dungeon Guide.
+- **[BUG FIX]** Sliders on the Settings pages show their current number again instead of a blank readout.
 
 ## 1.1.1
 

@@ -434,6 +434,29 @@ local function normRecapEvent(ev)
     }
 end
 
+-- Feign Death filter. C_DamageMeter logs a Hunter's Feign Death as a death row (with a recap), even
+-- though the hunter never died - which inflates their death count and their Deaths score. A real death
+-- has a killing blow: an event whose overkill (`over`) is >= 0 (the API uses -1 on a non-lethal hit).
+-- A feign never does. Safety net: we also KEEP any death where the hunter bottomed out near-lethal
+-- (<= 15% max HP) - a real death spiral whose final hit just wasn't in the captured recap window - so a
+-- death is only dropped when it had no killing blow AND never got near-lethal. Callers gate this to
+-- Hunters (the only class with Feign Death). No events -> false: no evidence, so never treat it as feign.
+local FEIGN_HP_FLOOR = 0.15
+function Providers.LooksFeignDeath(events, maxHP)
+    if type(events) ~= "table" or #events == 0 then return false end
+    local minHP
+    for _, e in ipairs(events) do
+        if type(e) == "table" then
+            if e.over and e.over >= 0 then return false end                     -- killing blow -> real
+            if e.hp and (not minHP or e.hp < minHP) then minHP = e.hp end
+        end
+    end
+    if maxHP and maxHP > 0 and minHP and minHP <= FEIGN_HP_FLOOR * maxHP then
+        return false                                                            -- got near-lethal -> real
+    end
+    return true
+end
+
 -- Pull each death's RECAP via C_DeathRecap.GetRecapEvents(recapID) - the authoritative per-death hit
 -- timeline (the same source the built-in meter's death view uses; confirmed against EllesmereUI). The
 -- deathRecapID lives on each Overall Deaths row. C_DamageMeter's own accessors do NOT expose this - the
@@ -451,7 +474,14 @@ function Providers.ReadDeathRecaps(ctx)
     local okD, deaths = pcall(dm.GetCombatSessionFromType, ST.Overall or 0, MT.Deaths)
     if not (okD and type(deaths) == "table" and type(deaths.combatSources) == "table") then return nil end
 
-    local out, any = {}, false
+    -- Which GUIDs are Hunters (the only class that can Feign Death). The player and each party member
+    -- carry classFile; anyone else's "death" with no killing blow is a real death we couldn't fully
+    -- capture, not a feign, so we never filter them.
+    local hunters = {}
+    local function markHunter(m) if type(m) == "table" and m.guid and m.classFile == "HUNTER" then hunters[m.guid] = true end end
+    if ctx then markHunter(ctx.player); for _, m in ipairs(ctx.party or {}) do markHunter(m) end end
+
+    local out, feign, any = {}, {}, false
     for _, row in ipairs(deaths.combatSources) do
         local guid = ML.ReadStr(row.sourceGUID)
         local rid  = ML.ReadNum(row.deathRecapID)
@@ -469,12 +499,16 @@ function Providers.ReadDeathRecaps(ctx)
             if type(DR.GetRecapMaxHealth) == "function" then
                 local ok2, hp = pcall(DR.GetRecapMaxHealth, rid); if ok2 then maxHP = ML.ReadNum(hp) end
             end
-            out[guid] = out[guid] or {}
-            out[guid][#out[guid] + 1] = { recapID = rid, maxHP = maxHP, events = events }
-            any = true
+            if hunters[guid] and Providers.LooksFeignDeath(events, maxHP) then
+                feign[guid] = (feign[guid] or 0) + 1   -- a Feign Death the meter miscounted; drop it
+            else
+                out[guid] = out[guid] or {}
+                out[guid][#out[guid] + 1] = { recapID = rid, maxHP = maxHP, events = events }
+                any = true
+            end
         end
     end
-    return any and out or nil
+    return (any and out or nil), (next(feign) and feign or nil)
 end
 
 -- Classify deaths from the WHOLE recap, not just the killing blow. The final hit is often only "the

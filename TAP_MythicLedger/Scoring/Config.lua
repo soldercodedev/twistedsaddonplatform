@@ -172,7 +172,7 @@ Scoring.Config = Config
 --      interruptible cast, the death is Kickable even when earlier avoidable/other chip damage held the
 --      dominant share (completes the v41 killing-blow rule; from a reviewed reclassification). Retroactive
 --      rescore.
-Config.version = 43
+Config.version = 45
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -515,18 +515,20 @@ Config.confidence = {
 -- reference). ratioToScore reuses a gentle curve so 1.0x baseline ~= 85 ("meeting expectations").
 ----------------------------------------------------------------------
 Config.throughput = {
-    -- ratio (value/baseline) -> score, interpolated. SOFT-CAPPED at 1.0: meeting your expected group
-    -- share = full marks (100). Doing MORE than your share neither helps nor hurts (the curve plateaus
-    -- - interp clamps to the last point), and your excess is also removed from the baseline the group
-    -- is measured against (see EffectiveGroupTotals), so out-DPSing your share never drags anyone down
-    -- (teammates OR yourself). Underperforming your share is what costs you.
+    -- ratio (value/baseline) -> score, interpolated. v45 SPLIT-DIFFERENCE tuning (between v44's soft-cap
+    -- at share and the sharpened proposal): meeting your expected group share is a strong 94 (was an
+    -- automatic 100), and pulling ~15% above your share tops out at 100. Your excess is still removed
+    -- from the baseline the group is measured against (see EffectiveGroupTotals), so out-DPSing your
+    -- share never drags a teammate down - but it now modestly lifts your OWN bar. Underperforming your
+    -- share still costs the most; ratios above 1.15 stay at 100.
     curve = {
         { ratio = 0.00, score = 0 },
-        { ratio = 0.40, score = 40 },
-        { ratio = 0.65, score = 64 },
-        { ratio = 0.80, score = 80 },
-        { ratio = 0.90, score = 90 },
-        { ratio = 1.00, score = 100 },   -- meeting expected = max; ratios above 1.0 stay at 100
+        { ratio = 0.45, score = 40 },
+        { ratio = 0.70, score = 64 },
+        { ratio = 0.85, score = 80 },
+        { ratio = 0.95, score = 90 },
+        { ratio = 1.00, score = 94 },    -- meeting your share = strong, but no longer an automatic 100
+        { ratio = 1.15, score = 100 },   -- ~15% above your share tops out
     },
     -- GROUP-RELATIVE baselines (deterministic - no self-learning, so scores match across installs).
     -- Each player's EXPECTED value for a metric = groupTotal(metric) * theirShare / sum(shares).
@@ -706,6 +708,14 @@ Config.survival = {
         { v = 0.50,  s = 0 },     -- 50% of your damage taken was avoidable -> zero
     },
     neutralScore = 80,   -- used only when avoidable or taken data is missing entirely
+    -- v45: TANK threat accountability. A tank's core job is holding threat, which the avoidable-share
+    -- metric can't see (their huge unavoidable damage dilutes any avoidable share to ~0, so tanks nearly
+    -- always score 100). So for tanks we fold in the party's "threat" deaths (a teammate killed by melee
+    -- after a mob was lost or never tanked): forgive the first `tankThreatDeathGrace` per run (bad luck
+    -- happens), then dock `tankThreatDeathPenalty` Survival points for each one after. TANK only; clamped
+    -- at 0. penalty 0 disables.
+    tankThreatDeathPenalty = 10,
+    tankThreatDeathGrace   = 1,
 }
 
 ----------------------------------------------------------------------
