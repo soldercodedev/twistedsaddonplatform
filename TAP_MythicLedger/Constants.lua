@@ -97,6 +97,61 @@ function ML.DungeonArt(b, x, y, w, h, bg, alpha)
     b:Tex(x, y, w, h, bg, { u0, u1, v0, v1 }, { 1, 1, 1, alpha or 0.5 }, 1)
 end
 
+-- Season-data integrity check. The per-dungeon catalogs are generated (tools/logparse/season_catalog.py)
+-- and the supply blocks are hand-authored, and BOTH must only use labels the display + scoring layers
+-- recognize: kick/dispel tiers are keyed into KICK_TIERS/DISPEL_TIERS, dispel `dtype` schools into
+-- SCHOOL_COLOR, and the partyDebuff/targetBuff supply keys into the defensive/offensive sets below. An
+-- unknown value never errors - it silently drops to "Spare"/grey (display) or zero supply (scoring) - so
+-- there is no other guard against a typo from the generator or a hand edit. Walk every loaded season and
+-- return a list of human-readable problems ({} when clean). Cheap; safe to run any time.
+local DEBUFF_SCHOOLS = { magic = true, curse = true, poison = true, disease = true }   -- defensive dispel supply keys
+local BUFF_ACTIONS   = { purge = true, enrage = true }                                  -- offensive dispel supply keys
+function ML.ValidateSeasonData()
+    local problems = {}
+    local data = ML.Scoring and ML.Scoring.SeasonData
+    if type(data) ~= "table" then return problems end
+    local function add(fmt, ...) problems[#problems + 1] = string.format(fmt, ...) end
+    -- nil / "unset" are valid: both normalize to the Spare row on purpose.
+    local function tierOK(map, tier) return tier == nil or tier == "unset" or map[tier] ~= nil end
+    for sk, season in pairs(data) do
+        for dn, d in pairs((season and season.dungeons) or {}) do
+            for _, e in ipairs(d.kicks or {}) do
+                if not tierOK(ML.KICK_TIERS, e.tier) then
+                    add("%s/%s: kick '%s' has unknown tier '%s'", sk, dn, tostring(e.name), tostring(e.tier))
+                end
+            end
+            for _, e in ipairs(d.dispels or {}) do
+                if not tierOK(ML.DISPEL_TIERS, e.tier) then
+                    add("%s/%s: dispel '%s' has unknown tier '%s'", sk, dn, tostring(e.name), tostring(e.tier))
+                end
+                if type(e.dtype) == "string" and e.dtype ~= "" and e.dtype ~= "?" then
+                    for seg in e.dtype:gmatch("[^/]+") do   -- dtype is a "/"-joined compound (e.g. "Curse/Magic")
+                        if not ML.SCHOOL_COLOR[seg] then
+                            add("%s/%s: dispel '%s' dtype '%s' has unknown school '%s'", sk, dn, tostring(e.name), e.dtype, seg)
+                        end
+                    end
+                end
+            end
+            local function checkFreq(where, blk)
+                if type(blk) ~= "table" then return end
+                if type(blk.partyDebuffFrequencies) == "table" then
+                    for k in pairs(blk.partyDebuffFrequencies) do
+                        if not DEBUFF_SCHOOLS[k] then add("%s/%s: %s partyDebuffFrequencies has unknown school '%s'", sk, dn, where, tostring(k)) end
+                    end
+                end
+                if type(blk.targetBuffFrequencies) == "table" then
+                    for k in pairs(blk.targetBuffFrequencies) do
+                        if not BUFF_ACTIONS[k] then add("%s/%s: %s targetBuffFrequencies has unknown action '%s'", sk, dn, where, tostring(k)) end
+                    end
+                end
+            end
+            checkFreq("trash", d.trash)
+            for encID, blk in pairs(d.bosses or {}) do checkFreq("boss " .. tostring(encID), blk) end
+        end
+    end
+    return problems
+end
+
 ----------------------------------------------------------------------
 -- Season registry: friendly labels for known season ids. Verify the live season id + dungeon
 -- pool in game (C_MythicPlus.GetCurrentSeason / C_ChallengeMode.GetMapTable); unknown ids fall

@@ -305,6 +305,16 @@ function Scoring.RunTests(printer)
     check(d2["P1"].baseExpected < d1["P1"].baseExpected - 1e-6, "a second Magic dispeller lowers P1's Magic share")
     clearDungeon("Dist D Test")
 
+    -- (36) SEASON DATA INTEGRITY: every catalog tier/dtype and supply key across all loaded seasons must be
+    -- one the display + scoring layers recognize. An unknown value never errors - it silently drops to
+    -- "Spare"/grey (display) or zero supply (scoring) - so this is the only guard against a typo from the
+    -- catalog generator or a hand edit. Runs after the test dungeons above are cleared, so it sees real data.
+    do
+        local problems = ML.ValidateSeasonData and ML.ValidateSeasonData() or {}
+        check(#problems == 0, "season data uses only known tiers/schools/keys"
+            .. (#problems > 0 and string.format(" (%d issue(s), e.g. %s)", #problems, problems[1]) or ""))
+    end
+
     printer(string.format("|cffa06cf0Scoring tests|r: %d passed, %d failed", passed, failed))
     for _, l in ipairs(lines) do printer("  " .. l) end
     return { passed = passed, failed = failed, lines = lines }
