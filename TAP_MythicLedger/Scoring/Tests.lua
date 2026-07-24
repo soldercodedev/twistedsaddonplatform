@@ -270,7 +270,7 @@ function Scoring.RunTests(printer)
     -- no-show). Fury warrior: same spec, one tracked-with-0-kicks, one fully blind.
     local trackedZero = Scoring.Normalize.Player(run(1800, 12, { member("TZ", 72, "DAMAGER", dpsStats({ interrupts = nil }), true) }),
         member("TZ", 72, "DAMAGER", dpsStats({ interrupts = nil }), true))
-    check(trackedZero.interrupts == 0, "tracked run, no interrupt rows -> interrupts normalised to 0 (not nil)")
+    check(trackedZero.interrupts == 0, "tracked run, no interrupt rows -> interrupts normalized to 0 (not nil)")
     local untracked = Scoring.Normalize.Player(run(1800, 12, { member("UT", 72, "DAMAGER", {}, true) }),
         member("UT", 72, "DAMAGER", {}, true))
     check(untracked.interrupts == nil, "untracked run (no combat data) -> interrupts stay nil (neutral fallback)")

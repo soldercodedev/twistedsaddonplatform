@@ -344,7 +344,7 @@ end
 -- The on-screen cue frame (built once, reused across enable/disable).
 --   icon : the spell art, clipped to the shape via a mask. NO fill sits behind it, so fading
 --          the icon reveals the world - not a dark plate.
---   ring : a real hollow border ring (its centre is transparent), drawn over the icon's edge;
+--   ring : a real hollow border ring (its center is transparent), drawn over the icon's edge;
 --          thickness comes from pre-baked ring textures, color + opacity are tint + alpha.
 ----------------------------------------------------------------------
 -- Pre-baked ring thickness levels available on disk (ring-<shape>-1 .. -10).
@@ -513,7 +513,7 @@ local function buildCue()
     cue:SetScript("OnDragStart", function(self) if placing then self:StartMoving() end end)
     cue:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
-        -- Store the CENTRE offset from UIParent (scale-independent), so re-scaling never moves it.
+        -- Store the CENTER offset from UIParent (scale-independent), so re-scaling never moves it.
         local cx, cy = self:GetCenter()
         local ux, uy = UIParent:GetCenter()
         if cx and ux then S().pos = { x = cx - ux, y = cy - uy } end
@@ -1030,7 +1030,7 @@ local function RenderPage(pageId, m, b, x, y, w, win)
             "Shape of the frame around the icon.")
         P:slider("Size", "iconSize", 24, 96, 2, "%d", "Base icon size, in pixels.")
         P:slider("Zoom", "iconZoom", 0.75, 1.5, 0.05, "%.2f", "Zoom / crop the icon art inside the frame.")
-        P:slider("Scale", "scale", 0.5, 2.5, 0.05, "%.2f", "Overall scale multiplier for the whole cue (grows around its centre).")
+        P:slider("Scale", "scale", 0.5, 2.5, 0.05, "%.2f", "Overall scale multiplier for the whole cue (grows around its center).")
         P:slider("Opacity", "iconOpacity", 0, 1, 0.05, "%.2f", "Transparency of the icon (fade it to see the world through it).")
         P:slider("Overall", "opacity", 0, 1, 0.05, "%.2f", "Transparency of the entire cue.")
         return P.y

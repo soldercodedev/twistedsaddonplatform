@@ -745,7 +745,7 @@ function TCC.StopMover(save)
     if TCC.HideMoverControls then TCC.HideMoverControls() end
     TCC.Evaluate()
     if TCC.OpenManager then TCC.OpenManager() end
-    print(PREFIX .. (save and "Positions saved." or "Move cancelled."))
+    print(PREFIX .. (save and "Positions saved." or "Move canceled."))
 end
 
 ----------------------------------------------------------------------

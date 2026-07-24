@@ -184,12 +184,12 @@ end
 -- One titled, tier-sorted column of kicks or dispels. Returns the next y.
 local function drawList(b, C, x, y, w, title, entries, kind, win)
     b:Label(title, x, y, C.accent, 12)
-    b:Label((entries and #entries or 0) .. " catalogued", x + w - 96, y, C.subtext, 10)
+    b:Label((entries and #entries or 0) .. " cataloged", x + w - 96, y, C.subtext, 10)
     y = y - 8
     b:Box(x, y, w, 1, 0.5, 0, C.border or C.subtext)
     y = y - 12
     if not entries or #entries == 0 then
-        b:Label("None catalogued for this dungeon.", x, y - 4, C.subtext, 11)
+        b:Label("None cataloged for this dungeon.", x, y - 4, C.subtext, 11)
         return y - 24
     end
     local tiers = (kind == "kick") and KICK_TIERS or DISPEL_TIERS
