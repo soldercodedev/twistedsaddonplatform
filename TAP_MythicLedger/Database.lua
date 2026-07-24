@@ -102,7 +102,49 @@ ML.CopyDefaults = CopyDefaults
 -- preserve unknown fields, and tolerate partially written data.
 ----------------------------------------------------------------------
 DB.MIGRATIONS = {
-    -- [2] = function(root) ... end,   -- future schema bumps land here
+    -- v2: Feign Death correction on saved runs. C_DamageMeter logged a Hunter's Feign Death as a death;
+    -- strip those from recorded runs (a captured death with no killing blow that never took the hunter
+    -- near-lethal - the same test the live tracker now uses), fix the count, and re-derive death causes.
+    -- The Config.version bump rescores the corrected runs on load.
+    [2] = function(root)
+        local Providers = ML.Providers
+        if not (Providers and Providers.LooksFeignDeath) then return end
+        local Cfg = ML.Scoring and ML.Scoring.Config
+        local function kicksFor(dungeon)
+            local cat = Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(dungeon)
+            if not (cat and type(cat.kicks) == "table") then return nil end
+            local ks = {}
+            for _, e in ipairs(cat.kicks) do if e.id then ks[e.id] = true end end
+            return ks
+        end
+        for _, run in ipairs(root.runs or {}) do
+            for _, m in ipairs((type(run) == "table" and run.party) or {}) do
+                if type(m) == "table" and m.classFile == "HUNTER" and type(m.deathRecaps) == "table" then
+                    local kept, feign = {}, 0
+                    for _, rc in ipairs(m.deathRecaps) do
+                        if type(rc) == "table" and Providers.LooksFeignDeath(rc.events, rc.maxHP) then
+                            feign = feign + 1
+                        else
+                            kept[#kept + 1] = rc
+                        end
+                    end
+                    if feign > 0 then
+                        m.deathRecaps = (#kept > 0) and kept or nil
+                        local s = m.stats
+                        if type(s) == "table" and type(s.deaths) == "number" then
+                            s.deaths = math.max(0, s.deaths - feign)
+                        end
+                        local n = (type(s) == "table" and s.deaths) or 0
+                        if n > 0 and Providers.ClassifyDeaths then
+                            m.deathCauses = Providers.ClassifyDeaths(m.attribution, m.deathRecaps, m.role, n, kicksFor(run.dungeonName))
+                        else
+                            m.deathCauses = nil
+                        end
+                    end
+                end
+            end
+        end
+    end,
 }
 
 local function runMigrations(root)
@@ -231,11 +273,6 @@ end
 --   2. the overall TOP 10 TIMED runs (by key, then time).
 -- Sets run.pinned on keepers, clears it on the rest. The UI shows a crown on pinned runs.
 DB.TOP_KEEP = 10
--- Hard safety ceiling on total stored runs. Retention ships OFF (scope ALL + no cap) so users don't lose
--- data unexpectedly, but "off" must not mean "unbounded" - past this many runs the oldest UN-protected
--- ones are trimmed (keepers - best-per-dungeon, top 10, crowned best-of-kind - are always spared). Set
--- generously so it never bites a normal or even heavy user; it only bounds pathological accumulation.
-DB.SAFETY_CAP = 5000
 function DB.MarkKeepers()
     if not DB.root then return end
     local best, timed = {}, {}
@@ -304,11 +341,9 @@ function DB.ApplyRetention()
     local scope   = st.retentionScope or "ALL"
     local cap     = tonumber(st.retentionRuns) or 0
     local keepTop = st.retentionKeepTop ~= false   -- default true
-    -- The numeric cap to enforce: the user's if they set one, otherwise the hard SAFETY ceiling (so
-    -- retention "off" still can't grow unbounded). With no scope prune and room under the ceiling there
-    -- is nothing to do - bail cheaply (this is the common path on every save).
-    local effCap = (cap > 0) and cap or DB.SAFETY_CAP
-    if scope == "ALL" and #DB.root.runs <= effCap then return end
+    -- Retention off (ALL scope + no numeric cap, the default) keeps EVERYTHING - nothing to enforce.
+    -- A cap of 0 means "unlimited" on purpose; history only trims when you set a scope or a numeric cap.
+    if scope == "ALL" and cap <= 0 then return end
 
     local runs = DB.root.runs
     -- Refresh keeper flags so the top-run guard is accurate before we prune anything.
@@ -340,12 +375,12 @@ function DB.ApplyRetention()
         end
     end
 
-    -- Phase 2: numeric CAP (the user's cap if set, else the safety ceiling) - oldest un-protected first.
-    if #runs > effCap then
+    -- Phase 2: numeric CAP - only when you've set retentionRuns > 0 (0 = unlimited). Oldest un-protected first.
+    if cap > 0 and #runs > cap then
         table.sort(runs, function(a, b)
             return (a.completedAt or a.startedAt or 0) < (b.completedAt or b.startedAt or 0)
         end)
-        local removeCount, i = #runs - effCap, 1
+        local removeCount, i = #runs - cap, 1
         while removeCount > 0 and i <= #runs do
             if not protected(runs[i]) then table.remove(runs, i); removeCount = removeCount - 1; removed = removed + 1
             else i = i + 1 end   -- keepers survive; step over them

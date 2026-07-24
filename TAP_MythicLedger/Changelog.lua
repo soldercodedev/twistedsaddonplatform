@@ -9,11 +9,10 @@ ML.CHANGELOG = [==[
 
 Hunter Feign Death is no longer miscounted as a death, plus display and housekeeping fixes.
 
-- **[BUG FIX]** A Hunter's Feign Death no longer counts as a real death, so hunters aren't penalised for feigning. Your existing runs are corrected on login.
+- **[BUG FIX]** A Hunter's Feign Death no longer counts as a real death, so hunters aren't penalized for feigning. Your existing runs are corrected on login.
 - **[BUG FIX]** The run lists on the Characters and Dungeons pages were missing their column headers. They're back, and now sortable by date, key, time, deaths or DPS/HPS.
 - **[BUG FIX]** The Dungeon Guide's caster preview shows on the first click instead of staying blank until you click away and back.
 - **[BUG FIX]** The scoreboard and browsing lots of runs no longer slowly use more memory over a long session.
-- **[CHANGE]** Very old runs are trimmed automatically so your saved history can't grow forever.
 - **[CHANGE]** The group-utility tiles in the run review use the same color per dispel school as the Dungeon Guide.
 
 ## 1.1.1
@@ -32,7 +31,7 @@ The platform's new **two-tier navigation** plus a big **scoring pass**: item lev
 - **[CHANGE]** **Item level now shapes your damage bar.** Throughput is the one place gear genuinely changes output, so your expected damage is nudged by your item level versus the group average (bounded, about 1% per item level). The **lowest-geared player isn't punished** for output their gear can't reach, and out-gearing the group no longer reads as skill. Applies only when most of the party's item level is known.
 - **[CHANGE]** **Healers get full credit on a clean key.** Time the key with no deaths and your healing was enough by definition, so the **healing half** of your throughput is lifted to full marks instead of being marked down when the group self-covered its own damage. It scales with deaths (a messy run earns less of the lift) and **never lowers** a score.
 - **[NEW]** **New S+ grade.** A flawless run - every metric that applied to you a perfect 100 - now earns an **S+**, one tier above S.
-- **[CHANGE]** **Smarter death causes.** The **killing blow** now decides why you died: a fatal hit that was avoidable, **environmental** (fall / lava / fire - now counted as your own fault), a **melee** hit taken as a non-tank (lost threat), or an **un-kicked cast** (missed kick) is labelled by that hit, even when earlier chip damage was something else.
+- **[CHANGE]** **Smarter death causes.** The **killing blow** now decides why you died: a fatal hit that was avoidable, **environmental** (fall / lava / fire - now counted as your own fault), a **melee** hit taken as a non-tank (lost threat), or an **un-kicked cast** (missed kick) is labeled by that hit, even when earlier chip damage was something else.
 - **[CHANGE]** **Fairer dispels.** When the group already handled the one or two dispels a fight offered, a spec with only a tiny fair share is no longer scored a zero for it. Skyreach no longer expects a healer to cleanse a debuff that isn't there (its dispellable content is enemy buffs), and **Restoration Druids** are now credited for **Soothe**.
 - **[CHANGE]** **Long-cooldown interrupts get a pass.** A spec with a long-cooldown kick (Solar Beam, Quell, Shadow's Silence...) is no longer docked when the group already covered the run's kicks and nobody died to a missed one - with a note that it's still worth pressing when you can.
 - **[NEW]** **Tanks see loose-mob deaths.** A tank's review now flags teammate deaths that came from a mob it lost or never had threat on - shown for awareness, **not** part of the score.
@@ -52,13 +51,13 @@ The platform's new **two-tier navigation** plus a big **scoring pass**: item lev
 **Missed Kick** deaths, a new on-screen **death report**, and an **avoidable-damage breakdown** with clearer, personalized coaching - building on beta.7's attribution. The scoring change below **re-scores your existing runs automatically** on login.
 
 - **[NEW]** **Missed Kick is now its own death cause.** Death attribution adds a fourth cause alongside Avoidable, Threat, and Other: a **Missed Kick** - a cast that should have been interrupted landed and helped kill you - and it names the exact cast. It reads the **death recap** and weighs the *whole* sequence, so a kickable cast that dropped you gets the blame even when a normal hit lands the killing blow. Recomputed from each run's stored recaps, so it appears on runs you already have.
-- **[CHANGE]** **Missed-kick deaths are scored like an "Other" death.** A death from a missed interrupt carries the same penalty as an unavoidable one - carved out of the old "Other" bucket, so the death count and its total weight are unchanged, only how each death is labelled.
+- **[CHANGE]** **Missed-kick deaths are scored like an "Other" death.** A death from a missed interrupt carries the same penalty as an unavoidable one - carved out of the old "Other" bucket, so the death count and its total weight are unchanged, only how each death is labeled.
 - **[NEW]** **On-screen death report.** After a pull (or at the run's end), a customizable overlay flashes **who died since the last report and why** - the time in the key, the killing blow, and the cause (including a missed kick's cast). Turn it on in **Settings > Death Report**, where you can style the font, size, colors, an optional background panel, and position (drag-to-move with Save/Cancel), pick how it dismisses (auto-fade or **click to dismiss**), and choose whether it fires each pull or once at the finish. **/ledger deathreport** reposts the last one to party chat.
 - **[NEW]** **Avoidable-damage breakdown on the score card.** The player review now lists the exact mechanics behind your Survival score - biggest first, each a real **spell icon** with the game's own hover tooltip, plus the damage taken, a share bar, and its share of your avoidable total. Reference only; it never changes the score.
 - **[CHANGE]** **Clearer, personalized score explanations.** The "How your targets were set" box now sits **below** the coaching (What went well / Focus on), and every category is explained in plain language using **your own numbers** with a worked example. Survival and Deaths in particular now show your actual avoidable share and what each death cost, instead of a generic rule.
 - **[BUG FIX]** **Scoreboard "Least Avoidable" leader fixed.** A player who took **no** avoidable damage (shown as "-") was skipped, so the crown went to someone who actually stood in something; a clean player is now correctly read as zero and credited.
 - **[CHANGE]** **Settings page redesigned.** Settings now use a **two-column layout**, and the scoreboard **Scale** slider shows its numeric value again.
-- **[BUG FIX]** **Interrupt cooldown-class labels corrected.** Several kicks were labelled in the wrong CD band: 15-second melee kicks (Kick, Pummel, Mind Freeze, Disrupt, Skull Bash, Spear Hand Strike, Rebuke) now read **Short-CD**, and 24-second ranged kicks (Counter Shot, Counterspell, Spell Lock) read **Standard**. Labels only - expected kick rates and grades are unchanged.
+- **[BUG FIX]** **Interrupt cooldown-class labels corrected.** Several kicks were labeled in the wrong CD band: 15-second melee kicks (Kick, Pummel, Mind Freeze, Disrupt, Skull Bash, Spear Hand Strike, Rebuke) now read **Short-CD**, and 24-second ranged kicks (Counter Shot, Counterspell, Spell Lock) read **Standard**. Labels only - expected kick rates and grades are unchanged.
 
 ## 1.0.0-beta.7
 

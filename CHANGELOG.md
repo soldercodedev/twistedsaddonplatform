@@ -15,11 +15,10 @@ Uses less memory over long sessions, Combat Alerts is a smaller download, and yo
 
 ### Mythic Ledger (1.1.2)
 
-- **[BUG FIX]** A Hunter's Feign Death no longer counts as a real death, so hunters aren't penalised for feigning. Your existing runs are corrected on login.
+- **[BUG FIX]** A Hunter's Feign Death no longer counts as a real death, so hunters aren't penalized for feigning. Your existing runs are corrected on login.
 - **[BUG FIX]** The run lists on the Characters and Dungeons pages were missing their column headers. They're back, and now sortable by date, key, time, deaths or DPS/HPS.
 - **[BUG FIX]** The Dungeon Guide's caster preview shows on the first click instead of staying blank until you click away and back.
 - **[BUG FIX]** The scoreboard and browsing lots of runs no longer slowly use more memory over a long session.
-- **[CHANGE]** Very old runs are trimmed automatically so your saved history can't grow forever.
 - **[CHANGE]** The group-utility tiles in the run review use the same color per dispel school as the Dungeon Guide.
 
 ### Combat Alerts (1.1.0)
