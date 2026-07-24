@@ -458,29 +458,24 @@ local function renderOverviewScope(b, C, x, y, w, win)
     return y - 34
 end
 
--- Draw a dungeon's wide Encounter-Journal art as a card backdrop using a COVER crop instead of a
--- straight stretch. The EJ backgrounds are ~2.5:1 landscape images; a card that's much wider (or
--- much shorter) than that would otherwise scale the whole image up and smear it. We keep the art's
--- aspect and crop to a centred band so it always fills the card at a sane zoom. `bg` is a texture
--- fileID (from API.DungeonBackground / mapInfo.texture); no-op when nil.
-local DUNGEON_ART_ASPECT = 2.5
-local function dungeonArt(b, x, y, w, h, bg, alpha)
-    if not bg then return end
-    local target = w / math.max(1, h)
-    local u0, u1, v0, v1 = 0, 1, 0, 1
-    if target > DUNGEON_ART_ASPECT then          -- card wider than the art: crop top/bottom
-        local vh = DUNGEON_ART_ASPECT / target
-        v0 = (1 - vh) / 2; v1 = 1 - v0
-    else                                          -- card narrower/taller than the art: crop sides
-        local uh = target / DUNGEON_ART_ASPECT
-        u0 = (1 - uh) / 2; u1 = 1 - u0
-    end
-    b:Tex(x, y, w, h, bg, { u0, u1, v0, v1 }, { 1, 1, 1, alpha or 0.5 }, 1)
-end
+-- Dungeon art as a card backdrop with a COVER crop (keeps the ~2.5:1 EJ art's aspect and crops to a
+-- centred band so it fills without smearing). Shared with the Dungeon Guide banner: ML.DungeonArt.
+local dungeonArt = ML.DungeonArt
 
 -- Dark base for the KPI/highlight hero cards, so they read in the same dark, art-card family as the
 -- dungeon-hero cards even though they carry no background art.
 local HERO_CARD_BG = { 0.05, 0.055, 0.07 }
+
+-- The shared hero-card CHROME: 1px border, a base fill, optional dimmed dungeon art, then the accent
+-- left edge - identical geometry on every hero card (stat / entity / dungeon / top-run) so the border
+-- inset and edge can't drift between them. Draws only the shell; the caller fills the content. `base`
+-- defaults to black; `art` (texture id) + `artAlpha` lay the background; `accent` is the left-edge color.
+local function cardShell(b, C, cx, cy, cw, ch, opts)
+    b:Box(cx - 1, cy + 1, cw + 2, ch + 2, 0.9, 0, C.border)          -- 1px border
+    b:Box(cx, cy, cw, ch, 1, 1, opts.base or { 0, 0, 0 })            -- base fill
+    if opts.art then dungeonArt(b, cx, cy, cw, ch, opts.art, opts.artAlpha or 0.42) end
+    b:VRule(cx + 1, cy, cy - ch, 2, opts.accent)                     -- accent left edge
+end
 
 -- A KPI / highlight card in the STANDARD dungeon-hero visual language: dark base, 1px border, an accent
 -- left edge, a large left icon, then a label + big value (+ optional sub line). This is what keeps the
@@ -491,9 +486,7 @@ local HERO_CARD_BG = { 0.05, 0.055, 0.07 }
 local function heroStatCard(b, C, cx, cy, cw, ch, opts)
     local acc = opts.accent or C.accent
     if type(acc) == "string" then acc = b.theme:Color(acc, C.accent) end
-    b:Box(cx - 1, cy + 1, cw + 2, ch + 2, 0.9, 0, C.border)   -- 1px border
-    b:Box(cx, cy, cw, ch, 1, 1, HERO_CARD_BG)                 -- dark base (matches the dungeon cards)
-    b:VRule(cx + 1, cy, cy - ch, 2, acc)                      -- accent left edge
+    cardShell(b, C, cx, cy, cw, ch, { base = HERO_CARD_BG, accent = acc })
     local innerW = cw - 28   -- full text column width (14px inset each side)
     -- Every text element is width-clamped to the card so a long label / name / context line can
     -- never spill past the right border. Label + sub span the FULL width (the icon sits between them,
@@ -515,6 +508,28 @@ local function heroStatCard(b, C, cx, cy, cw, ch, opts)
     end
 end
 
+-- A reflowing grid of headline StatTiles (the player- and character-details "hero stats" row). Columns
+-- fit to width; each `tile(hkey, value, formatted, opts)` places the next cell (opts overrides the
+-- HeroStatStyle label/color/icon/tip). Returns the drawer plus `finish()` -> the y below the grid.
+local function heroTileGrid(b, x, y, w)
+    local setStyle = tileStyle()
+    local style = (setStyle == "panel" or not setStyle) and "clean" or setStyle
+    local th, tw, gap = 92, 150, 12
+    local cols = math.max(1, math.floor((w + gap) / (tw + gap)))
+    local gx, gy, idx = tw + gap, th + 12, 0
+    local function tile(hkey, value, formatted, opts)
+        opts = opts or {}
+        local col, rowi = idx % cols, math.floor(idx / cols); idx = idx + 1
+        local s = ML.HeroStatStyle(hkey, value, formatted)
+        b:StatTile(x + col * gx, y - rowi * gy, {
+            style = style, iconSize = 40, label = opts.label or s.label, value = formatted or DASH,
+            width = tw, height = th,
+            accent = opts.color or s.color, icon = opts.icon or s.icon, tipData = opts.tipData or s.tipData,
+        })
+    end
+    return tile, function() return y - math.ceil(idx / cols) * gy - 6 end
+end
+
 -- The canonical ENTITY hero card, in the exact same visual language as the dungeon-hero cards: dark
 -- base (+ optional background art), 1px border, an accent left edge, a LARGE left icon (a square
 -- portrait/portal, or a 2:1 banner via iconWide), a title with an optional right-aligned accent value,
@@ -524,10 +539,8 @@ end
 local function heroCard(b, C, cx, cy, cw, ch, opts)
     local acc = opts.accent or C.accent
     if type(acc) == "string" then acc = b.theme:Color(acc, C.accent) end
-    b:Box(cx - 1, cy + 1, cw + 2, ch + 2, 0.9, 0, C.border)   -- 1px border
-    b:Box(cx, cy, cw, ch, 1, 1, { 0, 0, 0 })                  -- black base
-    if opts.art then dungeonArt(b, cx, cy, cw, ch, opts.art, opts.artAlpha or 0.42) end
-    b:VRule(cx + 1, cy, cy - ch, 2, opts.art and artAccent(C) or acc)   -- accent left edge
+    cardShell(b, C, cx, cy, cw, ch, { art = opts.art, artAlpha = opts.artAlpha,
+        accent = opts.art and artAccent(C) or acc })
     local isz = opts.iconSize or 48
     local ih = opts.iconWide and math.floor(isz / 2) or isz
     local tx = cx + 12
@@ -581,11 +594,9 @@ local function renderOverview(b, C, x, y, w, win)
         local bh = 96
         local aHex = artAccentHex(C)
         local function acc(s) return "|cff" .. aHex .. s .. "|r" end   -- light accent, readable over the art
-        b:Box(x - 1, y + 1, w + 2, bh + 2, 0.9, 0, C.border)   -- 1px border
-        b:Box(x, y, w, bh, 1, 1, { 0, 0, 0 })                  -- black base under the art
         local mi = d and d.mapId and API.GetMapInfo(d.mapId)
-        dungeonArt(b, x, y, w, bh, d and (API.DungeonBackground(d.name) or (mi and mi.texture)), 0.5)
-        b:VRule(x + 1, y, y - bh, 2, artAccent(C))             -- light accent left edge (over the art)
+        cardShell(b, C, x, y, w, bh, { art = d and (API.DungeonBackground(d.name) or (mi and mi.texture)),
+            artAlpha = 0.5, accent = artAccent(C) })
         dungeonGlyph(b, x + 16, y - (bh - 64) / 2, 64, d and d.mapId)   -- large portal icon (like the dungeon cards)
         local tx = x + 96
         b:Label("MOST-PLAYED DUNGEON", tx, y - 13, artAccent(C), 10)
@@ -1110,10 +1121,7 @@ local function renderRunDetails(b, C, x, y, w, win)
         local bh = 116   -- tall enough that the bottom affixes/date line clears the banner border
         local mi = r.mapId and API.GetMapInfo(r.mapId)
         local bg = API.DungeonBackground(r.dungeonName) or (mi and mi.texture)
-        b:Box(x - 1, y + 1, w + 2, bh + 2, 0.9, 0, C.border)   -- 1px border
-        b:Box(x, y, w, bh, 1, 1, { 0, 0, 0 })                  -- black base under the art
-        dungeonArt(b, x, y, w, bh, bg, 0.5)
-        b:VRule(x + 1, y, y - bh, 2, artAccent(C))             -- light accent left edge (over the art)
+        cardShell(b, C, x, y, w, bh, { art = bg, artAlpha = 0.5, accent = artAccent(C) })
         dungeonGlyph(b, x + 16, y - (bh - 64) / 2, 64, r.mapId)
         local tx = x + 96
         b:Label("MYTHIC+ RUN", tx, y - 12, artAccent(C), 10)
@@ -1312,11 +1320,9 @@ end
 -- name, its best-timed key, and a two-line stat readout (runs / timed% / best & avg time / avg deaths).
 -- This is the STANDARD dungeon-hero card for the module. Click anywhere to open the dungeon's details.
 local function dungeonHeroCard(b, C, cx, cy, cw, ch, d, win)
-    b:Box(cx - 1, cy + 1, cw + 2, ch + 2, 0.9, 0, C.border)              -- 1px border
-    b:Box(cx, cy, cw, ch, 1, 1, { 0, 0, 0 })                            -- black base under the art
     local mi = d.mapId and API.GetMapInfo(d.mapId)
-    dungeonArt(b, cx, cy, cw, ch, API.DungeonBackground(d.name) or (mi and mi.texture), 0.40)
-    b:VRule(cx + 1, cy, cy - ch, 2, C.accent)                           -- accent left edge (over the art)
+    cardShell(b, C, cx, cy, cw, ch, { art = API.DungeonBackground(d.name) or (mi and mi.texture),
+        artAlpha = 0.40, accent = C.accent })
     local isz = 48                                                       -- large dungeon icon, vertically centred
     dungeonGlyph(b, cx + 12, cy - (ch - isz) / 2, isz, d.mapId)
     local tx = cx + 12 + isz + 12                                       -- text column clears the icon
@@ -1682,22 +1688,7 @@ local function renderPlayerDetails(b, C, x, y, w, win)
     local pct = History.timedPct(t)
     local avgK = Util.safeDiv(p.levelSum, p.levelN)
     local avgD = History.avgOf(p.stats, "deaths")
-    local setStyle = tileStyle()
-    local style = (setStyle == "panel" or not setStyle) and "clean" or setStyle
-    local th = 92
-    local tw, gap = 150, 12
-    local cols = math.max(1, math.floor((w + gap) / (tw + gap)))
-    local gx, gy, idx = tw + gap, th + 12, 0
-    local function tile(hkey, value, formatted, opts)
-        opts = opts or {}
-        local col, rowi = idx % cols, math.floor(idx / cols); idx = idx + 1
-        local s = ML.HeroStatStyle(hkey, value, formatted)
-        b:StatTile(x + col * gx, y - rowi * gy, {
-            style = style, iconSize = 40, label = opts.label or s.label, value = formatted or DASH,
-            width = tw, height = th,
-            accent = opts.color or s.color, icon = opts.icon or s.icon, tipData = opts.tipData or s.tipData,
-        })
-    end
+    local tile, finish = heroTileGrid(b, x, y, w)
     local function outcomeOpts(label, icon, hex, desc)
         return { label = label, icon = icon, color = hex,
             tipData = { title = label, lines = { { text = desc, color = "subtext" } } } }
@@ -1715,7 +1706,7 @@ local function renderPlayerDetails(b, C, x, y, w, win)
         outcomeOpts("Abandoned", "logout", "9098a8", "Left or reset before completion."))
     tile("averageDeaths", avgD,            avgD and string.format("%.1f", avgD) or DASH)
 
-    y = y - math.ceil(idx / cols) * gy - 6
+    y = finish()
 
     b:Label(string.format("First seen %s  ·  Last seen %s", Util.dateShort(p.firstSeenAt), Util.dateShort(p.lastSeenAt)),
         x, y - 2, C.subtext, 11)
@@ -1916,11 +1907,9 @@ end
 -- time / your DPS, the date, and your grade. Crown if it's also your best-scoring run of its kind.
 -- Click anywhere on the card to open the run's full details.
 local function topRunCard(b, C, cx, cy, cw, ch, rank, r, win)
-    b:Box(cx - 1, cy + 1, cw + 2, ch + 2, 0.9, 0, C.border)              -- 1px border
-    b:Box(cx, cy, cw, ch, 1, 1, { 0, 0, 0 })                            -- black base under the art
     local mi = r.mapId and API.GetMapInfo(r.mapId)
-    dungeonArt(b, cx, cy, cw, ch, API.DungeonBackground(r.dungeonName) or (mi and mi.texture), 0.42)  -- dimmed art
-    b:VRule(cx + 1, cy, cy - ch, 2, artAccent(C))                       -- light accent left edge (over the art)
+    cardShell(b, C, cx, cy, cw, ch, { art = API.DungeonBackground(r.dungeonName) or (mi and mi.texture),
+        artAlpha = 0.42, accent = artAccent(C) })                       -- dimmed art + light accent edge
     dungeonGlyph(b, cx + 10, cy - (ch - 40) / 2, 40, r.mapId)          -- portal icon (matches every other hero card)
     local tx = cx + 60
     b:Label("#" .. rank .. "   " .. (r.dungeonName or "Dungeon") .. "   " .. Util.keyLabel(r.level), tx, cy - 13, ON_ART, 14)
@@ -2987,22 +2976,7 @@ local function renderCharacterDetails(b, C, x, y, w, win)
     -- Headline stats as responsive hero tiles (the Overview page's look + color scale). Columns reflow
     -- to the page width. DPS/HPS are neutral (absolute throughput isn't rated); scores use the grade color.
     -- Panel style can't host the large right-side icon, so fall back to a large-icon-capable style there.
-    local setStyle = tileStyle()
-    local style = (setStyle == "panel" or not setStyle) and "clean" or setStyle
-    local th = 92
-    local tw, gap = 150, 12
-    local cols = math.max(1, math.floor((w + gap) / (tw + gap)))
-    local gx, gy, idx = tw + gap, th + 12, 0
-    local function tile(hkey, value, formatted, opts)
-        opts = opts or {}
-        local col, rowi = idx % cols, math.floor(idx / cols); idx = idx + 1
-        local s = ML.HeroStatStyle(hkey, value, formatted)
-        b:StatTile(x + col * gx, y - rowi * gy, {
-            style = style, iconSize = 40, label = opts.label or s.label, value = formatted or DASH,
-            width = tw, height = th,
-            accent = opts.color or s.color, icon = opts.icon or s.icon, tipData = opts.tipData or s.tipData,
-        })
-    end
+    local tile, finish = heroTileGrid(b, x, y, w)
     local function scoreFmt(v) return (v and S and S.Score) and string.format("%s  (%d)", S.Score.Grade(v), math.floor(v + 0.5)) or DASH end
     local function scoreOpts(label, v, desc)
         local grade = (v and S and S.Score) and S.Score.Grade(v) or nil
@@ -3028,7 +3002,7 @@ local function renderCharacterDetails(b, C, x, y, w, win)
     tile("highScore", highScore, scoreFmt(highScore), scoreOpts("Highest Score", highScore, "Your best single-run performance score (0-100)."))
     tile("lowScore",  lowScore,  scoreFmt(lowScore),  scoreOpts("Lowest Score", lowScore, "Your lowest single-run performance score (0-100)."))
 
-    y = y - math.ceil(idx / cols) * gy - 6
+    y = finish()
 
     -- BY SPEC: each spec played, as a class/spec hero card (class color + spec icon).
     y = b:Section("BY SPEC", x, y); y = y - 30
@@ -3617,7 +3591,7 @@ function renderPlayerReview(b, C, x, y, w, win)
         local scfg = ML.Scoring and ML.Scoring.Config
         local cat = scfg and scfg.SeasonDungeon and scfg.SeasonDungeon(r.dungeonName)
         local you, them = m.isPlayer and "you" or "they", m.isPlayer and "you" or "them"
-        local OFFLIST = { o = 9, c = "8b91a0" }
+        local OFFLIST = { order = 9, color = "8b91a0" }
 
         -- kind: "kick"|"dispel". landed = attribution list {id,amt}. prio = catalog (for tier + caster on
         -- the landed rows). tierMap/prioSet = ordering+color and which tiers count as "priority". iconFn =
@@ -3630,7 +3604,7 @@ function renderPlayerReview(b, C, x, y, w, win)
             local byId = {}
             for _, e in ipairs(prio) do if e.id then byId[e.id] = e end end
             local buckets = {}
-            local function bucket(label, ti) buckets[label] = buckets[label] or { order = ti.o, color = ti.c, entries = {} }; return buckets[label] end
+            local function bucket(label, ti) buckets[label] = buckets[label] or { order = ti.order, color = ti.color, entries = {} }; return buckets[label] end
             local prioCount, spareCount = 0, 0
             for _, k in ipairs(landed) do
                 local cnt, e = k.amt or 1, k.id and byId[k.id]
@@ -3701,8 +3675,7 @@ function renderPlayerReview(b, C, x, y, w, win)
 
         if cat then
             -- Interrupts (tier-based; missed = priority casts not kicked).
-            local KICK_TIER = { ["Critical"] = { o = 1, c = "ff4d4d" }, ["Must kick"] = { o = 2, c = "ff7a45" },
-                ["Should kick"] = { o = 3, c = "ffd200" }, ["Spare"] = { o = 8, c = "9aa0ad" } }
+            local KICK_TIER = ML.KICK_TIERS
             local KICK_PRIO = { Critical = true, ["Must kick"] = true, ["Should kick"] = true }
             local kicked = m.attribution and m.attribution.interrupts or {}
             local kdone = {}
@@ -3717,9 +3690,7 @@ function renderPlayerReview(b, C, x, y, w, win)
             -- already filtered to THIS spec's cleanse/purge/soothe capability - cross-ref to the season
             -- catalog for tier + caster so the "not dispelled" icons are correct AND clickable. Tools =
             -- defensive dispel (+ the offensive purge/soothe ability when the dungeon has any).
-            local DISPEL_TIER = { ["Highest"] = { o = 1, c = "ff4d4d" }, ["High (remove)"] = { o = 2, c = "ff7a45" },
-                ["High"] = { o = 3, c = "ffb038" }, ["Medium"] = { o = 4, c = "ffd200" }, ["Conditional"] = { o = 5, c = "8fbf6b" },
-                ["When needed"] = { o = 6, c = "6fb0c9" }, ["Spare"] = { o = 8, c = "9aa0ad" } }
+            local DISPEL_TIER = ML.DISPEL_TIERS
             local DISPEL_PRIO = { Highest = true, ["High (remove)"] = true, High = true }
             local dRes = cats.dispels
             local dtargets = (dRes and dRes.dispelTargets) or {}   -- spec-filtered; empty for non-dispellers

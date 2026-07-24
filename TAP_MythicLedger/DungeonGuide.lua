@@ -22,21 +22,9 @@ local DISPLAY = {
 }
 
 -- Priority tiers -> display order (high first) + color. An uncurated ("unset") entry shows as "Spare".
-local KICK_TIERS = {
-    ["Critical"]    = { order = 1, color = "ff4d4d" },
-    ["Must kick"]   = { order = 2, color = "ff7a45" },
-    ["Should kick"] = { order = 3, color = "ffd200" },
-    ["Spare"]       = { order = 8, color = "9aa0ad" },
-}
-local DISPEL_TIERS = {
-    ["Highest"]       = { order = 1, color = "ff4d4d" },
-    ["High (remove)"] = { order = 2, color = "ff7a45" },
-    ["High"]          = { order = 3, color = "ffb038" },
-    ["Medium"]        = { order = 4, color = "ffd200" },
-    ["Conditional"]   = { order = 5, color = "8fbf6b" },
-    ["When needed"]   = { order = 6, color = "6fb0c9" },
-    ["Spare"]         = { order = 8, color = "9aa0ad" },
-}
+-- Single source of truth in Constants (shared with the run-review interrupt/dispel breakdown).
+local KICK_TIERS   = ML.KICK_TIERS
+local DISPEL_TIERS = ML.DISPEL_TIERS
 -- Dispel school -> color (shared with the run-review tiles; see ML.SCHOOL_COLOR).
 local SCHOOL_COLOR = ML.SCHOOL_COLOR
 
@@ -55,18 +43,8 @@ local function tierInfo(map, tier) return map[tier] or map["Spare"] end
 -- Module-local view state.
 local state = { dungeon = nil, selDungeon = nil, sel = nil }   -- sel = { id, npcId, name, npc, tier }
 
-----------------------------------------------------------------------
--- Dungeon art (crop the ~2.5:1 EJ background to fill a banner, like the scoreboard cards).
-----------------------------------------------------------------------
-local ART_ASPECT = 2.5
-local function artBanner(b, x, y, w, h, bg, alpha)
-    if not bg then return end
-    local target = w / math.max(1, h)
-    local u0, u1, v0, v1 = 0, 1, 0, 1
-    if target > ART_ASPECT then local vh = ART_ASPECT / target; v0 = (1 - vh) / 2; v1 = 1 - v0
-    else local uh = target / ART_ASPECT; u0 = (1 - uh) / 2; u1 = 1 - u0 end
-    b:Tex(x, y, w, h, bg, { u0, u1, v0, v1 }, { 1, 1, 1, alpha or 0.5 }, 1)
-end
+-- Dungeon art banner (crop the ~2.5:1 EJ background to fill, like the scoreboard cards). Shared: ML.DungeonArt.
+local artBanner = ML.DungeonArt
 
 ----------------------------------------------------------------------
 -- Persistent 3D model panel (survives the builder's per-render Reset; reparented if the window rebuilds).

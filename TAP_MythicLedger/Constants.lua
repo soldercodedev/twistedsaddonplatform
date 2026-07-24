@@ -58,6 +58,45 @@ ML.SCHOOL_COLOR = {
 -- end-of-run scoreboard can't drift (the scoreboard used to keep its own byte-identical copy).
 ML.STATUS_HEX = { TIMED = "33dd66", DEPLETED = "e0a030", ABANDONED = "9098a8" }
 
+-- Interrupt / dispel priority tiers -> sort order + theme hex. ONE source of truth so the Dungeon
+-- Guide (tier badges) and the run-review interrupt/dispel breakdown can't drift. `order` sorts the
+-- rows; `color` is the tier's theme hex. Unlisted tiers fall back to "Spare".
+ML.KICK_TIERS = {
+    ["Critical"]    = { order = 1, color = "ff4d4d" },
+    ["Must kick"]   = { order = 2, color = "ff7a45" },
+    ["Should kick"] = { order = 3, color = "ffd200" },
+    ["Spare"]       = { order = 8, color = "9aa0ad" },
+}
+ML.DISPEL_TIERS = {
+    ["Highest"]       = { order = 1, color = "ff4d4d" },
+    ["High (remove)"] = { order = 2, color = "ff7a45" },
+    ["High"]          = { order = 3, color = "ffb038" },
+    ["Medium"]        = { order = 4, color = "ffd200" },
+    ["Conditional"]   = { order = 5, color = "8fbf6b" },
+    ["When needed"]   = { order = 6, color = "6fb0c9" },
+    ["Spare"]         = { order = 8, color = "9aa0ad" },
+}
+
+-- Draw a dungeon's wide Encounter-Journal art as a card/banner backdrop with a COVER crop instead of a
+-- straight stretch. The EJ backgrounds are ~2.5:1 landscape; a target much wider (or shorter) than that
+-- would smear when stretched, so we keep the art's aspect and crop to a centred band. `bg` is a texture
+-- fileID (from API.DungeonBackground / mapInfo.texture); no-op when nil. Shared by the run-review cards
+-- and the Dungeon Guide banner so the crop can't drift.
+local ART_ASPECT = 2.5
+function ML.DungeonArt(b, x, y, w, h, bg, alpha)
+    if not bg then return end
+    local target = w / math.max(1, h)
+    local u0, u1, v0, v1 = 0, 1, 0, 1
+    if target > ART_ASPECT then          -- target wider than the art: crop top/bottom
+        local vh = ART_ASPECT / target
+        v0 = (1 - vh) / 2; v1 = 1 - v0
+    else                                  -- target narrower/taller than the art: crop sides
+        local uh = target / ART_ASPECT
+        u0 = (1 - uh) / 2; u1 = 1 - u0
+    end
+    b:Tex(x, y, w, h, bg, { u0, u1, v0, v1 }, { 1, 1, 1, alpha or 0.5 }, 1)
+end
+
 ----------------------------------------------------------------------
 -- Season registry: friendly labels for known season ids. Verify the live season id + dungeon
 -- pool in game (C_MythicPlus.GetCurrentSeason / C_ChallengeMode.GetMapTable); unknown ids fall
