@@ -16,10 +16,8 @@ local CHANGELOG = [==[
 
 ## 1.1.0
 
-Part of the platform's **two-tier navigation** (TAP 1.5.0).
-
-- **[NEW]** **Announce by class/spec.** The **Announce** page adds a **Class / Spec** picker: focus and ready-check call-outs now fire only while you're playing one of the chosen specs. Leave it empty to announce on every character.
-- **[CHANGE]** **Pages moved to the sidebar.** Macros, Marker Palette, Announce and Settings are now sub-rows under the **Focus Target Interrupt** category in the `/tap` sidebar, each full-width. The enable toggle moved to the platform **Overview**.
+- **[CHANGE]** The Macros, Marker Palette, Announce and Settings pages moved into the sidebar under Focus Target Interrupt, and the on/off toggle is now on the platform Overview.
+- **[NEW]** You can limit focus and ready-check call-outs to certain specs - the Announce page has a Class/Spec picker. Leave it empty to announce on every character.
 
 ## 1.0.0
 

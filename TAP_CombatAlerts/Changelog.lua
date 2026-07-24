@@ -6,13 +6,11 @@ TCC.CHANGELOG = [==[
 
 ## 1.1.0
 
-Combat Alerts drops its bundled spell/item database in favour of reading names live from your own spellbook, gear and bags - a much smaller download - and a few search, test and slash-command rough edges are fixed.
-
-- **[BUG FIX]** **Alert visuals recycle.** An on-screen alert's frame is reused when you delete its rule, instead of lingering for the rest of the session.
-- **[CHANGE]** **Lighter search, no bundled database.** The optional spell/item name database is gone; the **Find** search now reads live from your spellbook, auras, gear and bags - paste a numeric spell or item **ID** to add anything outside those. Much smaller install, and no data file to parse on first search.
-- **[BUG FIX]** **/tap alerts** opens the manager again (it had stopped doing anything after the navigation move).
-- **[BUG FIX]** **Test cues can be stopped again** - the on-screen **Stop Test** bar is back, so a looping test no longer runs until you /reload.
-- **[CHANGE]** **Test button moved.** The test button now lives in the alert editor's header (reachable from any tab) and is labelled **Test Alert**.
+- **[BUG FIX]** Deleting an alert no longer leaves its on-screen warning behind.
+- **[BUG FIX]** /tap alerts opens the manager again.
+- **[BUG FIX]** You can stop a running test alert again (the Stop Test bar is back).
+- **[CHANGE]** Dropped the bundled spell/item name database - the Find search reads from your spellbook, gear and bags instead, so it's a smaller download. Paste an ID for anything not in those.
+- **[CHANGE]** Moved the test button into the alert editor and renamed it Test Alert.
 
 ## 1.0.1
 

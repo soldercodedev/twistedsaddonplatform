@@ -2,13 +2,14 @@
 
 ## 1.1.2
 
-A fix-up and tidy-up release - no scoring changes. The detail-page run tables are now sortable, a round of memory fixes keeps the UI and saved history lean, and a couple of display bugs are fixed - plus consistent dispel-school colours between the run review and the Dungeon Guide.
+Hunter Feign Death is no longer miscounted as a death, plus display and housekeeping fixes.
 
-- **[BUG FIX]** **Sortable run tables.** The Characters and Dungeons detail pages now show column headers on their run lists, and you can click **Date**, **Key**, **Time**, **Deaths** or **DPS/HPS** to sort - matching the main Runs list.
-- **[CHANGE]** **Leaner history, fewer leaks.** Run history now has a safety cap so it can't grow without bound, cached scores for removed runs are cleaned up, and the run review, scoreboard and detail pages no longer accumulate frames over a long session.
-- **[BUG FIX]** **Dungeon Guide caster preview** now renders on the first click, instead of staying blank until you clicked away and back.
-- **[BUG FIX]** **Death report pet kills** are attributed to the pet's owner, instead of showing an orphaned pet name.
-- **[CHANGE]** **Consistent dispel-school colours.** The run-review group-utility tiles now use the same colour per school (Magic, Curse, Poison...) as the Dungeon Guide.
+- **[BUG FIX]** A Hunter's Feign Death no longer counts as a real death, so hunters aren't penalised for feigning. Your existing runs are corrected on login.
+- **[BUG FIX]** The run lists on the Characters and Dungeons pages were missing their column headers. They're back, and now sortable by date, key, time, deaths or DPS/HPS.
+- **[BUG FIX]** The Dungeon Guide's caster preview shows on the first click instead of staying blank until you click away and back.
+- **[BUG FIX]** The scoreboard and browsing lots of runs no longer slowly use more memory over a long session.
+- **[CHANGE]** Very old runs are trimmed automatically so your saved history can't grow forever.
+- **[CHANGE]** The group-utility tiles in the run review use the same color per dispel school as the Dungeon Guide.
 
 ## 1.1.1
 

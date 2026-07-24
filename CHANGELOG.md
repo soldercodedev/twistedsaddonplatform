@@ -5,29 +5,30 @@ any module → *What's New*), and a `README.md` in its folder.
 
 ## 1.6.0
 
-A leaner, sturdier release. Combat Alerts drops its bundled spell/item database in favour of reading names live from your own spellbook, gear and bags - a much smaller download - and its search, test and slash-command rough edges are fixed. The platform can now re-enable a fully-disabled add-on without a trip to Blizzard's menu, and a large under-the-hood clean-up leaves the whole suite lighter.
+Uses less memory over long sessions, Combat Alerts is a smaller download, and you can re-enable a fully-disabled add-on from the Overview.
 
 **Platform**
 
-- **[CHANGE]** **Lighter, leak-free interface.** A memory-fix sweep across the shared UI: reusable controls are pooled and reused, the window, dialogs and toasts stop leaving stray frames behind, and the Settings colour picker no longer churns while you drag it.
-- **[NEW]** **Re-enable a disabled add-on from `/tap`.** Fully disabling an add-on used to hide it until you turned it back on from Blizzard's AddOns list. The Overview page now has a **Disabled add-ons** section with a one-click **Enable** (it reloads the UI) for any installed module you've switched off.
-- **[CHANGE]** **Errors surface instead of vanishing.** A crash inside a module's page or on-enable/disable hook is now reported instead of being silently swallowed, so a misbehaving add-on can't fail invisibly.
+- **[BUG FIX]** Fixed a slow memory build-up while the `/tap` window stays open for a long session.
+- **[CHANGE]** A broken add-on now shows an error instead of quietly doing nothing.
+- **[NEW]** You can re-enable a fully-disabled add-on straight from the Overview, instead of hunting for it in Blizzard's AddOns list.
 
 ### Mythic Ledger (1.1.2)
 
-- **[BUG FIX]** **Sortable run tables.** The Characters and Dungeons detail pages now show column headers on their run lists, and you can click **Date**, **Key**, **Time**, **Deaths** or **DPS/HPS** to sort - matching the main Runs list.
-- **[CHANGE]** **Leaner history, fewer leaks.** Run history now has a safety cap so it can't grow without bound, cached scores for removed runs are cleaned up, and the run review, scoreboard and detail pages no longer accumulate frames over a long session.
-- **[BUG FIX]** **Dungeon Guide caster preview** now renders on the first click, instead of staying blank until you clicked away and back.
-- **[BUG FIX]** **Death report pet kills** are attributed to the pet's owner, instead of showing an orphaned pet name.
-- **[CHANGE]** **Consistent dispel-school colours.** The run-review group-utility tiles now use the same colour per school (Magic, Curse, Poison...) as the Dungeon Guide.
+- **[BUG FIX]** A Hunter's Feign Death no longer counts as a real death, so hunters aren't penalised for feigning. Your existing runs are corrected on login.
+- **[BUG FIX]** The run lists on the Characters and Dungeons pages were missing their column headers. They're back, and now sortable by date, key, time, deaths or DPS/HPS.
+- **[BUG FIX]** The Dungeon Guide's caster preview shows on the first click instead of staying blank until you click away and back.
+- **[BUG FIX]** The scoreboard and browsing lots of runs no longer slowly use more memory over a long session.
+- **[CHANGE]** Very old runs are trimmed automatically so your saved history can't grow forever.
+- **[CHANGE]** The group-utility tiles in the run review use the same color per dispel school as the Dungeon Guide.
 
 ### Combat Alerts (1.1.0)
 
-- **[BUG FIX]** **Alert visuals recycle.** An on-screen alert's frame is reused when you delete its rule, instead of lingering for the rest of the session.
-- **[CHANGE]** **Lighter search, no bundled database.** The optional spell/item name database is gone; the **Find** search now reads live from your spellbook, auras, gear and bags - paste a numeric spell or item **ID** to add anything outside those. Much smaller install, and no data file to parse on first search.
-- **[BUG FIX]** **`/tap alerts`** opens the manager again (it had stopped doing anything after the navigation move).
-- **[BUG FIX]** **Test cues can be stopped again** - the on-screen **Stop Test** bar is back, so a looping test no longer runs until you `/reload`.
-- **[CHANGE]** **Test button moved.** The test button now lives in the alert editor's header (reachable from any tab) and is labelled **Test Alert**.
+- **[BUG FIX]** Deleting an alert no longer leaves its on-screen warning behind.
+- **[BUG FIX]** `/tap alerts` opens the manager again.
+- **[BUG FIX]** You can stop a running test alert again (the Stop Test bar is back).
+- **[CHANGE]** Dropped the bundled spell/item name database - the Find search reads from your spellbook, gear and bags instead, so it's a smaller download. Paste an ID for anything not in those.
+- **[CHANGE]** Moved the test button into the alert editor and renamed it Test Alert.
 
 ## 1.5.1
 
