@@ -1,8 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Twisteds Addon Platform - repo hygiene
 # Keep dev tooling, scripts, and reference material OUT of what we push/ship.
-# Only the addon folders (TAP, TAP_*) + docs (README/CHANGELOG/CURSE/LICENSE/
-# THIRD_PARTY_NOTICES) belong in the repo.
+# Only the addon folders (TAP, TAP_*) + user-facing docs (README/CHANGELOG/
+# LICENSE/THIRD_PARTY_NOTICES/ABOUT) belong in the repo.
 # ─────────────────────────────────────────────────────────────────────────────
 
 /betaportal/
@@ -32,7 +32,10 @@
 **/tools/
 *.py
 
-# Internal design notes / scratch docs (not part of the shipped addon)
+# Internal docs: design notes, scoring/research references, audits, dev scratch,
+# plus the CURSE.md store-listing copy (pasted to CurseForge by hand). The docs/
+# folder is the single home for every non-user-facing .md (the shipped addons
+# keep only README/CHANGELOG/LICENSE/THIRD_PARTY_NOTICES/ABOUT).
 /RotationKeybindCue.md
 /NOTES.md
 /scratch/
@@ -41,11 +44,6 @@
 # Support-bot context (private - for the live help AI agent, never shipped/pushed)
 /context.md
 /guardrails.md
-
-# Local dev working notes (not shipped/pushed)
-/PATCH_CHANGES.md
-/CODE_QUALITY_AUDIT.md
-/CLEANUP_BATCHES.md
 
 # Local screenshots (dev captures, not part of the shipped addon)
 /ScreenShots/
