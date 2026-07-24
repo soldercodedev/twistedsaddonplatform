@@ -2724,7 +2724,7 @@ local function renderDebug(b, C, x, y, w, win)
         local theme = _G.TAP and _G.TAP.uiTheme
         if theme and theme.ShowCopyDialog then theme:ShowCopyDialog("Mythic Ledger API self-check", txt) end
     end, { icon = "list-check", iconSize = 13 }), "API self-check",
-        "Probe every live API the module uses (safe on a target dummy - validates the stat pipeline without a key).")
+        "Probe every live API the add-on uses (safe on a target dummy - validates the stat pipeline without a key).")
     y = y - 34
     T(b, b:Button(x, y, 200, "Rescore all runs", "default", function()
         if ML.Scoring and ML.Scoring.RescoreAll then

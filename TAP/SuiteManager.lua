@@ -351,27 +351,32 @@ local function pageOverview(b, win)
     local w = b.contentWidth
     local x, y = 24, -18
 
-    local total, active = Suite:Stats()
+    -- Count ADD-ONS (one per installed add-on), not raw modules - the Mythic Ledger add-on registers a
+    -- few modules (its main module + the Dungeon Guide + Scoring Guide pages) that share one Overview row.
+    local leads = addonLeads()
+    local total = #leads
+    local active = 0
+    for _, lead in ipairs(leads) do if lead:IsEnabled() then active = active + 1 end end
     y = b:PageHeading(x, y, "Overview", "Turn an add-on on or off, jump into any one, or fully unload it. "
         .. "Each add-on's pages live under it in the sidebar - no reload needed for the live on/off.")
 
-    b:StatTile(x, y, { label = "Modules", value = tostring(total), width = 150, height = 64 })
+    b:StatTile(x, y, { label = "Add-ons", value = tostring(total), width = 150, height = 64 })
     b:StatTile(x + 162, y, { label = "Active", value = tostring(active), width = 150, height = 64,
         valueColor = active > 0 and "accent" or nil })
     y = y - 80
 
     if total == 0 then
-        y = b:Section("NO PLUGINS INSTALLED", x, y); y = y - 34
-        b:Wrap("No sidecar modules are registered yet. Install a platform plugin addon (one that "
+        y = b:Section("NO ADD-ONS INSTALLED", x, y); y = y - 34
+        b:Wrap("No sidecar add-ons are registered yet. Install a platform plug-in add-on (one that "
             .. "lists TAP as a dependency) and it will appear here automatically.",
             x, y, w - 44, C.subtext, 12)
         return y - 60
     end
 
-    y = b:Section("MODULES", x, y); y = y - 30
+    y = b:Section("ADD-ONS", x, y); y = y - 30
     local rowW = w - 48
     local rpad = 14   -- inset for the right-aligned controls, so they don't sit flush to the row edge
-    for _, lead in ipairs(addonLeads()) do
+    for _, lead in ipairs(leads) do
         local spec = lead.spec
         local enabled = lead:IsEnabled()
         local rowTitle = spec.group or spec.title or spec.id   -- addon-level name (Mythic Ledger, not Dungeon Guide)
@@ -676,15 +681,15 @@ local function pageAbout(b, win)
     local _, hh = b:Wrap("This is the home base for Twisted's collection of add-ons. Rather than a pile "
         .. "of separate add-ons that all look and behave differently, they live here together - sharing "
         .. "one clean look and this single window to turn them on or off and set them up.\n\n"
-        .. "Each feature is its own \"module\". Switch on only the ones you want; the rest sit quietly and "
-        .. "do nothing. Every module you have installed shows up in the list on the left.",
+        .. "Each feature is its own \"add-on\". Switch on only the ones you want; the rest sit quietly and "
+        .. "do nothing. Every add-on you have installed shows up in the list on the left.",
         x, y, w - 44, C.subtext, 12)
     y = y - (hh + 16)
 
     -- Getting around (what the sidebar pages do)
     y = b:Section("GETTING AROUND", x, y); y = y - 30
     for _, line in ipairs({
-        { "Overview",    "Turn modules on or off, jump to any one, or fully unload an add-on." },
+        { "Overview",    "Turn add-ons on or off, jump to any one, or fully unload one." },
         { "Settings",    "Change the platform's look - theme, accent color and font." },
         { "The sidebar", "Each add-on is a category; its pages sit under it - click one to open it." },
     }) do
@@ -694,17 +699,19 @@ local function pageAbout(b, win)
     end
     y = y - 8
 
-    -- Your modules (details for everything currently loaded)
-    y = b:Section("YOUR MODULES", x, y); y = y - 30
-    if #Suite.modules == 0 then
-        b:Wrap("No modules installed yet. Add one of Twisted's plug-in add-ons and it'll appear here "
+    -- Your add-ons (one entry per installed add-on, not per registered module)
+    y = b:Section("YOUR ADD-ONS", x, y); y = y - 30
+    local leads = addonLeads()
+    if #leads == 0 then
+        b:Wrap("No add-ons installed yet. Add one of Twisted's plug-in add-ons and it'll appear here "
             .. "(and in the sidebar) automatically.", x, y, w - 44, C.subtext, 11)
         y = y - 40
     else
-        for _, mod in ipairs(Suite.modules) do
+        for _, mod in ipairs(leads) do
             local spec = mod.spec
-            if spec.icon then b:Glyph(x, y - 3, { icon = spec.icon, size = 18, color = mod:IsActive() and C.accent or C.subtext }) end
-            local titleFs = b:Label(spec.title or spec.id, x + 26, y - 2, C.text, 13)
+            local name = spec.group or spec.title or spec.id   -- add-on name (Mythic Ledger, not Dungeon Guide)
+            if spec.groupIcon or spec.icon then b:Glyph(x, y - 3, { icon = spec.groupIcon or spec.icon, size = 18, color = mod:IsActive() and C.accent or C.subtext }) end
+            local titleFs = b:Label(name, x + 26, y - 2, C.text, 13)
             local sx = x + 26 + (titleFs:GetStringWidth() or 60) + 8
             local ver = addonVersion(spec.addon)
             if ver then
@@ -793,7 +800,7 @@ local function pageCommands(b, win)
     local w = b.contentWidth
     local x, y = 24, -18
 
-    y = b:PageHeading(x, y, "Commands", "Every slash command across the platform and its installed modules. "
+    y = b:PageHeading(x, y, "Commands", "Every slash command across the platform and its installed add-ons. "
         .. "Type |cffffffff/tap|r on its own to open this window.")
 
     -- Group by owner, preserving the order owners first appear in the registry.
@@ -836,8 +843,8 @@ local function pageChangelog(b, win)
     local w = b.contentWidth
     local x = 24
     local y = b:PageHeading(x, -18, "Changelog",
-        "Platform-level release notes for the Twisteds Addon Platform. Each module also keeps its own "
-        .. "What's New (open a module from the sidebar, then What's New).", w - 44)
+        "Platform-level release notes for the Twisteds Addon Platform. Each add-on also keeps its own "
+        .. "What's New (open an add-on from the sidebar, then What's New).", w - 44)
     local blocks = parseChangelog(Suite.CHANGELOG or "")
     if #blocks == 0 then
         b:Wrap("No changelog available.", x, y, w - 44, C.subtext, 12)
@@ -927,12 +934,12 @@ local function renderPage(b, win, mod, page)
     local spec = mod.spec
     if not mod:IsEnabled() then
         if not spec.rendersWhenDisabled then
-            b:Wrap("This module is turned off. Switch it on from the Platform Overview page to configure it.",
+            b:Wrap("This add-on is turned off. Switch it on from the Platform Overview page to configure it.",
                 x, y, w - 44, C.subtext, 12)
             return y - 40
         elseif not page.disabledSafe then
-            b:Heading("Module disabled", x, y, "h2"); y = y - 34
-            local _, hh = b:Wrap("This page is unavailable while " .. (spec.title or "this module")
+            b:Heading("Add-on disabled", x, y, "h2"); y = y - 34
+            local _, hh = b:Wrap("This page is unavailable while " .. (spec.title or "this add-on")
                 .. " is turned off. Open its Settings to switch it back on.", x, y, w - 44, C.subtext, 12)
             y = y - (hh + 16)
             local sv = settingsPageView(mod)
@@ -1317,8 +1324,8 @@ hint:RegisterEvent("PLAYER_LOGIN")
 hint:RegisterEvent("PLAYER_ENTERING_WORLD")
 hint:SetScript("OnEvent", function(_, ev)
     if ev == "PLAYER_LOGIN" then
-        local total = Suite:Stats()
-        print(("|cffa06cf0Twisteds Addon Platform|r loaded - |cffffffff/tap|r to manage %d module%s.")
+        local total = #addonLeads()
+        print(("|cffa06cf0Twisteds Addon Platform|r loaded - |cffffffff/tap|r to manage %d add-on%s.")
             :format(total, total == 1 and "" or "s"))
         createAllMinimapButtons()
     else   -- PLAYER_ENTERING_WORLD: reassert once (world assets/fonts fully ready), then stop

@@ -115,10 +115,10 @@ function BuilderMixin:PageHeading(x, y, title, desc, w)
     return y
 end
 
--- A centered "MODULE DISABLED" overlay notice, drawn in place of a page's content when the module
+-- A centered "ADD-ON DISABLED" overlay notice, drawn in place of a page's content when the add-on
 -- that owns it is switched off. A dark scrim panel with a red hairline frame, a lock glyph, a red
 -- heading and a subtext line, plus an optional "Go to Overview" button (opts.onSettings). Every suite
--- module shows the same block, so a disabled module reads consistently. Returns the y below the panel.
+-- add-on shows the same block, so a disabled add-on reads consistently. Returns the y below the panel.
 -- opts: height (default 300), title, subtitle, icon (bundled slug), onSettings.
 function BuilderMixin:DisabledOverlay(x, y, w, opts)
     opts = opts or {}
@@ -134,7 +134,7 @@ function BuilderMixin:DisabledOverlay(x, y, w, opts)
     local cx, cy = x + w / 2, y - h / 2
     local isz = 48
     self:Tex(cx - isz / 2, cy + 58, isz, isz, opts.icon or "lock", nil, RED, 2)
-    local t = self:Label(opts.title or "MODULE DISABLED", x, cy + 2, RED, 22)
+    local t = self:Label(opts.title or "ADD-ON DISABLED", x, cy + 2, RED, 22)
     t:SetWidth(w); t:SetJustifyH("CENTER")
     local s = self:Label(opts.subtitle or "Enable it from the Platform Overview.", x, cy - 28, C.subtext, 13)
     s:SetWidth(w); s:SetJustifyH("CENTER")
