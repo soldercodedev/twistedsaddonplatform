@@ -7,8 +7,10 @@ ML.CHANGELOG = [==[
 
 ## 1.1.2
 
-A small fix-up release - no scoring changes. A couple of display bugs are fixed, and the dispel-school colours are now consistent between the run review and the Dungeon Guide.
+A fix-up and tidy-up release - no scoring changes. The detail-page run tables are now sortable, a round of memory fixes keeps the UI and saved history lean, and a couple of display bugs are fixed - plus consistent dispel-school colours between the run review and the Dungeon Guide.
 
+- **[BUG FIX]** **Sortable run tables.** The Characters and Dungeons detail pages now show column headers on their run lists, and you can click **Date**, **Key**, **Time**, **Deaths** or **DPS/HPS** to sort - matching the main Runs list.
+- **[CHANGE]** **Leaner history, fewer leaks.** Run history now has a safety cap so it can't grow without bound, cached scores for removed runs are cleaned up, and the run review, scoreboard and detail pages no longer accumulate frames over a long session.
 - **[BUG FIX]** **Dungeon Guide caster preview** now renders on the first click, instead of staying blank until you clicked away and back.
 - **[BUG FIX]** **Death report pet kills** are attributed to the pet's owner, instead of showing an orphaned pet name.
 - **[CHANGE]** **Consistent dispel-school colours.** The run-review group-utility tiles now use the same colour per school (Magic, Curse, Poison...) as the Dungeon Guide.
