@@ -196,12 +196,15 @@ end
 
 local function renderChangelog(content, wrapW, blocks)
     local C = theme.C
-    local y = -4
+    local pool = content._clPool or {}; content._clPool = pool   -- reuse fontstrings across re-opens
+    local used, y = 0, -4
     local function line(size, color, w2, xoff, s, flags)
-        local fs = content:CreateFontString(nil, "OVERLAY")
+        used = used + 1
+        local fs = pool[used]
+        if not fs then fs = content:CreateFontString(nil, "OVERLAY"); pool[used] = fs end
         fs:SetFont(theme.FONT, size, flags); fs:SetJustifyH("LEFT"); fs:SetWordWrap(true); fs:SetWidth(w2)
         fs:SetText(s); fs:SetTextColor(color[1], color[2], color[3])
-        fs:SetPoint("TOPLEFT", xoff, y)
+        fs:ClearAllPoints(); fs:SetPoint("TOPLEFT", xoff, y); fs:Show()
         y = y - (fs:GetStringHeight() or size) - 5
     end
     for _, blk in ipairs(blocks) do
@@ -217,6 +220,7 @@ local function renderChangelog(content, wrapW, blocks)
             line(12, C.text, wrapW, 4, txt)
         end
     end
+    for i = used + 1, #pool do pool[i]:Hide() end   -- hide leftovers from a longer prior changelog
     content:SetHeight(math.max(10, -y + 8))
 end
 
@@ -227,14 +231,25 @@ local function openWhatsNew(title, text)
         icon = "sparkles", width = 560, bodyHeight = 460, dismissable = true,
         content = function(body, modal)
             local sw = body:GetWidth()
-            local scroll = CreateFrame("ScrollFrame", nil, body)
-            scroll:SetPoint("TOPLEFT"); scroll:SetPoint("BOTTOMRIGHT")
-            local inner = CreateFrame("Frame", nil, scroll); inner:SetSize(sw, 10)
-            scroll:SetScrollChild(inner); scroll:EnableMouseWheel(true)
-            scroll:SetScript("OnMouseWheel", function(self, delta)
-                local maxv = self:GetVerticalScrollRange()
-                self:SetVerticalScroll(math.max(0, math.min(maxv, self:GetVerticalScroll() - delta * 42)))
-            end)
+            -- Cache the scroll frame + inner on the (pooled) modal, created once and reused across opens
+            -- (a fresh ScrollFrame per open would strand one every time). The modal body reset hides + clears
+            -- its points on reuse, so re-anchor each open.
+            local scroll = modal._clScroll
+            if not scroll then
+                scroll = CreateFrame("ScrollFrame", nil, body)
+                local inner = CreateFrame("Frame", nil, scroll)
+                scroll:SetScrollChild(inner); scroll:EnableMouseWheel(true)
+                scroll:SetScript("OnMouseWheel", function(self, delta)
+                    local maxv = self:GetVerticalScrollRange()
+                    self:SetVerticalScroll(math.max(0, math.min(maxv, self:GetVerticalScroll() - delta * 42)))
+                end)
+                scroll._inner = inner
+                modal._clScroll = scroll
+            end
+            local inner = scroll._inner
+            scroll:ClearAllPoints(); scroll:SetPoint("TOPLEFT"); scroll:SetPoint("BOTTOMRIGHT")
+            scroll:SetVerticalScroll(0); scroll:Show()
+            inner:SetSize(sw, 10)
             renderChangelog(inner, sw - 8, blocks)
         end,
     }):Open()
@@ -489,6 +504,16 @@ local function seedCustomPalette(a)
     return a.custom
 end
 
+-- Coalesced window refresh. The color picker's RGB sliders fire their callback every drag frame; a full
+-- win:Refresh() per tick re-renders the whole Settings page (recreating its transient rich components -
+-- FontSelect etc. - each time). ApplyAccent/ApplyCustomPalette already re-skin the LIVE widgets cheaply,
+-- so we let those run per tick and debounce only the expensive rebuild to fire once the drag settles.
+local _refreshTimer
+local function debouncedRefresh(w)
+    if _refreshTimer then _refreshTimer:Cancel() end
+    _refreshTimer = C_Timer.NewTimer(0.1, function() _refreshTimer = nil; if w then w:Refresh() end end)
+end
+
 local function pageSettings(b, win)
     local C = theme.C
     local w = b.contentWidth
@@ -551,14 +576,14 @@ local function pageSettings(b, win)
                 local ry = rowTop - math.floor((i - 1) / 2) * 30
                 local cx = x + col * colW
                 local label = PALETTE_KEY_LABELS[k] or k
-                b:Swatch(cx, ry - 2, cust[k], function() theme:ApplyCustomPalette(cust); win:Refresh() end,
+                b:Swatch(cx, ry - 2, cust[k], function() theme:ApplyCustomPalette(cust); debouncedRefresh(win) end,
                     label, "Set the " .. label:lower() .. " color.")
                 b:Label(label .. "  ·  #" .. TAP.hexOf(cust[k][1], cust[k][2], cust[k][3]), cx + 28, ry - 4, C.text, 11)
             end
             y = rowTop - math.ceil(#TAP.PALETTE_KEYS / 2) * 30 - 10
         else
             y = b:Section("ACCENT", x, y); y = y - 30
-            b:Swatch(x, y - 2, a.accent, function(r, g, b2) theme:ApplyAccent({ r, g, b2 }); win:Refresh() end,
+            b:Swatch(x, y - 2, a.accent, function(r, g, b2) theme:ApplyAccent({ r, g, b2 }); debouncedRefresh(win) end,
                 "Accent color", "The platform's highlight color, on top of the color scheme.")
             b:Label("Accent  ·  #" .. TAP.hexOf(a.accent[1], a.accent[2], a.accent[3]), x + 30, y - 4, C.text)
             y = y - 34
@@ -1013,7 +1038,10 @@ end
 local function createWindow()
     builtSig = moduleSig()
     win = theme:Window({
-        name = TAP.NextId("TAPManagerWindow"),
+        -- STABLE name (not NextId): the manager is a singleton, and a fresh name on every rebuild grew
+        -- UISpecialFrames by one dead entry each time. A stable name + the dedup guard in Window.build
+        -- keeps it to a single entry that always resolves to the current frame.
+        name = "TAPManagerWindow",
         title = "Twisteds Addon Platform",
         logo = theme:GetIcon("adjustments-horizontal"),
         width = 1366, height = 768, sidebarWidth = 220, contentWidth = 740,

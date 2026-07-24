@@ -46,37 +46,46 @@ end
 function Mixin:Badge(parent, opts)
     opts = opts or {}
     local theme, C = self, self.C
-    local variant = TAP.BADGE_VARIANTS[opts.variant or "accent"] or C.accent
-    local fill = TAP.toColor(opts.color, type(variant) == "string" and C[variant] or variant)
     local f = CreateFrame("Frame", nil, parent)
-    local borderTex = f:CreateTexture(nil, "BACKGROUND", nil, -1); borderTex:SetAllPoints(); borderTex:Hide()
-    local bg = f:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); f.bg = bg
-    local pad = opts.padding or 8
-    local dot
-    if opts.dot then
-        dot = f:CreateTexture(nil, "ARTWORK"); dot:SetSize(5, 5); dot:SetPoint("LEFT", pad, 0)
-        TAP.paint(dot, TAP.toColor(opts.dotColor, { 1, 1, 1 }))
+    f._border = f:CreateTexture(nil, "BACKGROUND", nil, -1); f._border:SetAllPoints(); f._border:Hide()
+    f.bg = f:CreateTexture(nil, "BACKGROUND"); f.bg:SetAllPoints()
+    f._dot = f:CreateTexture(nil, "ARTWORK"); f._dot:SetSize(5, 5); f._dot:Hide()   -- created always, shown per opts
+    f.fs = f:CreateFontString(nil, "OVERLAY")
+    -- Re-skin from opts (the Builder reuses a pooled Badge across renders instead of leaking one each time).
+    function f:Configure(o)
+        o = o or {}
+        local variant = TAP.BADGE_VARIANTS[o.variant or "accent"] or C.accent
+        local fill = TAP.toColor(o.color, type(variant) == "string" and C[variant] or variant)
+        local pad = o.padding or 8
+        if o.dot then
+            self._dot:ClearAllPoints(); self._dot:SetPoint("LEFT", pad, 0)
+            TAP.paint(self._dot, TAP.toColor(o.dotColor, { 1, 1, 1 })); self._dot:Show()
+        else
+            self._dot:Hide()
+        end
+        theme:StyleFont(self.fs, o, { fontSize = 10, textColor = { 1, 1, 1 } })
+        self.fs:SetText(o.text or "")
+        self.fs:ClearAllPoints(); self.fs:SetPoint("LEFT", o.dot and (pad + 9) or pad, 0)
+        local w = o.width or (self.fs:GetStringWidth() + pad * 2 + (o.dot and 9 or 0))
+        local h = o.height or 16
+        self:SetSize(w, h)
+        -- Solid, rounded, or pill corners (default to the theme/skin radius).
+        local spec = o.pill and "pill" or o.radius or o.corner or theme.radius
+        if o.border then
+            local bd = o.border == true and {} or o.border
+            local bsz = bd.size or theme.borderSize or 1
+            theme:PaintShape(self._border, theme:Color(bd.color, C.border), spec, w, h)
+            self._border:Show()
+            self.bg:ClearAllPoints(); self.bg:SetPoint("TOPLEFT", bsz, -bsz); self.bg:SetPoint("BOTTOMRIGHT", -bsz, bsz)
+        else
+            self._border:Hide()
+            self.bg:ClearAllPoints(); self.bg:SetAllPoints()
+        end
+        theme:PaintShape(self.bg, fill, spec, w, h, o.alpha)
+        if o.shadow ~= nil and not self._shadowed then theme:AttachShadow(self, o.shadow); self._shadowed = true end
     end
-    local fs = f:CreateFontString(nil, "OVERLAY")
-    theme:StyleFont(fs, opts, { fontSize = 10, textColor = { 1, 1, 1 } })
-    fs:SetText(opts.text or "")
-    fs:SetPoint("LEFT", dot and (pad + 9) or pad, 0)
-    local w = opts.width or (fs:GetStringWidth() + pad * 2 + (dot and 9 or 0))
-    local h = opts.height or 16
-    f:SetSize(w, h)
-    -- Solid, rounded, or pill corners (default to the theme/skin radius).
-    local spec = opts.pill and "pill" or opts.radius or opts.corner or theme.radius
-    if opts.border then
-        local bd = opts.border == true and {} or opts.border
-        local bsz = bd.size or theme.borderSize or 1
-        theme:PaintShape(borderTex, theme:Color(bd.color, C.border), spec, w, h)
-        borderTex:Show()
-        bg:ClearAllPoints(); bg:SetPoint("TOPLEFT", bsz, -bsz); bg:SetPoint("BOTTOMRIGHT", -bsz, bsz)
-    end
-    theme:PaintShape(bg, fill, spec, w, h, opts.alpha)
-    if opts.shadow ~= nil then theme:AttachShadow(f, opts.shadow) end
-    f.fs = fs
     function f:SetText(t) self.fs:SetText(t) end
+    f:Configure(opts)
     return f
 end
 

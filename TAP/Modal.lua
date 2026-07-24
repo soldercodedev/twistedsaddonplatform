@@ -54,7 +54,7 @@ end
 -- body text lines are pooled within the modal so repeated opens create no new frames.
 local function makeModal(theme)
     local C = theme.C
-    local modal = { _btnPool = {}, _fsPool = {} }
+    local modal = { _btnPool = {}, _fsPool = {}, _adopted = {} }
     local name = TAP.NextId(theme.id .. "Modal")
     local f = CreateFrame("Frame", name, UIParent)
     modal.frame = f
@@ -106,6 +106,27 @@ local function makeModal(theme)
         f:Hide()
         self:_syncClose()
     end
+
+    -- A Builder bound to this modal's body, created ONCE and reused across opens (its widget pool is
+    -- reset, not rebuilt). Content callbacks that draw through a Builder must use this instead of
+    -- theme:Builder(body, ...) - a fresh builder per open would strand a whole page of frames/regions on
+    -- the reused body every time the modal opens. The modal reset also Resets it, so a later non-builder
+    -- dialog on the same pooled frame doesn't inherit stale widgets.
+    function modal:Builder(bopts)
+        if not self._builder then self._builder = theme:Builder(self.body, bopts) end
+        self._builder:Reset()
+        if bopts and bopts.contentWidth then self._builder.contentWidth = bopts.contentWidth end
+        return self._builder
+    end
+
+    -- Adopt a content-created frame or region (e.g. a full-modal backdrop drawn on modal.frame, which the
+    -- body reset doesn't reach) so it's HIDDEN when this pooled modal is next reused. Cache the object
+    -- yourself (create-once) and re-Adopt each open; this only manages visibility, not creation.
+    function modal:Adopt(obj)
+        self._adopted[#self._adopted + 1] = obj
+        return obj
+    end
+
     return modal
 end
 
@@ -162,6 +183,9 @@ function Mixin:Modal(opts)
     for _, b in ipairs(modal._btnPool) do b:Hide() end
     for _, fs in ipairs(modal._fsPool) do fs:Hide(); fs:ClearAllPoints() end
     for _, ch in ipairs({ modal.body:GetChildren() }) do ch:Hide(); ch:ClearAllPoints() end   -- prior content-callback frames
+    if modal._builder then modal._builder:Reset() end                    -- clear a prior content-builder's widgets
+    for i = #modal._adopted, 1, -1 do modal._adopted[i]:Hide() end        -- hide prior frame-level decorations
+    modal._adopted = {}
 
     -- Footer buttons (right-aligned, right-to-left), pooled per modal.
     local btns = opts.buttons or {}

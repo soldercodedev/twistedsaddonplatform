@@ -77,6 +77,44 @@ local function relayout(host)
     end
 end
 
+-- Build a toast (frame + every sub-element + one animation group) ONCE. Mixin:Toast reconfigures and
+-- shows it; dismiss() returns it to the host's free pool. WoW never GCs frames, so recycling caps the
+-- live toast frames at the max concurrently on screen instead of leaking one per notification.
+local function makeToast(theme, host)
+    local C = theme.C
+    local t = CreateFrame("Button", nil, host)
+    theme:StylePanel(t, C.panel, C.border)
+    t._stripe = t:CreateTexture(nil, "ARTWORK")
+    t._stripe:SetPoint("TOPLEFT", 1, -1); t._stripe:SetPoint("BOTTOMLEFT", 1, 1); t._stripe:SetWidth(3)
+    t._icon = t:CreateTexture(nil, "ARTWORK"); t._icon:SetSize(18, 18); t._icon:SetPoint("LEFT", 12, 0)
+    t._titleFS  = theme:Heading(t, { text = "", role = "h5" })          -- shown only when there's a title
+    t._bodyRich = theme:Heading(t, { text = "", role = "caption" })     -- body when titled
+    t._bodyPlain = t:CreateFontString(nil, "OVERLAY")                   -- body when untitled
+    local xb = CreateFrame("Button", nil, t); xb:SetSize(16, 16); xb:SetPoint("TOPRIGHT", -6, -6)
+    xb.fs = xb:CreateFontString(nil, "OVERLAY"); theme:StyleFont(xb.fs, {}, { fontSize = 13, textColor = C.subtext })
+    xb.fs:SetPoint("CENTER"); xb.fs:SetText("x")
+    xb:SetScript("OnEnter", function(self) self.fs:SetTextColor(unpack(theme.C.text)) end)
+    xb:SetScript("OnLeave", function(self) self.fs:SetTextColor(unpack(theme.C.subtext)) end)
+    xb:SetScript("OnClick", function() if t._dismiss then t._dismiss() end end)
+    t._xb = xb
+    local ag = t:CreateAnimationGroup()
+    local fade = ag:CreateAnimation("Alpha"); fade:SetFromAlpha(0); fade:SetToAlpha(1); fade:SetDuration(0.2); fade:SetOrder(1)
+    t._trans = ag:CreateAnimation("Translation"); t._trans:SetDuration(0.2); t._trans:SetOrder(1)
+    ag:SetScript("OnFinished", function() t:SetAlpha(1); relayout(host) end)
+    t._ag = ag
+    t:SetScript("OnClick", function() if t._onClick then t._onClick() end if t._dismiss then t._dismiss() end end)
+    host._pool = host._pool or {}
+    host._pool[#host._pool + 1] = t
+    return t
+end
+
+local function acquireToast(theme, host)
+    if host._pool then
+        for _, t in ipairs(host._pool) do if t._free then t._free = false; return t end end
+    end
+    return makeToast(theme, host)
+end
+
 function Mixin:Toast(opts)
     opts = opts or {}
     local theme, C = self, self.C
@@ -88,52 +126,54 @@ function Mixin:Toast(opts)
     local hasTitle = opts.title ~= nil
     local dismissible = opts.dismissible ~= false
 
-    local t = CreateFrame("Button", nil, host); t:SetSize(w, hasTitle and 52 or 36)
-    theme:StylePanel(t, C.panel, C.border)
+    local t = acquireToast(theme, host)
+    t._gone = nil
+    t:SetSize(w, hasTitle and 52 or 36)
     theme:StyleFrame(t, opts)
-    local stripe = t:CreateTexture(nil, "ARTWORK"); stripe:SetPoint("TOPLEFT", 1, -1); stripe:SetPoint("BOTTOMLEFT", 1, 1); stripe:SetWidth(3); TAP.paint(stripe, accent)
+    TAP.paint(t._stripe, accent)
 
     local rightPad = dismissible and 26 or 14
     local textX = 14
     local iconTex = opts.icon and theme:IconPath(opts.icon) or theme:GetIcon(variant.slug)
     if iconTex then
-        local ic = t:CreateTexture(nil, "ARTWORK"); ic:SetSize(18, 18); ic:SetPoint("LEFT", 12, 0)
-        ic:SetTexture(iconTex); ic:SetVertexColor(accent[1], accent[2], accent[3])
+        t._icon:SetTexture(iconTex); t._icon:SetVertexColor(accent[1], accent[2], accent[3]); t._icon:Show()
         textX = 38
+    else
+        t._icon:Hide()
     end
+
     local bo
     if hasTitle then
-        local ti = theme:Heading(t, { text = opts.title, role = "h5", textColor = C.text }); ti:SetPoint("TOPLEFT", textX, -9)
-        bo = theme:Heading(t, { text = opts.text or "", role = "caption", wrapWidth = w - textX - rightPad }); bo:SetPoint("TOPLEFT", textX, -26)
+        theme:_applyHeading(t._titleFS, opts.title, "h5", { textColor = C.text })
+        t._titleFS:ClearAllPoints(); t._titleFS:SetPoint("TOPLEFT", textX, -9); t._titleFS:Show()
+        t._bodyPlain:Hide()
+        bo = t._bodyRich
+        theme:_applyHeading(bo, opts.text or "", "caption", { wrapWidth = w - textX - rightPad })
+        bo:ClearAllPoints(); bo:SetPoint("TOPLEFT", textX, -26); bo:Show()
     else
-        bo = t:CreateFontString(nil, "OVERLAY"); theme:StyleFont(bo, opts, { fontSize = 12, textColor = C.text })
-        bo:SetPoint("TOPLEFT", textX, -10); bo:SetWidth(w - textX - rightPad); bo:SetJustifyH("LEFT"); bo:SetWordWrap(true); bo:SetText(theme:HL(opts.text or ""))
+        t._titleFS:Hide(); t._bodyRich:Hide()
+        bo = t._bodyPlain
+        theme:StyleFont(bo, opts, { fontSize = 12, textColor = C.text })
+        bo:ClearAllPoints(); bo:SetPoint("TOPLEFT", textX, -10); bo:SetWidth(w - textX - rightPad)
+        bo:SetJustifyH("LEFT"); bo:SetWordWrap(true); bo:SetText(theme:HL(opts.text or "")); bo:Show()
     end
 
     -- Size the toast to its content so long / multi-line bodies aren't clipped (the body wraps at
     -- a fixed width, so its rendered height tells us how tall the card needs to be).
     local bodyH = (bo and bo:GetStringHeight()) or 12
     local topInset = hasTitle and 26 or 10
-    local needed = topInset + bodyH + 12
-    t:SetHeight(math.max(hasTitle and 52 or 36, needed))
+    t:SetHeight(math.max(hasTitle and 52 or 36, topInset + bodyH + 12))
 
     local function dismiss()
         if t._gone then return end
         t._gone = true
         for i, x in ipairs(host.stack) do if x == t then table.remove(host.stack, i); break end end
-        t:Hide(); relayout(host)
+        t:Hide(); t._free = true; relayout(host)   -- recycle (WoW never GCs the frame)
     end
+    t._dismiss = dismiss
     t.Dismiss = dismiss
-
-    if dismissible then
-        local xb = CreateFrame("Button", nil, t); xb:SetSize(16, 16); xb:SetPoint("TOPRIGHT", -6, -6)
-        xb.fs = xb:CreateFontString(nil, "OVERLAY"); theme:StyleFont(xb.fs, {}, { fontSize = 13, textColor = C.subtext }); xb.fs:SetPoint("CENTER"); xb.fs:SetText("x")
-        xb:SetScript("OnEnter", function(self) self.fs:SetTextColor(unpack(theme.C.text)) end)
-        xb:SetScript("OnLeave", function(self) self.fs:SetTextColor(unpack(theme.C.subtext)) end)
-        xb:SetScript("OnClick", function() dismiss() end)
-        t.closeBtn = xb
-    end
-    t:SetScript("OnClick", function() if opts.onClick then opts.onClick() end dismiss() end)
+    t._onClick = opts.onClick
+    t._xb:SetShown(dismissible)
 
     table.insert(host.stack, 1, t); relayout(host)
 
@@ -143,21 +183,20 @@ function Mixin:Toast(opts)
         theme:PlaySound(key, opts.soundChannel)
     end
 
-    -- Entrance animation.
+    -- Entrance animation (reuses the toast's own animation group).
     local anim = opts.animation or "fade"
+    t._ag:Stop()
     if anim == "none" then
         t:SetAlpha(1)
     else
         t:SetAlpha(0)
-        local ag = t:CreateAnimationGroup()
-        local fin = ag:CreateAnimation("Alpha"); fin:SetFromAlpha(0); fin:SetToAlpha(1); fin:SetDuration(0.2); fin:SetOrder(1)
         if anim == "slide" then
-            local tr = ag:CreateAnimation("Translation"); tr:SetOffset(0, -host.pos.slide); tr:SetDuration(0.2); tr:SetOrder(1)
-            -- start shifted so the translation brings it home
+            t._trans:SetOffset(0, -host.pos.slide)
             t:SetPoint("TOP", host, "TOP", 0, (select(5, t:GetPoint()) or 0) + host.pos.slide)
+        else
+            t._trans:SetOffset(0, 0)
         end
-        ag:SetScript("OnFinished", function() t:SetAlpha(1); relayout(host) end)
-        ag:Play()
+        t._ag:Play()
     end
 
     local dur = opts.duration or 4

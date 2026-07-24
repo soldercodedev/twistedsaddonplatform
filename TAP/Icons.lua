@@ -68,18 +68,25 @@ end
 function Mixin:Glyph(parent, opts)
     opts = opts or {}
     local theme = self
-    local size = opts.size or 20
-    local f = CreateFrame("Frame", nil, parent); f:SetSize(size, size)
+    local f = CreateFrame("Frame", nil, parent)
     local tex = f:CreateTexture(nil, opts.layer or "ARTWORK"); tex:SetAllPoints()
     f.tex = tex
     function f:SetGlyph(spec, variant)
         tex:SetTexture(theme:IconPath(spec, variant) or spec)
-        if opts.coords then tex:SetTexCoord(unpack(opts.coords))
-        elseif opts.inset then tex:SetTexCoord(unpack(theme.iconInset))
+        if self._coords then tex:SetTexCoord(unpack(self._coords))
+        elseif self._inset then tex:SetTexCoord(unpack(theme.iconInset))
         else tex:SetTexCoord(0, 1, 0, 1) end
     end
     function f:SetColor(c) local col = TAP.toColor(c, { 1, 1, 1 }); tex:SetVertexColor(col[1], col[2], col[3], col[4]) end
-    if opts.icon then f:SetGlyph(opts.icon, opts.variant) end
-    f:SetColor(opts.color or { 1, 1, 1 })
+    -- Re-skin from opts (the Builder reuses a pooled Glyph across renders instead of leaking one each time).
+    -- The texture LAYER is fixed at creation; everything else is reapplied.
+    function f:Configure(o)
+        o = o or {}
+        local sz = o.size or 20; self:SetSize(sz, sz)
+        self._coords, self._inset = o.coords, o.inset
+        self:SetGlyph(o.icon, o.variant)   -- clears the texture when o.icon is nil
+        self:SetColor(o.color or { 1, 1, 1 })
+    end
+    f:Configure(opts)
     return f
 end

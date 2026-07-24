@@ -339,6 +339,7 @@ function BuilderMixin:Transient(w) return transient(self, w) end
 local _baseReset = BuilderMixin.Reset
 function BuilderMixin:Reset()
     _baseReset(self)
+    if self._rich then releaseAll(self._rich) end   -- hide + rewind the pooled rich components
     if self._transient then
         for i = #self._transient, 1, -1 do local w = self._transient[i]; w:Hide(); w:ClearAllPoints() end
         self._transient = {}
@@ -353,15 +354,33 @@ function BuilderMixin:Heading(text, x, y, role, opts)
     return self:put(fs, x, y)
 end
 
--- Draw-at-(x,y) wrappers for the transient rich components. Return the live component.
+-- Draw-at-(x,y) wrappers for the rich components. Return the live component.
 local RICH = {
     "Badge", "Card", "StatTile", "Separator", "SearchBox",
     "SocialButton", "Glyph", "FontSelect", "ClassSpecButton",
     "UnitModel", "GameIcon", "SoundSelect",
 }
+-- Rich components that expose :Configure(opts) can be POOLED (create-once, reconfigure-many) like the
+-- simple widgets, so a page that redraws often doesn't leak a frame every render. The rest keep the
+-- transient model (created fresh, hidden on Reset). Adding :Configure to a component opts it in here.
+local RICH_POOLABLE = { Badge = true, Glyph = true }
+local function acqRich(self, kind, opts)
+    self._rich = self._rich or {}
+    local p = self._rich[kind]; if not p then p = { items = {}, used = 0 }; self._rich[kind] = p end
+    p.used = p.used + 1
+    local w = p.items[p.used]
+    if not w then w = self.theme[kind](self.theme, self.content, opts); p.items[p.used] = w
+    else w:Configure(opts) end
+    w._tipTitle, w._tipBody, w._tipAnchor, w._tipLines, w._tipIcon = nil, nil, nil, nil, nil
+    w:Show(); return w
+end
 for _, kind in ipairs(RICH) do
-    BuilderMixin[kind] = function(self, x, y, opts)
-        return self:put(transient(self, self.theme[kind](self.theme, self.content, opts)), x, y)
+    if RICH_POOLABLE[kind] then
+        BuilderMixin[kind] = function(self, x, y, opts) return self:put(acqRich(self, kind, opts), x, y) end
+    else
+        BuilderMixin[kind] = function(self, x, y, opts)
+            return self:put(transient(self, self.theme[kind](self.theme, self.content, opts)), x, y)
+        end
     end
 end
 

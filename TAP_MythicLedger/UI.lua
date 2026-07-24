@@ -4113,7 +4113,7 @@ function UI.ShowScoreboard(run, opts)
             { label = "Close", kind = "primary", onClick = function(m) m:Close() end },
         },
         content = function(body, modal)
-            local b = theme:Builder(body, { contentWidth = W - 32 })
+            local b = modal:Builder({ contentWidth = W - 32 })   -- cached+reused; no per-open frame leak
             local rowW = W - 32
             local x, y = 0, -2
             -- The MVP card and the hero-stat cards share one card width so they line up.
@@ -4151,18 +4151,32 @@ function UI.ShowScoreboard(run, opts)
             -- covering the WHOLE modal (header + body + footer), not just the body. Drawn on the modal
             -- frame at BACKGROUND sublevels 2/3 - above the panel fill (sublevel 1) but below the header
             -- bar/title (ARTWORK/OVERLAY) and the body content (a child frame), so everything renders on
-            -- top. Inset 2px so the modal's border still shows. Fresh per modal, so no pooling leak.
+            -- top. Inset 2px so the modal's border still shows. Cached on the (pooled) modal frame and
+            -- reused across opens; Adopt()ed so the modal hides them if the frame is reused for another
+            -- dialog (the body reset can't reach frame-level textures).
             local backdrop = (modal and modal.frame) or body
-            local blackBg = backdrop:CreateTexture(nil, "BACKGROUND", nil, 2)
-            blackBg:SetColorTexture(0, 0, 0, 1)
-            blackBg:SetPoint("TOPLEFT", 2, -2); blackBg:SetPoint("BOTTOMRIGHT", -2, 2)
+            local blackBg = backdrop._sbBlackBg
+            if not blackBg then
+                blackBg = backdrop:CreateTexture(nil, "BACKGROUND", nil, 2)
+                blackBg:SetColorTexture(0, 0, 0, 1)
+                blackBg:SetPoint("TOPLEFT", 2, -2); blackBg:SetPoint("BOTTOMRIGHT", -2, 2)
+                backdrop._sbBlackBg = blackBg
+            end
+            blackBg:Show(); if modal and modal.Adopt then modal:Adopt(blackBg) end
             -- Prefer the dungeon's wide Encounter-Journal background art (atmospheric, fills nicely);
             -- fall back to the small square GetMapUIInfo portal icon when the EJ art isn't available.
             local bgTex = API.DungeonBackground(run.dungeonName) or (mi and mi.texture)
-            if bgTex then
-                local watermark = backdrop:CreateTexture(nil, "BACKGROUND", nil, 3)
-                watermark:SetTexture(bgTex); watermark:SetAlpha(0.25)
+            local watermark = backdrop._sbWatermark
+            if not watermark then
+                watermark = backdrop:CreateTexture(nil, "BACKGROUND", nil, 3)
                 watermark:SetPoint("TOPLEFT", 2, -2); watermark:SetPoint("BOTTOMRIGHT", -2, 2)
+                backdrop._sbWatermark = watermark
+            end
+            if bgTex then
+                watermark:SetTexture(bgTex); watermark:SetAlpha(0.25); watermark:Show()
+                if modal and modal.Adopt then modal:Adopt(watermark) end
+            else
+                watermark:Hide()
             end
 
             -- Header: dungeon portal + name + result + affixes + date.

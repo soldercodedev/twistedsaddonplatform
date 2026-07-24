@@ -65,7 +65,12 @@ local function build(win)
     mgr:SetMovable(true); mgr:EnableMouse(true)
     mgr:Hide()
     mgr:SetScale((o.onScale and o.onScale()) or o.scale or 1)
-    tinsert(UISpecialFrames, name)
+    -- Escape-to-close. Guard against duplicates so a window rebuilt under a STABLE name (the manager on a
+    -- module toggle) doesn't add a second entry each time - UISpecialFrames closes by name, which always
+    -- resolves to the current frame, so one entry is enough.
+    local registered = false
+    for _, n in ipairs(UISpecialFrames) do if n == name then registered = true; break end end
+    if not registered then tinsert(UISpecialFrames, name) end
 
     -- Header (drag handle)
     local header = CreateFrame("Button", nil, mgr); header:SetPoint("TOPLEFT", 1, -1); header:SetPoint("TOPRIGHT", -1, -1)
