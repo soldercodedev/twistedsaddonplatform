@@ -2561,7 +2561,7 @@ local function renderSettings(b, C, x, y, w, win)
     end
 
     local function secRetention()
-    b:Sub("DATA RETENTION", x, y); y = y - 30
+    b:Sub("RUN HISTORY", x, y); y = y - 30
     -- The scope, numeric cap and keep-top toggle only STAGE a policy; nothing is removed until Apply
     -- is clicked (guarding against accidental deletion). The applied policy still auto-enforces as new
     -- runs save.
@@ -2579,15 +2579,36 @@ local function renderSettings(b, C, x, y, w, win)
         { "ALL", "All seasons" }, { "SEASON", "Current season only" }, { "EXPANSION", "Current expansion only" },
     }, function() return retScopePending end, function(v) retScopePending = v; win:Refresh() end)
     y = y - 34
-    b:Label("Also cap to newest (0 = no cap)", x, y - 2, C.subtext); y = y - 22
-    -- Digits only, 0-10000; sanitised on commit. Only STAGES the value - Apply enforces it.
-    T(b, b:EditBox(x, y, 90, tostring(retentionPending), function(txt)
-        local n = tonumber((tostring(txt or "")):gsub("%D", "")) or 0
-        if n > 10000 then n = 10000 end
-        retentionPending = n
-        win:Refresh()
-    end), "Run cap", "Keep at most this many of the newest runs (0 = no cap). Digits only, up to 10000.")
+    -- Keep everything (no limit) OR keep only the newest N. Both only STAGE; Apply enforces.
+    local unlimited = (retentionPending or 0) <= 0
+    local keepAll = b:Toggle(x, y, unlimited, function(v)
+        if v then
+            -- Turning ON "keep every run" - warn that history can grow with no limit, then stage it.
+            b.theme:Confirm({
+                title = "Keep every run?",
+                message = "Your runs will never be cleaned up, so over time they can add up and use more memory. "
+                    .. "Keep them all anyway?",
+                variant = "warning", confirmLabel = "Keep everything",
+                onConfirm = function() retentionPending = 0; win:Refresh() end,
+                onCancel  = function() win:Refresh() end,   -- pending stays > 0, so the toggle snaps back off
+            })
+        else
+            -- Turning OFF - enable a limit (keep a prior value, else default to 2000 newest).
+            retentionPending = (retentionPending and retentionPending > 0) and retentionPending or 2000
+            win:Refresh()
+        end
+    end)
+    b.theme:SetTip(keepAll, "Keep every run", "Never delete old runs. Your saved history can grow with no limit over time.")
+    b:Label("Keep every run", x + 46, y - 2, C.text)
     y = y - 34
+    if not unlimited then
+        b:Label("Keep the newest runs", x, y - 2, C.subtext); y = y - 24
+        T(b, b:Slider(x, y), "Runs to keep",
+            "Keep at most this many of your newest runs; older ones are removed when you Apply.")
+            :Configure(200, 100, 5000, 100, function() return retentionPending end,
+                function(v) retentionPending = v; win:Refresh() end, "%d")
+        y = y - 34
+    end
     local kt = b:Toggle(x, y, retKeepTopPending, function(v) retKeepTopPending = v; win:Refresh() end)
     b.theme:SetTip(kt, "Never remove a top run",
         "Protect your best key per dungeon, your top 10, and every crowned best-of-kind run - they are "
