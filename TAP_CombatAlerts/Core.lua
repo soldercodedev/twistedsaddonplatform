@@ -486,8 +486,9 @@ end
 ----------------------------------------------------------------------
 -- Visual warning frames - one per rule, so multiple alerts show at once.
 ----------------------------------------------------------------------
-local visuals = {}   -- ruleId -> frame
-local flashFrame     -- rule-less test flash (/tap alerts test)
+local visuals = {}      -- ruleId -> frame (active/assigned)
+local freeVisuals = {}  -- reusable frames from deleted/pruned rules (WoW never GCs frames, so recycle them)
+local flashFrame        -- rule-less test flash (/tap alerts test)
 
 -- Positions a visual frame using a rule action's per-rule placement.
 local function PositionVisual(f, a)
@@ -546,9 +547,19 @@ end
 
 local function getVisual(rule)
     local f = visuals[rule.id]
-    if not f then f = makeVisualFrame(); visuals[rule.id] = f end
+    if not f then f = table.remove(freeVisuals) or makeVisualFrame(); visuals[rule.id] = f end
     f._rule = rule
     return f
+end
+
+-- Return a rule's visual frame to the free pool (hidden) so a later rule reuses it instead of
+-- stranding it forever. Called when a rule is deleted or pruned; applyVisual re-skins it on reuse.
+local function releaseVisual(id)
+    local f = visuals[id]
+    if not f then return end
+    f:Hide(); f._rule = nil
+    visuals[id] = nil
+    freeVisuals[#freeVisuals + 1] = f
 end
 
 -- Applies a rule action's text + icon to the visual frame (no show/position).
@@ -851,6 +862,11 @@ function TCC.RebuildEngine()
             ruleState[id] = nil
         end
     end
+    -- Recycle visual frames for rules that no longer exist (otherwise they strand + the Evaluate
+    -- hide-loop keeps walking them).
+    for id in pairs(visuals) do
+        if not live[id] then releaseVisual(id) end
+    end
 
     -- Start/stop the throttled poller as needed.
     local need = false
@@ -972,6 +988,7 @@ function TCC.DeleteSelectedRule()
         if r.id == id then
             local st = ruleState[id]
             if st then StopRuleLoop(st); ruleState[id] = nil end
+            releaseVisual(id)
             table.remove(db.rules, i)
             break
         end
