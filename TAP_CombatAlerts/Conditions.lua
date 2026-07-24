@@ -2,6 +2,7 @@
 -- Condition type metadata (for the UI), condition evaluation, and the recursive
 -- rule-tree evaluation (nested AND/OR groups).
 local addonName, TCC = ...
+local TAP = _G.TAP
 
 ----------------------------------------------------------------------
 -- Condition type metadata
@@ -114,47 +115,6 @@ TCC.CONDITION_TYPES = {
     { type = "classSpec", label = "Class / Spec", params = {} },
 }
 
-----------------------------------------------------------------------
--- Class / spec helpers (used by the UI for icon dropdowns).
-----------------------------------------------------------------------
-local CLASS_ICON_TEX = "Interface\\TargetingFrame\\UI-Classes-Circles"
-
-function TCC.GetClassList()
-    local list = {}
-    local n = (GetNumClasses and GetNumClasses()) or 0
-    for i = 1, n do
-        local name, token, id = GetClassInfo(i)
-        if token then
-            list[#list + 1] = {
-                token = token, name = name, id = id,
-                icon = CLASS_ICON_TEX,
-                coords = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[token] or nil,
-            }
-        end
-    end
-    return list
-end
-
-function TCC.ClassIdFromToken(token)
-    for _, c in ipairs(TCC.GetClassList()) do
-        if c.token == token then return c.id end
-    end
-end
-
-function TCC.GetSpecList(classToken)
-    local list = { { value = "all", name = "All Specs" } }
-    local classID = classToken and TCC.ClassIdFromToken(classToken)
-    if classID and GetNumSpecializationsForClassID then
-        for s = 1, GetNumSpecializationsForClassID(classID) do
-            local specID, specName, _, specIcon = GetSpecializationInfoForClassID(classID, s)
-            if specID then
-                list[#list + 1] = { value = specID, name = specName, icon = specIcon }
-            end
-        end
-    end
-    return list
-end
-
 -- Resolve a spell input (numeric ID or name) to id, name, iconID.
 function TCC.ResolveSpell(input)
     if input == nil or input == "" then return nil, nil, nil end
@@ -247,14 +207,14 @@ function TCC.DescribeCondition(c)
         local className = "any class"
         if c.class and c.class ~= "" then
             className = c.class
-            for _, cl in ipairs(TCC.GetClassList()) do
+            for _, cl in ipairs(TAP.GetClassList()) do
                 if cl.token == c.class then className = cl.name; break end
             end
         end
         if c.spec and c.spec ~= "all" then
             local specName
-            for _, sp in ipairs(TCC.GetSpecList(c.class)) do
-                if tostring(sp.value) == tostring(c.spec) then specName = sp.name; break end
+            for _, sp in ipairs(TAP.GetSpecList(c.class)) do
+                if tostring(sp.id) == tostring(c.spec) then specName = sp.name; break end
             end
             return className .. " / " .. (specName or ("spec " .. tostring(c.spec)))
         end

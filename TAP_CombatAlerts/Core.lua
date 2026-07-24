@@ -7,12 +7,6 @@ local addonName, TCC = ...
 local PREFIX = "|cff33ff99Twisteds Combat Alerts:|r "
 TCC.PREFIX = PREFIX
 
--- Version, read from the TOC so it only needs bumping in one place.
-local function metadata(field)
-    if C_AddOns and C_AddOns.GetAddOnMetadata then return C_AddOns.GetAddOnMetadata(addonName, field) end
-end
-TCC.VERSION = metadata("Version") or "1.0.0"
-
 -- Midnight (12.0) "secret values": some combat/unit/measurement APIs (UnitInRange,
 -- IsSpellInRange, threat, GetVerticalScrollRange when the scroll content shows secrets,
 -- ...) return values that tainted (addon) code may STORE and PASS but may not COMPARE or

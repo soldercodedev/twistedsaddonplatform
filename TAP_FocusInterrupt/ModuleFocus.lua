@@ -88,20 +88,7 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
     local C = b.theme.C
     local d = (FTI.SyncDB and FTI.SyncDB()) or FTI.db   -- ensure FTI.db points at persisted settings
     if not d then b:Wrap("Loading...", x, y, w, C.subtext, 12); return y - 20 end
-    d.macro = d.macro or {}
-    local mac = d.macro
-    mac.mark = tonumber(mac.mark) or 8
-    mac.channel = mac.channel or "NONE"
-    if mac.focusMsg == nil then mac.focusMsg = "Focus {rt}" end
-    if mac.readyMsg == nil then mac.readyMsg = "My interrupt target is {rt}" end
-    mac.announceInstance = mac.announceInstance or "any"
-    mac.paletteScale = tonumber(mac.paletteScale) or 1
-    mac.paletteVisibility = mac.paletteVisibility or "always"
-    mac.focusTarget = mac.focusTarget or "smart"
-    mac.paletteRotation = mac.paletteRotation or "horizontal"
-    mac.paletteBgColor = mac.paletteBgColor or { 0.05, 0.05, 0.06 }
-    mac.paletteBorderColor = mac.paletteBorderColor or { 0.25, 0.25, 0.30 }
-    if mac.paletteOpacity == nil then mac.paletteOpacity = 0.9 end
+    local mac = d.macro   -- SyncDB() above already seeded every macro default
 
     -- Re-apply the bar's look (rotation / size / colors / opacity) live from a control.
     local function refreshPalette() if FTI.ApplyPalettePresentation then FTI.ApplyPalettePresentation() end end

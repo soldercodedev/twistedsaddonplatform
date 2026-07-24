@@ -9,7 +9,6 @@
 -- The whole feature is wrapped as a suite module: it does nothing until enabled from /tap,
 -- and OnDisable fully stands it down (hides the cue, unregisters every event).
 
-local ADDON = ...
 local TAP   = _G.TAP
 local Suite = _G.TAP
 
@@ -895,10 +894,15 @@ local function RenderPage(pageId, m, b, x, y, w, win)
         end
         function P:sub(t) b:Sub(t, self.x, self.y, self.w - 8); self.y = self.y - 26 end
         function P:note(t) local _, h = b:Wrap(t, self.x, self.y, self.w - 2, C.subtext, 10); self.y = self.y - (h + 8) end
-        function P:toggle(label, key, invert, tip)
+        -- tipTitle defaults to the label; onChange (optional) replaces the default apply+refresh (used
+        -- by toggles that reveal sub-controls and want a full page rebuild).
+        function P:toggle(label, key, invert, tip, tipTitle, onChange)
             local val = s[key]; if invert then val = not val end
-            local tg = b:Toggle(self.x, self.y, val and true or false, function(v) s[key] = invert and (not v) or v; applyLayout(); refresh() end)
-            b.theme:SetTip(tg, label, tip)
+            local tg = b:Toggle(self.x, self.y, val and true or false, function(v)
+                s[key] = invert and (not v) or v
+                if onChange then onChange() else applyLayout(); refresh() end
+            end)
+            b.theme:SetTip(tg, tipTitle or label, tip)
             b:Label(label, self.x + 46, self.y - 2, C.text)
             self.y = self.y - 30
         end
@@ -939,7 +943,7 @@ local function RenderPage(pageId, m, b, x, y, w, win)
         local tg = b:Toggle(P.x, P.y, s.showGlow ~= false, function(v) s.showGlow = v; refresh() end)
         b.theme:SetTip(tg, "Proc glow", "Light up the cue when the suggested ability is proc-highlighted (spell activation overlay) on your bars.")
         b:Label("Proc glow", P.x + 46, P.y - 2, C.text)
-        P.y = P.y - 32
+        P.y = P.y - 30   -- (hand-rolled: default-on via showGlow ~= false, and refresh-only on toggle)
         P:note("The cue is only draggable in Placement mode - use Set Placement below to move it.")
         return P.y
     end
@@ -960,10 +964,9 @@ local function RenderPage(pageId, m, b, x, y, w, win)
     local function castCell(cx, cw, cy)
         local P = pen(cx, cw, cy)
         P:sub("CAST INDICATOR")
-        local tg = b:Toggle(P.x, P.y, s.castIndicator and true or false,
-            function(v) s.castIndicator = v; applyLayout(); repage() end)
-        b.theme:SetTip(tg, "Cast / instant indicator", "Color the cue by whether Blizzard's next suggested ability is a hard cast or instant.")
-        b:Label("Show cast vs instant", P.x + 46, P.y - 2, C.text); P.y = P.y - 30
+        P:toggle("Show cast vs instant", "castIndicator", false,
+            "Color the cue by whether Blizzard's next suggested ability is a hard cast or instant.",
+            "Cast / instant indicator", function() applyLayout(); repage() end)
         if s.castIndicator then
             P:dropdown("Style", { { "border", "Tint the border" }, { "dot", "Corner dot" } },
                 function() return s.castStyle or "border" end, function(v) s.castStyle = v; applyLayout() end,
@@ -977,10 +980,9 @@ local function RenderPage(pageId, m, b, x, y, w, win)
     local function gcdCell(cx, cw, cy)
         local P = pen(cx, cw, cy)
         P:sub("GLOBAL COOLDOWN")
-        local tg = b:Toggle(P.x, P.y, s.showGCD and true or false,
-            function(v) s.showGCD = v; applyLayout(); repage() end)
-        b.theme:SetTip(tg, "GCD sweep", "Draw a radial sweep on the icon that wipes with your global cooldown.")
-        b:Label("Show GCD sweep", P.x + 46, P.y - 2, C.text); P.y = P.y - 30
+        P:toggle("Show GCD sweep", "showGCD", false,
+            "Draw a radial sweep on the icon that wipes with your global cooldown.",
+            "GCD sweep", function() applyLayout(); repage() end)
         if s.showGCD then
             P:slider("Sweep opacity", "gcdOpacity", 0, 1, 0.05, "%.2f", "Darkness of the GCD sweep over the icon.")
         end
@@ -990,10 +992,9 @@ local function RenderPage(pageId, m, b, x, y, w, win)
     local function rangeCell(cx, cw, cy)
         local P = pen(cx, cw, cy)
         P:sub("RANGE")
-        local tg = b:Toggle(P.x, P.y, s.rangeCheck and true or false,
-            function(v) s.rangeCheck = v; applyLayout(); repage() end)
-        b.theme:SetTip(tg, "Out-of-range feedback", "Grey out or red-tint the icon when the suggested ability is out of range of your target.")
-        b:Label("Show out of range", P.x + 46, P.y - 2, C.text); P.y = P.y - 30
+        P:toggle("Show out of range", "rangeCheck", false,
+            "Grey out or red-tint the icon when the suggested ability is out of range of your target.",
+            "Out-of-range feedback", function() applyLayout(); repage() end)
         if s.rangeCheck then
             P:dropdown("Style", { { "red", "Red tint" }, { "grey", "Desaturate (grey)" } },
                 function() return s.rangeStyle or "red" end, function(v) s.rangeStyle = v; applyLayout() end,
@@ -1008,10 +1009,9 @@ local function RenderPage(pageId, m, b, x, y, w, win)
     local function resourceCell(cx, cw, cy)
         local P = pen(cx, cw, cy)
         P:sub("RESOURCE")
-        local tg = b:Toggle(P.x, P.y, s.resourceCheck and true or false,
-            function(v) s.resourceCheck = v; applyLayout(); repage() end)
-        b.theme:SetTip(tg, "Out-of-resource feedback", "Tint or grey the icon when you can't afford the suggested ability (not enough mana / energy / rage / combo points / ...).")
-        b:Label("Show can't afford", P.x + 46, P.y - 2, C.text); P.y = P.y - 30
+        P:toggle("Show can't afford", "resourceCheck", false,
+            "Tint or grey the icon when you can't afford the suggested ability (not enough mana / energy / rage / combo points / ...).",
+            "Out-of-resource feedback", function() applyLayout(); repage() end)
         if s.resourceCheck then
             P:dropdown("Style", { { "tint", "Color tint" }, { "grey", "Desaturate (grey)" } },
                 function() return s.resourceStyle or "tint" end, function(v) s.resourceStyle = v; applyLayout() end,

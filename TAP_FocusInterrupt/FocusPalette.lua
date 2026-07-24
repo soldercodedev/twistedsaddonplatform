@@ -111,7 +111,7 @@ local function ensureMarkerPalette()
         b:SetSize(CELL, CELL)
         b:RegisterForClicks("AnyUp")
         b:SetAttribute("type", "macro")
-        b:SetAttribute("macrotext", "#showtooltip\n/focus [@mouseover,exists,nodead][]\n/tm [@focus] ~" .. i)
+        b:SetAttribute("macrotext", FTI.BuildFocusMacro({ mark = i, focusTarget = "smart" }))
         b.tex = b:CreateTexture(nil, "ARTWORK"); b.tex:SetAllPoints()
         b.tex:SetTexture(RAID_ATLAS); b.tex:SetTexCoord(unpack(RT_COORDS[i]))
         b.sel = b:CreateTexture(nil, "OVERLAY"); b.sel:SetPoint("TOPLEFT", -2, 2); b.sel:SetPoint("BOTTOMRIGHT", 2, -2)
@@ -220,14 +220,6 @@ function FTI.SetMarkerPaletteEnabled(on)
     else
         FTI.RefreshMarkerPaletteVisibility()
     end
-end
-
-function FTI.ToggleMarkerPalette()
-    if not (FTI.db and FTI.db.macro) then return end
-    local v = not FTI.db.macro.paletteShown
-    FTI.SetMarkerPaletteEnabled(v)
-    FTI.RefreshManager()
-    return v
 end
 
 -- On-screen mover: a small panel above the bar (drag to move + a resize slider).

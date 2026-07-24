@@ -23,7 +23,6 @@ if FTI.focusEnabled == nil then FTI.focusEnabled = true end
 local MACRO_DEFAULTS = {
     mark             = 8,               -- raid-target index (1-8, Star..Skull); 0 = none
     channel          = "NONE",          -- announce channel
-    autoFocus        = false,
     announceFocus    = false,
     announceReady    = false,
     announceInstance = "any",
@@ -79,8 +78,4 @@ end
 ----------------------------------------------------------------------
 function FTI.RefreshManager()
     if Suite and Suite.RefreshWindow then Suite:RefreshWindow() end
-end
-
-function FTI.OpenManager()
-    if Suite and Suite.OpenWindow then Suite:OpenWindow("mod:focusInterrupt") end
 end

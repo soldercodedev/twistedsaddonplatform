@@ -736,18 +736,11 @@ end
 -- Rule list + global options.
 ----------------------------------------------------------------------
 -- The list view is split into three docked-nav pages: Alerts, Profiles, and Settings (global).
-local function ensureDB(d)
-    d.rules = d.rules or {}
-    d.channel = d.channel or "Master"
-    d.pollInterval = tonumber(d.pollInterval) or 0.25
-end
 
 -- PROFILES page: which alert set this character uses, + copy alerts between profiles.
 local function renderProfiles(mod, b, x, y, w, win)
     local C = b.theme.C
-    local d = TCC.db
-    ensureDB(d)
-    local P = newPen(b, win, x, w)
+    local d = TCC.db    local P = newPen(b, win, x, w)
 
     -- PROFILE (which alert set this character uses, + copy alerts between profiles)
     b:Sub("PROFILE", x, y); y = y - 36
@@ -841,9 +834,7 @@ end
 -- SETTINGS page: global sound/check-rate, import / export / reset, and the minimap toggle.
 local function renderGlobal(mod, b, x, y, w, win)
     local C = b.theme.C
-    local d = TCC.db
-    ensureDB(d)
-    local P = newPen(b, win, x, w)
+    local d = TCC.db    local P = newPen(b, win, x, w)
 
     -- (enable/disable lives on the Platform Overview page, not repeated here)
 
@@ -913,9 +904,7 @@ end
 -- ALERTS page: the rule list + New Alert.
 local function renderAlerts(mod, b, x, y, w, win)
     local C = b.theme.C
-    local d = TCC.db
-    ensureDB(d)
-    local P = newPen(b, win, x, w)
+    local d = TCC.db    local P = newPen(b, win, x, w)
 
     -- ALERTS  (shorten the underline so the New Alert button doesn't sit on top of it)
     b:Sub("ALERTS", x, y, w - 170)

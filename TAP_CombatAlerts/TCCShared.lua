@@ -30,14 +30,9 @@ function TCC.RefreshManager()
 end
 TCC.RefreshOptions = TCC.RefreshManager   -- the engine uses both names interchangeably
 
--- Old TCC "views" -> the suite module page they now live on (all alerts views map to one module).
-local VIEW_MAP = {
-    alerts = "mod:combatAlerts",
-    global = "mod:combatAlerts",
-    debug  = "mod:combatAlerts",
-}
+-- Open the suite window on the Combat Alerts page (any non-nil view arg opens it; nil is a no-op).
 function TCC.OpenManager(view)
-    if Suite and Suite.OpenWindow then Suite:OpenWindow(view and VIEW_MAP[view]) end
+    if Suite and Suite.OpenWindow then Suite:OpenWindow(view and "mod:combatAlerts") end
 end
 TCC.OpenOptions = TCC.OpenManager
 
