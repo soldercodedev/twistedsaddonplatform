@@ -15,9 +15,9 @@ them the next time you group up - all stored locally, all private to you.
 - **Party & performance history** - every party member's role and combat stats are saved with the
   run: damage/DPS, healing/HPS, damage taken, interrupts, dispels, and deaths (whatever the active
   stat provider can supply).
-- **Combat-stat providers** - uses **Details!** when it's loaded and compatible, Blizzard's built-in
-  damage meter otherwise, and a metadata-only mode when neither can help. Deaths, interrupts, and
-  dispels are counted from the combat log regardless, so those are always available.
+- **Combat-stat provider** - reads Blizzard's built-in damage meter (`C_DamageMeter`), with a
+  metadata-only fallback when it isn't available. Damage, healing, damage taken, deaths, interrupts,
+  and dispels all come from the meter.
 - **"Who have I run with?"** - a searchable, sortable **Players** browser plus per-player detail
   pages (runs together, timed %, highest key, per-role averages, notes, tags, favourite).
 - **Returning-player recap** - when you join a group with someone you've keyed with before, a short
@@ -46,12 +46,11 @@ them the next time you group up - all stored locally, all private to you.
 - **Everything is local and private.** No data is uploaded, and recaps are never posted to a shared
   chat channel. There is no rating, blacklist, or automatic judgement of other players - it's a
   personal history.
-- Metrics a provider can't supply are shown as **-**, never a fake **0**.
-- Details! is optional and is never modified - all integration is isolated behind a provider.
+- Metrics the meter can't supply are shown as **-**, never a fake **0**.
 
 ## Requires
 
-The **TAP** hub (bundled). **Details!** is an optional enhancement (`## OptionalDeps: Details`).
+The **TAP** hub (bundled).
 
 ## License
 

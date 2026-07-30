@@ -29,7 +29,24 @@ local function acq(store, name, factory)
 end
 local function releaseAll(store)
     for _, p in pairs(store) do
-        for i = p.used, 1, -1 do local w = p.items[i]; if w then w:Hide(); w:ClearAllPoints() end end
+        for i = p.used, 1, -1 do
+            local w = p.items[i]
+            if w then
+                w:Hide(); w:ClearAllPoints()
+                -- Free what the last render hung on this slot so a pooled widget doesn't PIN it until the
+                -- exact slot is re-acquired: interactive handlers (closures that capture whole run/score
+                -- tables) and the tooltip tables. Guard with HasScript: fontstrings/textures have no
+                -- SetScript at all, and OnClick is only valid on Buttons (SetScript throws on a plain Frame).
+                if w.HasScript and w.SetScript then
+                    if w:HasScript("OnClick")   then w:SetScript("OnClick", nil) end
+                    if w:HasScript("OnMouseUp") then w:SetScript("OnMouseUp", nil) end
+                    if w:HasScript("OnEnter")   then w:SetScript("OnEnter", nil) end
+                    if w:HasScript("OnLeave")   then w:SetScript("OnLeave", nil) end
+                end
+                w._tipTitle, w._tipBody, w._tipAnchor, w._tipLines, w._tipIcon, w._tipMinWidth =
+                    nil, nil, nil, nil, nil, nil
+            end
+        end
         p.used = 0
     end
 end

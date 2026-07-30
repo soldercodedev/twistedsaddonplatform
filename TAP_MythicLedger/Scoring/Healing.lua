@@ -4,7 +4,7 @@
 -- throughput scorer judges "did you heal what the encounter dealt" instead of "your share of group HPS".
 --
 --   required(p)   = max(0, damageTaken(p) - avoidableDamageTaken(p))   -- unavoidable HP lost
---   output(p)     = healing(p) [- overhealing(p) if present] + absorbs(p)
+--   output(p)     = healing(p) + absorbs(p)
 --   tank target   = TankSelfCoverage(spec) x required(tank)
 --   healer target = SUM over tanks[(1 - coverage_t) x required(t)]
 --                 + groupSelfHealFactor x (required(nonTank) + avoidableCredit x avoidable(nonTank))
@@ -22,12 +22,10 @@ local Cfg = Scoring.Config
 
 local function n0(v) return (type(v) == "number") and v or 0 end
 
--- Per-player output (effective healing + shields). Overhealing is subtracted only if the meter provides
--- it (it doesn't in Midnight today; the soft-cap in Cat.Throughput guards padding meanwhile).
+-- Per-player output (effective healing + shields). The Blizzard meter reports effective healing already
+-- (no overheal to strip); the soft-cap in Cat.Throughput guards padding.
 local function outputOf(p)
-    local heal = n0(p.healing)
-    if type(p.overhealing) == "number" then heal = math.max(0, heal - p.overhealing) end
-    return heal + n0(p.absorbs)
+    return n0(p.healing) + n0(p.absorbs)
 end
 
 -- Compute the model for a normalized party. Returns:

@@ -14,7 +14,7 @@ ML.ADDON      = ADDON                 -- "TAP_MythicLedger"
 ML.MODULE_ID  = "mythicLedger"        -- Suite module id (matches ## X-Suite-Module)
 ML.NAME       = "Mythic Ledger"
 ML.PREFIX     = "|cffa06cf0Mythic Ledger|r "   -- chat print prefix (suite violet)
-ML.SCHEMA_VERSION = 2
+ML.SCHEMA_VERSION = 4
 
 -- Run outcome, kept as stable string keys (never localise these - they are saved).
 ML.STATUS = {

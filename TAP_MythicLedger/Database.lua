@@ -145,6 +145,47 @@ DB.MIGRATIONS = {
             end
         end
     end,
+    -- v3: slim the run log. We now read only Blizzard's C_DamageMeter, and several per-spell breakdowns
+    -- were stored but never read. Drop the unused per-spell lists (attribution.damageDone / healingDone /
+    -- damageTaken) and the dead Details!-only `overhealing` stat. KEEP everything scoring reads: the
+    -- aggregate stats (incl. damageTaken / avoidableDamageTaken), attribution.avoidable (feeds death-cause
+    -- classification + the Avoidable Damage card), interrupts/dispels, deathRecaps, and boss lowAvoid.
+    -- Scoring is untouched by this (the dropped fields have no readers; overhealing was always nil), so
+    -- there is no Config.version bump - this is a pure storage strip.
+    [3] = function(root)
+        for _, run in ipairs(root.runs or {}) do
+            if type(run) == "table" then
+                for _, m in ipairs(run.party or {}) do
+                    if type(m) == "table" then
+                        if type(m.stats) == "table" then m.stats.overhealing = nil end
+                        local a = m.attribution
+                        if type(a) == "table" then
+                            a.damageDone, a.healingDone, a.damageTaken = nil, nil, nil
+                            if next(a) == nil then m.attribution = nil end
+                        end
+                    end
+                end
+            end
+        end
+    end,
+    -- v4: trim per-boss table bloat (memory, not scoring). topDps/topHps were just the max entry of
+    -- perMember, duplicated - the review derives them from perMember at render now, so drop the stored
+    -- copies wherever perMember is present. Also null out empty deathList tables (an allocated table
+    -- holding nothing). Display-only; scores are unaffected.
+    [4] = function(root)
+        for _, run in ipairs(root.runs or {}) do
+            if type(run) == "table" then
+                for _, b in ipairs(run.bosses or {}) do
+                    if type(b) == "table" then
+                        if type(b.perMember) == "table" and #b.perMember > 0 then
+                            b.topDps, b.topHps = nil, nil
+                        end
+                        if type(b.deathList) == "table" and #b.deathList == 0 then b.deathList = nil end
+                    end
+                end
+            end
+        end
+    end,
 }
 
 local function runMigrations(root)

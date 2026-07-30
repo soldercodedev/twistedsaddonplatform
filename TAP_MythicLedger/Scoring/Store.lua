@@ -17,7 +17,32 @@ local Store = {}
 Scoring.Store = Store
 
 local wipe = _G.wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
-local fullMemo = {}   -- runId -> { version, result }
+
+-- Session memo of the FULL, explainable score for a run - the heaviest per-run structure (every category
+-- with its detail tables, the explanation strings, inputs, baseline...). Full scores are deterministic
+-- and cheap to recompute, so we DON'T keep them all: the memo is bounded to the most-recently-viewed runs
+-- (LRU). That stops memory from climbing as you browse the whole history; the tiny COMPACT summaries
+-- (overall/grade) stay fully cached in summaryCache. Eviction only drops a memo entry, never real data.
+local FULL_MEMO_CAP = 20          -- keep ~20 most-recently-viewed full scores; recompute beyond that
+local fullMemo = {}               -- runId -> { version, result, seq }
+local fullCount, fullSeq = 0, 0
+local function memoWipe() wipe(fullMemo); fullCount, fullSeq = 0, 0 end
+local function memoDel(id) if id and fullMemo[id] then fullMemo[id] = nil; fullCount = fullCount - 1 end end
+local function memoGet(id)
+    local m = fullMemo[id]
+    if m and m.version == Cfg.version then fullSeq = fullSeq + 1; m.seq = fullSeq; return m.result end
+    return nil
+end
+local function memoPut(id, result)
+    fullSeq = fullSeq + 1
+    if not fullMemo[id] then fullCount = fullCount + 1 end
+    fullMemo[id] = { version = Cfg.version, result = result, seq = fullSeq }
+    if fullCount > FULL_MEMO_CAP then         -- evict least-recently-used (n is tiny, a linear scan is fine)
+        local oldId, oldSeq
+        for k, v in pairs(fullMemo) do if not oldSeq or v.seq < oldSeq then oldSeq, oldId = v.seq, k end end
+        memoDel(oldId)
+    end
+end
 
 -- The persisted score cache, reset whenever the stored version doesn't match the engine version.
 local function scoreCache()
@@ -47,10 +72,10 @@ end
 function Store.Full(run)
     if not run then return nil end
     local id = run.id or tostring(run)
-    local m = fullMemo[id]
-    if m and m.version == Cfg.version then return m.result end
+    local cached = memoGet(id)
+    if cached then return cached end
     local result = Score.ScoreRun(run)
-    fullMemo[id] = { version = Cfg.version, result = result }
+    memoPut(id, result)
     local sc = scoreCache()
     if sc and run.id then sc.runs[run.id] = compact(result) end
     return result
@@ -69,7 +94,7 @@ end
 -- Retroactively (re)score EVERY saved run - the migration path for scoring-logic / version changes.
 -- Clears caches, recomputes, and rewrites the persisted summaries. Returns count, version.
 function Store.RescoreAll()
-    wipe(fullMemo)
+    memoWipe()
     local sc = scoreCache()
     if sc then sc.runs = {} end
     local n = 0
@@ -93,7 +118,7 @@ end
 
 -- Drop the in-memory memo for one run (e.g. after it's edited) so it recomputes on next access.
 function Store.Invalidate(runId)
-    if runId then fullMemo[runId] = nil else wipe(fullMemo) end
+    if runId then memoDel(runId) else memoWipe() end
 end
 
 -- Drop ALL cached scores - the session memo AND the persisted per-run summaries - WITHOUT recomputing
@@ -103,7 +128,7 @@ end
 -- Season Tuner calls this after every edit; RescoreAll is the heavier, eager sibling that also repersists
 -- and re-marks best runs.
 function Store.InvalidateAll()
-    wipe(fullMemo)
+    memoWipe()
     local sc = scoreCache()
     if sc then sc.runs = {} end
 end

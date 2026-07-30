@@ -1,8 +1,8 @@
 -- TAP: Mythic Ledger - Diag.lua
--- API self-check. Probes every Blizzard/Details entry point the module relies on and reports
+-- API self-check. Probes every Blizzard C_DamageMeter entry point the module relies on and reports
 -- present/missing plus live values, so the whole stat pipeline can be validated WITHOUT running a
 -- full key: hit a target dummy for a few seconds, then run it - the Blizzard meter's current-fight
--- data (and Details') shows up here. Surfaced via `/tap ledger apicheck` and the Debug page.
+-- data shows up here. Surfaced via `/tap ledger apicheck` and the Debug page.
 
 local ADDON, ML = ...
 local API  = ML.API
@@ -115,8 +115,7 @@ function Diag.Run(emit)
 end
 
 -- Run the SELECTED provider against the current fight and print the normalized stat block it would
--- save. Great on a target dummy with Details! (its "overall" holds the dummy fight); the Blizzard
--- provider reads the Overall session, which may be empty until a real run completes.
+-- save. The Blizzard provider reads the Overall session, which may be empty until a real run completes.
 function Diag.ProbeCapture(emit)
     local function line(s) if emit then emit(s) else print(ML.PREFIX .. s) end end
     local ctx = { player = API.PlayerContext(), party = API.GroupMembers() }
@@ -503,5 +502,84 @@ function Diag.ProbeDeathRecap(emit)
             end
         end
     end
+    return table.concat(out, "\n")
+end
+
+-- Memory breakdown (`/tap ledger mem`). Walks the big in-memory data structures and estimates their Lua
+-- footprint (a table header ~64 B + each stored entry ~40 B in Lua 5.1), then shows WoW's real per-addon
+-- total so the GAP = code + UI frames + everything not walked (the fixed cost that no data trim can touch).
+-- Point: see whether the run DB, the caches, or the fixed code/UI dominates, so effort goes where the
+-- memory actually is. Uses a shared `seen` set (iterative walk, no deep recursion) so nothing is double
+-- counted; the first subsystem to reach a shared table is credited with it (runs is measured first).
+function Diag.MemoryReport(emit)
+    local out = {}
+    local function line(s) out[#out + 1] = s; if emit then emit(s) end end
+
+    -- Lua 5.1 heap sizing (64-bit): Table header ~56 B; an array slot is a TValue (~16 B); a hash slot is
+    -- a Node (~40 B). Integer keys mostly live in the array part, string keys in the hash part - so we
+    -- split them to avoid over-counting the array-heavy lists (spell-id arrays, recap event rows).
+    local function measure(t, seen)
+        local tables, arr, hash = 0, 0, 0
+        local stack, n = { t }, 1
+        while n > 0 do
+            local v = stack[n]; stack[n] = nil; n = n - 1
+            if type(v) == "table" and not seen[v] then
+                seen[v] = true
+                tables = tables + 1
+                for k, val in pairs(v) do
+                    if type(k) == "number" then arr = arr + 1 else hash = hash + 1 end
+                    if type(k) == "table" then n = n + 1; stack[n] = k end
+                    if type(val) == "table" then n = n + 1; stack[n] = val end
+                end
+            end
+        end
+        return tables, arr + hash, tables * 56 + arr * 16 + hash * 40
+    end
+
+    line("== Mythic Ledger memory report ==")
+    -- Force a full GC, THEN snapshot WoW's real per-addon total BEFORE this report's own walk allocates
+    -- its scratch tables. Otherwise GetAddOnMemoryUsage counts un-collected garbage (it bills every Lua
+    -- allocation to whichever addon made it), so the total is inflated and CLIMBS on every run - the walk's
+    -- own `seen`/`stack`/strings from the previous call are still resident until the next GC.
+    local realBytes
+    if _G.collectgarbage then _G.collectgarbage("collect") end
+    if _G.UpdateAddOnMemoryUsage and _G.GetAddOnMemoryUsage and ML.ADDON then
+        _G.UpdateAddOnMemoryUsage()
+        realBytes = (_G.GetAddOnMemoryUsage(ML.ADDON) or 0) * 1024
+    end
+
+    local root = (ML.DB and ML.DB.root) or {}
+    local seen, rows = {}, {}
+    local function add(name, t)
+        if type(t) ~= "table" then return end
+        local tb, en, bytes = measure(t, seen)
+        rows[#rows + 1] = { name = name, tables = tb, entries = en, bytes = bytes }
+    end
+
+    add("run history", root.runs)                 -- FIRST, so shared tables are credited here
+    for k, v in pairs(root) do
+        if k ~= "runs" and type(v) == "table" then add(k, v) end
+    end
+    add("season + config", ML.Scoring and ML.Scoring.Config)
+
+    table.sort(rows, function(a, b) return a.bytes > b.bytes end)
+    local sumBytes = 0
+    for _, r in ipairs(rows) do sumBytes = sumBytes + r.bytes end
+    for _, r in ipairs(rows) do
+        line(string.format("  %-22s %6.2f MB  (%d tables / %d entries)", r.name, r.bytes / 1e6, r.tables, r.entries))
+    end
+    line(string.format("  %-22s %6.2f MB   <- data structures measured", "SUBTOTAL", sumBytes / 1e6))
+
+    if realBytes then
+        line(string.format("  %-22s %6.2f MB   <- WoW's real total (after a full GC)", "ADDON TOTAL", realBytes / 1e6))
+        local gap = realBytes - sumBytes
+        if gap > 0 then
+            line(string.format("  %-22s %6.2f MB   (%.0f%%: bytecode, closures, UI frames, not-walked)",
+                "code + UI + rest", gap / 1e6, 100 * gap / realBytes))
+        end
+    else
+        line("  (GetAddOnMemoryUsage unavailable - estimate only)")
+    end
+    line(string.format("  runs stored: %d", root.runs and #root.runs or 0))
     return table.concat(out, "\n")
 end

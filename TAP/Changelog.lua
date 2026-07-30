@@ -8,6 +8,22 @@ local Suite = _G.TAP
 Suite.CHANGELOG = [==[
 # Twisteds Addon Platform - Changelog
 
+## 1.7.0
+
+A leaner Mythic Ledger: throughput scoring returns to "meeting your share is 100," a much smaller saved run history, and lower memory use on data-heavy pages.
+
+**Platform**
+
+- **[CHANGE]** Pooled interface elements release what they were holding (click handlers, tooltip data) when they're reused, so paging through data-heavy screens uses less memory over a session.
+
+### Mythic Ledger (1.2.0)
+
+- **[NEW]** The Death Causes breakdown now names what actually killed you - the mechanic behind each avoidable death, the un-kicked cast behind a missed kick, and the biggest single source behind an unavoidable one. Works on existing runs too.
+- **[CHANGE]** Throughput: hitting your expected group share is a full 100 again. Doing your fair share is a top mark, beating it caps at 100, and falling short is still graded down. Reverts last version's stricter bar that scored meeting your share only a 94. Your existing runs re-score on login.
+- **[CHANGE]** The saved run history is much smaller - several per-ability breakdowns that were stored but never shown are no longer kept (plus a leftover stat nothing fills in); existing runs are trimmed automatically on login, keeping everything the score, the review, and the boss splits use.
+- **[CHANGE]** Per-boss splits store less: top DPS and HPS are derived from the per-player numbers instead of saved twice, and empty death lists aren't kept.
+- **[CHANGE]** Lower memory when browsing many run reviews in one session - a viewed run's full score detail is cached briefly instead of held all session.
+
 ## 1.6.0
 
 Uses less memory over long sessions, Combat Alerts is a smaller download, and you can re-enable a fully-disabled add-on from the Overview.

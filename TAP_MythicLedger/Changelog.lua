@@ -5,6 +5,16 @@ local ADDON, ML = ...
 ML.CHANGELOG = [==[
 # Mythic Ledger - What's New
 
+## 1.2.0
+
+Throughput scoring goes back to "meeting your share is 100," the Death Causes breakdown now names what killed you, and the saved run history is leaner with lower memory use.
+
+- **[NEW]** The Death Causes breakdown now names what actually killed you - the mechanic behind each avoidable death, the un-kicked cast behind a missed kick, and the biggest single source behind an unavoidable one. Works on your existing runs too.
+- **[CHANGE]** Throughput: hitting your expected group share is a full 100 again. Doing your fair share is a top mark, beating it caps at 100 (you can't score above 100% for work that wasn't asked of you), and falling short is still graded down. This reverts last version's stricter bar, which scored meeting your share only a 94. Your existing runs re-score on login.
+- **[CHANGE]** The saved run history is much smaller. Several per-ability breakdowns that were stored but never shown are no longer kept, along with a leftover stat nothing fills in; your existing runs are trimmed automatically on login, keeping everything the score, the run review, and the boss splits actually use.
+- **[CHANGE]** Per-boss splits store less - the top DPS and HPS are worked out from the per-player numbers instead of saved a second time, and empty death lists aren't kept.
+- **[CHANGE]** Uses less memory when you browse a lot of run reviews in one session: a viewed run's full score detail is now cached briefly instead of held for the whole session.
+
 ## 1.1.2
 
 A scoring calibration pass - fairer tank grading and a firmer throughput bar - plus the Hunter Feign Death fix and housekeeping.

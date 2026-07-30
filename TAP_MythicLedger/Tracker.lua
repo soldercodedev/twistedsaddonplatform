@@ -316,11 +316,12 @@ end
 -- exercise the identical maths. Mutates `e`.
 local function computeBossCombat(e, baseMap, endMap, dur, party, playerGuid)
     if not (baseMap and endMap and dur and dur > 0) then return end
-    local topName, topClass, topDps
-    local hpsName, hpsClass, topHps
     local lowName, lowClass, lowAvoid
     e.deathList = e.deathList or {}
-    e.perMember = {}   -- every member's DPS/HPS on this boss (for the "everyone" tooltip)
+    -- Every member's DPS/HPS on this boss. Top DPS/HPS are DERIVED from this at render time (they were
+    -- just the max entry - storing them separately duplicated perMember for no reason), so we don't keep
+    -- them here anymore. lowAvoid stays: it needs the avoidable delta, which perMember doesn't carry.
+    e.perMember = {}
     for _, m in ipairs(party or {}) do
         local guid = m.guid
         if guid then
@@ -339,17 +340,12 @@ local function computeBossCombat(e, baseMap, endMap, dur, party, playerGuid)
             local hps = (healDelta > 0) and (healDelta / dur) or 0
             local avDelta = (now.avoid or 0) - (base.avoid or 0); if avDelta < 0 then avDelta = 0 end
             e.perMember[#e.perMember + 1] = { name = m.name, classFile = m.classFile, role = m.role, dps = dps, hps = hps }
-            if dmgDelta > 0 then
-                if not topDps or dps > topDps then topDps, topName, topClass = dps, m.name, m.classFile end
-                if guid == playerGuid and (not e.killDps or dps > e.killDps) then e.killDps = dps end
-            end
-            if healDelta > 0 and (not topHps or hps > topHps) then topHps, hpsName, hpsClass = hps, m.name, m.classFile end
+            if dmgDelta > 0 and guid == playerGuid and (not e.killDps or dps > e.killDps) then e.killDps = dps end
             if not lowAvoid or avDelta < lowAvoid then lowAvoid, lowName, lowClass = avDelta, m.name, m.classFile end
         end
     end
     table.sort(e.perMember, function(a, b2) return (a.dps or 0) > (b2.dps or 0) end)
-    if topName then e.topDps = { name = topName, classFile = topClass, dps = topDps } end
-    if hpsName then e.topHps = { name = hpsName, classFile = hpsClass, hps = topHps } end
+    if #e.deathList == 0 then e.deathList = nil end   -- don't keep an empty table around
     if lowName then e.lowAvoid = { name = lowName, classFile = lowClass, amount = lowAvoid } end
 end
 
@@ -706,8 +702,8 @@ function Tracker.CompleteRun()
     if state == STATE.COMPLETING or state == STATE.COMPLETED then return end
     setState(STATE.COMPLETING)
     retries, combatWaits = 0, 0
-    -- Brief settle delay so Details!/Blizzard finalize the overall segment before we read it (and, if the
-    -- key completed mid-trash, tryFinalize then waits for combat to actually drop before reading).
+    -- Brief settle delay so the Blizzard meter finalizes the overall segment before we read it (and, if
+    -- the key completed mid-trash, tryFinalize then waits for combat to actually drop before reading).
     finalizeTimer = C_Timer.NewTimer(1.5, tryFinalize)
 end
 

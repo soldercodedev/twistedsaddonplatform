@@ -14,7 +14,7 @@ local STATUS = ML.STATUS
 local History = {}
 ML.History = History
 
-local ROLE_METRICS = { "damage", "dps", "damageTaken", "healing", "hps", "overhealing",
+local ROLE_METRICS = { "damage", "dps", "damageTaken", "healing", "hps",
                        "interrupts", "dispels", "crowdControls", "deaths" }
 
 ----------------------------------------------------------------------

@@ -14,14 +14,14 @@ ML.Providers = Providers
 ----------------------------------------------------------------------
 local STAT_KEYS = {
     "damage", "dps", "damageTaken", "avoidableDamageTaken", "absorbs",
-    "healing", "hps", "overhealing", "interrupts", "dispels", "crowdControls", "deaths",
+    "healing", "hps", "interrupts", "dispels", "crowdControls", "deaths",
 }
 Providers.STAT_KEYS = STAT_KEYS
 
 local function emptyStats()
     return {
         damage = nil, dps = nil, damageTaken = nil, avoidableDamageTaken = nil, absorbs = nil,
-        healing = nil, hps = nil, overhealing = nil,
+        healing = nil, hps = nil,
         interrupts = nil, dispels = nil, crowdControls = nil, deaths = nil,
     }
 end
@@ -365,9 +365,12 @@ local function topByAmt(list, cap)
     return list
 end
 
--- Per-GUID per-spell breakdown for the whole run. Returns { [guid] = { damageDone, healingDone,
--- damageTaken, avoidable, interrupts, dispels } } (each a capped, amount-sorted spell list) or nil if
--- the meter/source API is unavailable. Pet kicks/dispels fold into the owner (mirrors readMeterStats).
+-- Per-GUID per-spell breakdown for the whole run. Returns { [guid] = { avoidable, interrupts, dispels } }
+-- (each a capped, amount-sorted spell list) or nil if the meter/source API is unavailable. We keep only
+-- the breakdowns something reads: `avoidable` (feeds avoidable death-cause classification + the Avoidable
+-- Damage card) and interrupts/dispels (Group Utility). The damage-done / healing-done / damage-taken
+-- per-spell lists were never read, so we don't build or store them - the aggregate stats block already
+-- carries the top-level totals. Pet kicks/dispels fold into the owner (mirrors readMeterStats).
 function Providers.ReadAttribution(ctx)
     local dm = C_DM()
     if type(dm) ~= "table" or type(dm.GetCombatSessionSourceFromType) ~= "function" then return nil end
@@ -386,9 +389,6 @@ function Providers.ReadAttribution(ctx)
     local out = {}
     for _, g in ipairs(order) do
         out[g] = {
-            damageDone  = topByAmt(normSpells(getT, sess, MT.DamageDone, g, false), ATTR_CAP),
-            healingDone = topByAmt(normSpells(getT, sess, MT.HealingDone, g, false), ATTR_CAP),
-            damageTaken = topByAmt(normSpells(getT, sess, MT.DamageTaken, g, true), ATTR_CAP),
             avoidable   = topByAmt(normSpells(getT, sess, MT.AvoidableDamageTaken, g, true), ATTR_CAP),
             interrupts  = normSpells(getT, sess, MT.Interrupts, g, false),
             dispels     = normSpells(getT, sess, MT.Dispels, g, false),
@@ -551,6 +551,7 @@ function Providers.ClassifyDeaths(attribution, recaps, role, deathCount, kickSet
             -- Sum the death's damage by category over the WHOLE recap (heals excluded). Precedence per hit:
             -- avoidable, then threat (melee), then a missed kick - so kickable carves out of "other" only.
             local dTot, dAvoid, dMelee, dKick = 0, 0, 0, 0
+            local bySrc = {}   -- per-source damage totals, to name the biggest single source (display only)
             for _, e in ipairs(evs) do
                 if not isHeal(e) then
                     local amt = e.amt or 0; if amt < 0 then amt = 0 end
@@ -558,7 +559,23 @@ function Providers.ClassifyDeaths(attribution, recaps, role, deathCount, kickSet
                     if isAvoid(e) then dAvoid = dAvoid + amt
                     elseif isMelee(e) and nonTank then dMelee = dMelee + amt
                     elseif isKick(e) then dKick = dKick + amt end
+                    if amt > 0 then
+                        local key = e.id or e.name or e.ev or "?"
+                        local rec = bySrc[key]
+                        if not rec then rec = { amt = 0, name = e.name, id = e.id, ev = e.ev }; bySrc[key] = rec end
+                        rec.amt = rec.amt + amt
+                    end
                 end
+            end
+            -- Biggest single source over the whole recap + its % of this death's damage. Drives the
+            -- "what actually killed you" drill-down, most useful for an "Other" death whose finishing blow
+            -- was small. Display only - not read by scoring (which uses the cause counts below).
+            local topRec
+            for _, rec in pairs(bySrc) do if not topRec or rec.amt > topRec.amt then topRec = rec end end
+            local topName = topRec and topRec.name
+            if topRec and not topName then
+                if topRec.ev == "ENVIRONMENTAL_DAMAGE" then topName = "Environmental"
+                elseif topRec.ev == "SWING_DAMAGE" then topName = "Melee" end
             end
             local avShare = dTot > 0 and (dAvoid / dTot) or 0
             local meShare = dTot > 0 and (dMelee / dTot) or 0
@@ -597,6 +614,8 @@ function Providers.ClassifyDeaths(attribution, recaps, role, deathCount, kickSet
                 killer = killerName, killerId = killer and killer.id, killerEvent = killer and killer.ev,
                 avoidPct = math.floor(avShare * 100 + 0.5), meleePct = math.floor(meShare * 100 + 0.5),
                 kickPct = math.floor(kkShare * 100 + 0.5),
+                topName = topName, topId = topRec and topRec.id,
+                topPct = (topRec and dTot > 0) and math.floor(topRec.amt / dTot * 100 + 0.5) or 0,
             }
         end
     end

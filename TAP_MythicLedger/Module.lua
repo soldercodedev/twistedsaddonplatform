@@ -106,6 +106,8 @@ local function handleSlash(rest)
         end
     elseif cmd == "attr" then
         ML.Diag.ProbeAttribution(function(s) print(s) end)
+    elseif cmd == "mem" then
+        ML.Diag.MemoryReport(function(s) print(s) end)
     elseif cmd == "deathreport" or cmd == "dr" then
         local sub = rest:match("^%S+%s+(%S+)") or "post"
         if ML.DeathReport then
@@ -166,6 +168,7 @@ if Suite.RegisterCommand then
             { "detail",   "Dump C_DamageMeter row structure (out of combat) to find per-spell detail" },
             { "source",   "Probe the C_DamageMeter Source accessors for the per-spell breakdown" },
             { "attr",     "Readable attribution: avoidable hits, kicks, dispels, damage taken (named)" },
+            { "mem",      "Memory breakdown: run DB vs caches vs code/UI, to find what's actually big" },
             { "deaths",   "Probe the death-recap timeline (deathRecapID) for fatal-blow classification" },
             { "deathreport", "Post the last on-screen death report to party chat ( / test / move )" },
             { "export",   "Copy the whole ledger as a share string" },

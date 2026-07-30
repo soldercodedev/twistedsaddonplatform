@@ -39,6 +39,16 @@ local kickIcon = makeIconPool()     -- INTERRUPT breakdown
 local dispIcon = makeIconPool()     -- DISPEL breakdown
 local avoidIcon, avoidIconPool = makeIconPool()   -- AVOIDABLE-damage breakdown (pool hidden directly, ~:3818)
 
+-- Shared OnMouseUp for breakdown spell icons: read the catalog entry + dungeon off the FRAME rather than
+-- capturing them in a fresh per-render closure. These icons are session-lived pooled frames, so a captured
+-- closure would pin the whole run (and, for a preview run, its heavy score result) forever. Frame-field
+-- pattern mirrors DungeonGuide's icon handler.
+local function iconOpenGuide(self)
+    if self._catEntry and ML.DungeonGuide and ML.DungeonGuide.SelectAndOpen then
+        ML.DungeonGuide.SelectAndOpen(self._dungeon, self._catEntry)
+    end
+end
+
 -- The Builder stat-tile style for the current cardStyle setting (CLEAN/PANEL/COMPACT -> clean/panel/
 -- compact). Nil-safe so every stat-tile surface renders the SAME style: the call sites used to drift
 -- between no fallback and `or "compact"`. In practice cardStyle is always one of the three keys (its
@@ -2082,11 +2092,11 @@ local SAMPLE_PARTY = {
 local function sampleStats(role, dur)
     local st = { deaths = (role == "TANK") and 1 or 0 }
     if role == "HEALER" then
-        st.healing = 1.1e7; st.hps = st.healing / dur; st.overhealing = st.healing * 0.25
+        st.healing = 1.1e7; st.hps = st.healing / dur
         st.dispels = 9; st.damage = 2.4e6; st.dps = st.damage / dur; st.interrupts = 2
     elseif role == "TANK" then
         st.damageTaken = 2.6e7; st.damage = 9.5e6; st.dps = st.damage / dur
-        st.healing = 4.6e6; st.hps = st.healing / dur; st.overhealing = st.healing * 0.3
+        st.healing = 4.6e6; st.hps = st.healing / dur
         st.interrupts = 6; st.dispels = 1
     else
         st.damage = 1.7e7; st.dps = st.damage / dur; st.damageTaken = 4.2e6
@@ -2827,7 +2837,7 @@ local function bossTipData(bo)
         lines[#lines + 1] = { left = "Your DPS - low",  right = Util.shortNum(bo.lowDps), rcolor = "e0a030" }
     else
         lines[#lines + 1] = { blank = true }
-        lines[#lines + 1] = { text = "No per-boss DPS captured yet (needs Details! or Blizzard meter).", color = "subtext" }
+        lines[#lines + 1] = { text = "No per-boss DPS captured yet (needs the Blizzard meter).", color = "subtext" }
     end
     return { title = bo.name or "Boss", lines = lines }
 end
@@ -3711,12 +3721,8 @@ function renderPlayerReview(b, C, x, y, w, win)
                     n = n + 1
                     local gi = iconFn(theme, b.content, n, 24)
                     gi:ClearAllPoints(); gi:SetPoint("TOPLEFT", b.content, "TOPLEFT", ix, ry + 2); gi:SetSpell(e.id); gi:Show(); b:Transient(gi)
-                    local catEntry = e.e
-                    gi:SetScript("OnMouseUp", function()
-                        if catEntry and ML.DungeonGuide and ML.DungeonGuide.SelectAndOpen then
-                            ML.DungeonGuide.SelectAndOpen(r.dungeonName, catEntry)
-                        end
-                    end)
+                    gi._catEntry, gi._dungeon = e.e, r.dungeonName   -- on the frame, not a captured closure
+                    gi:SetScript("OnMouseUp", iconOpenGuide)
                     ix = ix + 26
                     if (e.count or 1) > 1 then b:Label("x" .. e.count, ix, ry - 3, C.subtext, 10); ix = ix + 18 end
                     ix = ix + 6
@@ -3884,25 +3890,57 @@ function renderPlayerReview(b, C, x, y, w, win)
         b:Label("Death Causes", LX + 16, y - 16, C.text, 13)
         b:Label(hlNums(string.format("%d death%s classified  ·  best-effort  ·  drives the Death Impact score",
             total, total == 1 and "" or "s")), LX + 16, y - 34, C.subtext, 10)
-        local function causeBar(name, count, hex, yy, tipBody)
+        -- What actually killed you, per cause, from the classifier's per-death `fatal` detail: the finishing
+        -- blow for avoidable / missed-kick / threat deaths, and the biggest single source (with its % of the
+        -- death) for "Other" - whose fatal blow is often just the straw. Deduped, "x2" for repeats.
+        local byCause = {}
+        for _, f in ipairs(dcz.fatal or {}) do
+            local c = f.cause or "other"; byCause[c] = byCause[c] or {}
+            local l = byCause[c]; l[#l + 1] = f
+        end
+        local function culprits(cause)
+            local list = byCause[cause]; if not list or #list == 0 then return nil end
+            local order, seen = {}, {}
+            -- Avoidable / missed-kick: name the FINISHING blow (it is the mechanic). Threat / other: name the
+            -- biggest single source with its %, since the fatal blow is often just the last straw there.
+            local useTop = (cause == "other" or cause == "threat")
+            for _, f in ipairs(list) do
+                local nm = (useTop and (f.topName or f.killer)) or (f.killer or f.topName) or "?"
+                local e = seen[nm]
+                if not e then e = { name = nm, n = 0, pct = useTop and f.topPct or nil }; seen[nm] = e; order[#order + 1] = e end
+                e.n = e.n + 1
+            end
+            local parts = {}
+            for i = 1, math.min(#order, 3) do
+                local e = order[i]; local s = e.name
+                if e.n > 1 then s = s .. " x" .. e.n end
+                if e.pct and e.pct > 0 then s = s .. " (" .. e.pct .. "%)" end
+                parts[#parts + 1] = s
+            end
+            if #order > 3 then parts[#parts + 1] = "+" .. (#order - 3) .. " more" end
+            return table.concat(parts, ", ")
+        end
+        local function causeBar(name, count, hex, yy, tipBody, culpritStr)
             b:Label(name, LX + 20, yy, C.subtext, 11)
             local bw = 190
             b:Box(LX + 120, yy - 3, bw, 9, 0.16, 1, C.border)
             if count > 0 then b:Box(LX + 120, yy - 3, bw * (count / total), 9, 0.95, 2, theme:Color(hex)) end
             b:Label(tostring(count), LX + 322, yy, theme:Color(hex), 12)
+            if culpritStr and culpritStr ~= "" then b:Label(culpritStr, LX + 348, yy, theme:Color(hex, C.subtext), 10) end
             if tipBody and b.theme.SetTipData then
-                b.theme:SetTipData(b:Hit(LX + 16, yy + 7, CW - 32, 18),
-                    { title = name, lines = { { text = tipBody, color = "subtext" } } })
+                local lines = { { text = tipBody, color = "subtext" } }
+                if culpritStr and culpritStr ~= "" then lines[#lines + 1] = { text = "Culprits: " .. culpritStr, color = "subtext" } end
+                b.theme:SetTipData(b:Hit(LX + 16, yy + 7, CW - 32, 18), { title = name, lines = lines })
             end
         end
         causeBar("Avoidable", dcz.avoidable or 0, "e0655a", y - 54,
-            "Died to a mechanic you could have sidestepped - the fatal damage was in this run's avoidable-damage list.")
+            "Died to a mechanic you could have sidestepped - the fatal damage was in this run's avoidable-damage list.", culprits("avoidable"))
         causeBar("Missed Kick", dcz.kickable or 0, "5f8dff", y - 72,
-            "Died to a cast that should have been interrupted - the fatal damage came from a spell in this dungeon's kick list that wasn't kicked.")
+            "Died to a cast that should have been interrupted - the fatal damage came from a spell in this dungeon's kick list that wasn't kicked.", culprits("kickable"))
         causeBar("Threat", dcz.threat or 0, "e0a030", y - 90,
-            "Died to unmitigated melee while not tanking - usually a threat/pickup issue (pulled aggro, or the tank never grabbed it). Note: fixate / soak / cleave mechanics can also read as melee.")
+            "Died to unmitigated melee while not tanking - usually a threat/pickup issue (pulled aggro, or the tank never grabbed it). Note: fixate / soak / cleave mechanics can also read as melee.", culprits("threat"))
         causeBar("Other", dcz.other or 0, "8b91a0", y - 108,
-            "Unavoidable mechanics, or a death we couldn't pin to a specific cause.")
+            "Unavoidable mechanics, or a death we couldn't pin to a specific cause.", culprits("other"))
         y = y - H - 8
     end
 
@@ -4447,6 +4485,14 @@ function UI.ShowScoreboard(run, opts)
                 b:Label("DEATHS", x + 1400, y - 2, C.subtext, 10)
                 y = y - 20
                 local function hl(h, k) return h and (classColorText(h.classFile, h.name or "?") .. "  " .. Util.shortNum(h[k])) end
+                -- Top DPS/HPS aren't stored anymore - derive from perMember (the max entry). Falls back to
+                -- a stored boss.topDps/topHps for very old bosses that predate perMember.
+                local function topBy(pm, k)
+                    if type(pm) ~= "table" then return nil end
+                    local best
+                    for _, e in ipairs(pm) do if (e[k] or 0) > 0 and (not best or e[k] > best[k]) then best = e end end
+                    return best
+                end
                 for i, boss in ipairs(bosses) do
                     -- Tooltip: kill info + EVERY party member's DPS / HPS on this encounter.
                     local btip = {
@@ -4468,8 +4514,8 @@ function UI.ShowScoreboard(run, opts)
                     framedIcon(b, x + 10, y - 6, 60, 30, API.BossIcon(boss.name, boss.id))   -- 2:1 (60x30)
                     b:Label(boss.name or ("Boss " .. tostring(boss.id)), x + 80, y - 21, C.text, 12)
                     b:Label(Util.duration(boss.killDuration), x + 430, y - 21, C.subtext, 11)
-                    b:Label(hl(boss.topDps, "dps") or DASH, x + 540, y - 21, C.text, 11)
-                    b:Label(hl(boss.topHps, "hps") or DASH, x + 810, y - 21, C.text, 11)
+                    b:Label(hl(boss.topDps or topBy(boss.perMember, "dps"), "dps") or DASH, x + 540, y - 21, C.text, 11)
+                    b:Label(hl(boss.topHps or topBy(boss.perMember, "hps"), "hps") or DASH, x + 810, y - 21, C.text, 11)
                     b:Label(hl(boss.lowAvoid, "amount") or DASH, x + 1080, y - 21, C.text, 11)
                     b:Label(string.format("%d", boss.deaths or 0), x + 1400, y - 21, C.subtext, 11)
                     y = y - 42

@@ -178,7 +178,10 @@ Scoring.Config = Config
 --      shared curve's 3.5% grace let every tank sit at 100). (2) The tank loose-mob-death grace is removed
 --      (tankThreatDeathGrace 1 -> 0): the FIRST teammate death from a mob the tank lost or never grabbed
 --      now docks Survival too. Retroactive rescore.
-Config.version = 46
+-- v47: throughput curve reverts the v45 "firmer bar" - meeting your expected group share is 100 again
+--      (was 94, with 100 reserved for ~1.15x). Doing your fair share is a full mark; over-performance
+--      clamps at 100; falling short is still graded down. Retroactive rescore.
+Config.version = 47
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -521,20 +524,20 @@ Config.confidence = {
 -- reference). ratioToScore reuses a gentle curve so 1.0x baseline ~= 85 ("meeting expectations").
 ----------------------------------------------------------------------
 Config.throughput = {
-    -- ratio (value/baseline) -> score, interpolated. v45 SPLIT-DIFFERENCE tuning (between v44's soft-cap
-    -- at share and the sharpened proposal): meeting your expected group share is a strong 94 (was an
-    -- automatic 100), and pulling ~15% above your share tops out at 100. Your excess is still removed
-    -- from the baseline the group is measured against (see EffectiveGroupTotals), so out-DPSing your
-    -- share never drags a teammate down - but it now modestly lifts your OWN bar. Underperforming your
-    -- share still costs the most; ratios above 1.15 stay at 100.
+    -- ratio (value/baseline) -> score, interpolated. v47: meeting your expected group share IS 100 -
+    -- doing exactly your fair share is a full mark, and pulling above it clamps at 100 (you can't beat
+    -- 100% by doing work nobody asked for). All the discrimination lives BELOW 1.0x: falling short of
+    -- your share is graded down, hard. Your excess is still stripped from the baseline the group is
+    -- measured against (see EffectiveGroupTotals), so out-DPSing your share never drags a teammate down.
+    -- (v45 had put the 100 anchor at 1.15x - a "firmer bar" that scored meeting-your-share only 94; that
+    -- read as grading a 25-question test out of 27, so it's reverted.)
     curve = {
         { ratio = 0.00, score = 0 },
         { ratio = 0.45, score = 40 },
         { ratio = 0.70, score = 64 },
         { ratio = 0.85, score = 80 },
         { ratio = 0.95, score = 90 },
-        { ratio = 1.00, score = 94 },    -- meeting your share = strong, but no longer an automatic 100
-        { ratio = 1.15, score = 100 },   -- ~15% above your share tops out
+        { ratio = 1.00, score = 100 },   -- meeting your fair share = 100; ratios above 1.0 clamp here
     },
     -- GROUP-RELATIVE baselines (deterministic - no self-learning, so scores match across installs).
     -- Each player's EXPECTED value for a metric = groupTotal(metric) * theirShare / sum(shares).
