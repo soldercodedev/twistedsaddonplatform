@@ -9,7 +9,7 @@ Hotfix for 1.7.0: checkboxes and toggles are clickable again.
 
 **Platform**
 
-- **[BUG FIX]** After 1.7.0, checkboxes/toggles across the UI couldn't be clicked and some hover highlights stopped working. A memory-cleanup change was wiping pooled controls' click handlers when they were reused; reverted.
+- **[BUG FIX]** After 1.7.0, some checkboxes and toggles in the settings couldn't be clicked, and a few buttons lost their hover highlight. Fixed.
 
 ## 1.7.0
 
