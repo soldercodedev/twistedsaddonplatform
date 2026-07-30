@@ -3,7 +3,7 @@
 ## Notes: Parent hub for the Twisteds Addon Platform - the shared UI library plus the module registry and Suite Manager (/tap) that loads optional sidecar plugins. Exposed as _G.TAP.
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
 ## Author: Twistedfury-Zul'jin
-## Version: 1.7.0
+## Version: 1.7.1
 ## Category: Twisted's Addon Platform
 ## X-Website: shared UI foundation + plugin hub for the tool suite
 ## X-Curse-Project-ID: 1609931

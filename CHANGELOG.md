@@ -3,6 +3,14 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
+## 1.7.1
+
+Hotfix for 1.7.0: checkboxes and toggles are clickable again.
+
+**Platform**
+
+- **[BUG FIX]** After 1.7.0, checkboxes/toggles across the UI couldn't be clicked and some hover highlights stopped working. A memory-cleanup change was wiping pooled controls' click handlers when they were reused; reverted.
+
 ## 1.7.0
 
 A leaner Mythic Ledger: throughput scoring returns to "meeting your share is 100," a much smaller saved run history, and lower memory use on data-heavy pages.
