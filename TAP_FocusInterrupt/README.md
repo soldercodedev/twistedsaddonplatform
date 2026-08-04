@@ -16,7 +16,8 @@ Everything you need to focus, mark, and interrupt cleanly - built for your exact
   raids, or a group).
 - **Interrupt & Stun macros** - auto-detected for your class, spec, and talents. It finds the
   ability you actually have (baseline or talented, pet abilities included) so you just create and
-  bind it.
+  bind it. The Interrupt macro's **Cast at** option picks who it fires at - your focus, current
+  target, or mouseover, with fallback combos.
 - **Call-outs** - optionally announce your focus (or a ready check) to say / party / raid, limited to
   the content you choose.
 

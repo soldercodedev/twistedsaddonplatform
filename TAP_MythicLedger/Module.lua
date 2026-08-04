@@ -23,6 +23,7 @@ local function OnEnable(m)
     ML.Recap.Start()
     if ML.Tooltip and ML.Tooltip.Start then ML.Tooltip.Start() end
     if ML.DeathReport and ML.DeathReport.Start then ML.DeathReport.Start() end
+    if ML.LiveCoach and ML.LiveCoach.Start then ML.LiveCoach.Start() end
     ML.Log("Module enabled")
 end
 
@@ -31,6 +32,7 @@ local function OnDisable(m)
     ML.Recap.Stop()
     if ML.Tooltip and ML.Tooltip.Stop then ML.Tooltip.Stop() end
     if ML.DeathReport and ML.DeathReport.Stop then ML.DeathReport.Stop() end
+    if ML.LiveCoach and ML.LiveCoach.Stop then ML.LiveCoach.Stop() end
     ML.Log("Module disabled")
 end
 
@@ -115,6 +117,13 @@ local function handleSlash(rest)
             elseif sub == "move" then ML.DeathReport.StartMove()
             elseif sub == "stop" then ML.DeathReport.StopMove()
             else ML.DeathReport.PostToParty() end
+        end
+    elseif cmd == "coach" or cmd == "livecoach" then
+        local sub = rest:match("^%S+%s+(%S+)") or "test"
+        if ML.LiveCoach then
+            if sub == "move" then ML.LiveCoach.StartMove()
+            elseif sub == "stop" then ML.LiveCoach.StopMove()
+            else ML.LiveCoach.Test() end
         end
     elseif cmd == "deaths" then
         local theme = Suite.uiTheme

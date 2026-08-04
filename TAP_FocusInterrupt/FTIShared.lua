@@ -27,6 +27,7 @@ local MACRO_DEFAULTS = {
     announceReady    = false,
     announceInstance = "any",
     focusTarget      = "smart",         -- smart (mouseover>target) / target / mouseover
+    kickTarget       = "focus",         -- focus / focus_target / target / mouseover / mouseover_focus
     paletteShown     = false,
     palettePos       = nil,
     paletteScale     = 1.0,

@@ -127,6 +127,7 @@ function Mixin:Toast(opts)
     local dismissible = opts.dismissible ~= false
 
     local t = acquireToast(theme, host)
+    t:Show()   -- a reused toast was Hidden by its dismiss(); re-show it before the fade-in animates alpha
     t._gone = nil
     t:SetSize(w, hasTitle and 52 or 36)
     theme:StyleFrame(t, opts)

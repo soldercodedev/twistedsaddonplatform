@@ -8,6 +8,42 @@ local Suite = _G.TAP
 Suite.CHANGELOG = [==[
 # Twisteds Addon Platform - Changelog
 
+## 1.8.0-beta.2
+
+A first-launch Setup Tour for the platform, Mythic Ledger's new Live Coach, week-over-week stats, Weekly Vault and a Progression page, and interrupt targeting options for Focus Target Interrupt.
+
+**Platform**
+
+- **[NEW]** A first-launch **Setup Tour**. On first login the platform offers a short guided walkthrough of the /tap Overview, pointing out how to enable, disable, configure and preview each add-on. Reopen it any time from Help > Setup Tour, or /tap tour.
+
+### Mythic Ledger (1.3.0)
+
+- **[NEW]** **Live Coach** - an on-screen nudge between fights. After a boss (or big pulls too, your call) it checks how the run is going and tells you the one thing to fix: "Kick more", "Cut avoidable damage", "Push your DPS". It grades with the same engine as your end-of-run score, so the advice matches your final grade - the real score still comes at the end. Off by default; turn it on in Settings > Live Coach, where you pick how often it speaks, how much it says, and how it looks. /tap ml coach tests it.
+- **[NEW]** The Overview has a **This Week** row - runs, timed %, average score, and deaths, each compared to last week. Shows up once you have two weeks of history.
+- **[NEW]** **Trouble Spots**, also on the Overview: the dungeons that keep beating you, ranked by fail rate and deaths.
+- **[NEW]** The Characters page now starts with a **Weekly Vault** panel - every character's top 8 keys this week, with the three vault slots marked and the reset timer. Depleted keys count too, same as the vault itself.
+- **[NEW]** A new **Progression** page charts a character's trajectory across their runs. Pick a metric - Ledger Score, Key Level, Time vs timer, Deaths, DPS or HPS - and read it as a line with an average line and an Improving / Steady / Regressing call, with Latest / Min / Max / Average cards above it. Switch between a per-run and a weekly view, and narrow to a date range and/or a key-level range.
+
+### Focus Target Interrupt (1.2.0)
+
+- **[NEW]** The Interrupt macro has a **Cast at** option, just like the Focus macro's focus source: interrupt your focus, your current target, or your mouseover, with fallback combos (focus, else target / mouseover, else focus). The default is still focus-only; save the macro again after changing it.
+- **[NEW]** The Macros page shows the detected interrupt and stun as a proper spell icon - hover it for the real Blizzard spell tooltip.
+- **[CHANGE]** The macro buttons now read **Update Macro** when that macro already exists in your macro book, so it's clear you're rewriting it rather than adding another.
+
+## 1.8.0-beta.1
+
+A beta preview of a new add-on, **Toolbox** - starting with a WoW Token gold-price tracker.
+
+**Platform**
+
+- **[CHANGE]** Spell/item icons drawn on settings pages (the ones with the real Blizzard tooltip on hover) are now pooled and reused across page redraws instead of a fresh element per redraw, trimming memory growth over a session.
+
+### Toolbox (0.1.0)
+
+- **[NEW]** See the current WoW Token price in gold on its own page, refreshable any time.
+- **[NEW]** A price-trend chart over the last 30, 60, or 90 days. Hover any point to read its exact price and time, with the high, low, median, and change shown as cards above it.
+- **[NEW]** Optional alerts on login and when you change zones: a toast showing the current price, and/or a heads-up when the price crosses a gold amount you set. Each alert is independent and fully configurable - position, color, size, duration, and sound - and can be silenced while you are in a dungeon, raid, or battleground.
+
 ## 1.7.1
 
 Hotfix for 1.7.0: checkboxes and toggles are clickable again.

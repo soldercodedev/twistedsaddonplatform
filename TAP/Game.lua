@@ -160,14 +160,9 @@ local function itemIcon(item)
 end
 
 function Mixin:GameIcon(parent, opts)
-    opts = opts or {}
     local theme = self
-    local size = opts.size or 32
-    local b = CreateFrame("Button", nil, parent); b:SetSize(size, size)
-    theme:StylePanel(b, theme.C.bg)
-    b.tex = b:CreateTexture(nil, "ARTWORK"); b.tex:SetPoint("TOPLEFT", 1, -1); b.tex:SetPoint("BOTTOMRIGHT", -1, 1); b.tex:SetTexCoord(unpack(theme.iconInset))
-    b._tip = opts.showTooltip ~= false
-    b._anchor = opts.tooltipAnchor or "ANCHOR_RIGHT"
+    local b = CreateFrame("Button", nil, parent)
+    b.tex = b:CreateTexture(nil, "ARTWORK"); b.tex:SetPoint("TOPLEFT", 1, -1); b.tex:SetPoint("BOTTOMRIGHT", -1, 1)
     b:SetScript("OnEnter", function(self)
         if not self._tip or not self._id then return end
         GameTooltip:SetOwner(self, self._anchor)
@@ -182,10 +177,22 @@ function Mixin:GameIcon(parent, opts)
     function b:SetItem(item)   local ic, id = itemIcon(item); self._kind, self._id = "item", id; self.tex:SetTexture(ic or QMARK) end
     function b:SetIcon(v)      self._id = nil; self.tex:SetTexture(theme:IconPath(v) or v or QMARK) end
 
-    if opts.spell then b:SetSpell(opts.spell)
-    elseif opts.aura then b:SetAura(opts.aura)
-    elseif opts.item then b:SetItem(opts.item)
-    elseif opts.icon then b:SetIcon(opts.icon)
-    else b.tex:SetTexture(QMARK) end
+    -- Full (re)configure from an opts table - resets size, skin, tooltip and the icon source, so
+    -- the Builder can pool GameIcons (create-once, reconfigure-many) instead of leaking one per redraw.
+    function b:Configure(o)
+        o = o or {}
+        local size = o.size or 32
+        self:SetSize(size, size)
+        theme:StylePanel(self, theme.C.bg)             -- re-apply shape so a live skin swap sticks
+        self.tex:SetTexCoord(unpack(theme.iconInset))
+        self._tip = o.showTooltip ~= false
+        self._anchor = o.tooltipAnchor or "ANCHOR_RIGHT"
+        if o.spell then self:SetSpell(o.spell)
+        elseif o.aura then self:SetAura(o.aura)
+        elseif o.item then self:SetItem(o.item)
+        elseif o.icon then self:SetIcon(o.icon)
+        else self._kind, self._id = nil, nil; self.tex:SetTexture(QMARK) end
+    end
+    b:Configure(opts)
     return b
 end

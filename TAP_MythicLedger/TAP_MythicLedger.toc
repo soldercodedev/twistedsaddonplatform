@@ -3,7 +3,7 @@
 ## Notes: Account-wide Mythic+ run, party, and performance history. A module of the Twisteds Addon Platform - configure with /tap.
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
 ## Author: Twistedfury-Zul'jin
-## Version: 1.2.0
+## Version: 1.3.0
 ## Category: Combat
 ## Dependencies: TAP
 ## SavedVariables: TAP_MythicLedgerDB
@@ -79,6 +79,9 @@ ScoringGuide.lua
 
 # On-screen post-pull death report (overlay + party-chat post).
 DeathReport.lua
+
+# On-screen live coach: post-encounter, scores the run so far (engine read-only) and reminds you what to fix.
+LiveCoach.lua
 
 # Module registration, lifecycle wiring, and slash commands (loads last).
 Module.lua

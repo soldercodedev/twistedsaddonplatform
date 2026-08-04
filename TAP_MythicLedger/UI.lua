@@ -16,7 +16,8 @@ local UI = {}
 ML.UI = UI
 
 -- Module-local view state (reset via OnSelect / detail back buttons).
-local view = { season = "current", character = "all", detailRun = nil, detailPlayer = nil, detailDungeon = nil, detailCharacter = nil, review = nil }
+local view = { season = "current", character = "all", detailRun = nil, detailPlayer = nil, detailDungeon = nil, detailCharacter = nil, review = nil,
+    progMetric = "score", progWeekly = false, progRange = "all" }   -- progression chart: metric + per-run/weekly + date range
 -- Per-run player-review target (object refs, so it works for both saved and unsaved/preview runs).
 local reviewRunRef, reviewMemberRef = nil, nil
 
@@ -100,6 +101,7 @@ local retentionPending = nil   -- staged retention cap; committed only via the S
 local retScopePending   = nil  -- staged retention scope (ALL / SEASON / EXPANSION); committed on Apply
 local retKeepTopPending = nil  -- staged "never remove a top run"; committed on Apply
 local charSort     = { key = "runs", dir = "desc" }
+local vaultSort    = { key = "keys", dir = "desc" }   -- Weekly Vault table (top-8 keys this reset)
 local statsFilter  = { season = "current", character = nil, mapId = nil, minKey = 0 }
 local dungeonFilter = { text = "" }   -- Dungeons tab type-to-filter (applied at 3+ characters)
 local dungeonSearch                    -- persistent SearchBox frame - survives the builder Reset so it keeps focus
@@ -173,7 +175,8 @@ end
 
 local TABS = {
     { "overview", "Summary", "layout-grid" }, { "runs", "Runs", "list" }, { "dungeons", "Dungeons", "map" },
-    { "characters", "Characters", "users" }, { "players", "Players", "user" }, { "bests", "Bests", "trophy" },
+    { "characters", "Characters", "users" }, { "progression", "Progression", "activity" },
+    { "players", "Players", "user" }, { "bests", "Bests", "trophy" },
     { "settings", "Settings", "settings" }, { "debug", "Debug", "tools" },
 }
 
@@ -690,6 +693,93 @@ local function renderOverview(b, C, x, y, w, win)
 
     local rows = math.ceil(idx / cols)
     y = y - rows * gy - 6
+
+    -- ANALYTICS: weekly TRENDS + your hardest dungeons. New VIEWS over data already recorded - read-only,
+    -- reusing the persisted per-run score summaries (Store.Summary) and the per-dungeon aggregates.
+    do
+        local trend = (History.WeeklyTrend and History.WeeklyTrend(scopeSeason(), charScope, 4)) or {}
+        local weeksWithRuns = 0
+        for _, wk in ipairs(trend) do if (wk.runs or 0) > 0 then weeksWithRuns = weeksWithRuns + 1 end end
+
+        if weeksWithRuns >= 2 then
+            y = b:Section("THIS WEEK", x, y); y = y - 30
+
+            -- latest + previous non-nil value of a metric across the weekly series (oldest -> newest).
+            local function curPrev(key)
+                local cur, prev
+                for i = #trend, 1, -1 do
+                    local v = trend[i][key]
+                    if type(v) == "number" then
+                        if cur == nil then cur = v elseif prev == nil then prev = v; break end
+                    end
+                end
+                return cur, prev
+            end
+
+            local gap, ch = 12, 68
+            local cardW = math.floor((w - gap * 3) / 4)
+            -- One card: dark panel + label + this-week value + a "vs last week" delta chip. `neutral` shows
+            -- the delta in plain subtext (for a volume metric like run count, where more isn't "better").
+            local function trendCard(slot, key, label, fmtVal, fmtDelta, higherIsGood, neutral)
+                local cx = x + slot * (cardW + gap)
+                b:Box(cx - 1, y + 1, cardW + 2, ch + 2, 0.9, 0, C.border)
+                b:Box(cx, y, cardW, ch, 1, 1, { 0.05, 0.055, 0.07 })
+                b:Label(label, cx + 10, y - 11, C.subtext, 10)
+                local cur, prev = curPrev(key)
+                b:Label(cur and fmtVal(cur) or DASH, cx + 10, y - 29, C.text, 17)
+                if cur and prev and math.abs(cur - prev) > 1e-9 then
+                    local d = cur - prev
+                    local col = neutral and C.subtext
+                        or (((d > 0) == higherIsGood) and { 0.42, 0.82, 0.45 } or { 0.90, 0.42, 0.42 })
+                    local dfs = b:Label((d > 0 and "+" or "-") .. fmtDelta(d), cx + 10, y - 51, col, 11)
+                    b:Label("vs last week", cx + 15 + (dfs:GetStringWidth() or 26), y - 51, C.subtext, 10)
+                elseif cur and prev then
+                    b:Label("same as last week", cx + 10, y - 51, C.subtext, 10)
+                else
+                    b:Label("no prior week yet", cx + 10, y - 51, C.subtext, 10)
+                end
+            end
+
+            trendCard(0, "runs", "RUNS",
+                function(v) return tostring(math.floor(v + 0.5)) end,
+                function(d) return tostring(math.floor(math.abs(d) + 0.5)) end, true, true)
+            trendCard(1, "timedPct", "TIMED %",
+                function(v) return string.format("%.0f%%", v * 100) end, function(d) return string.format("%.0f%%", math.abs(d) * 100) end, true)
+            trendCard(2, "avgScore", "AVG SCORE",
+                function(v) return string.format("%.0f", v) end, function(d) return string.format("%.0f", math.abs(d)) end, true)
+            trendCard(3, "avgDeaths", "AVG DEATHS",
+                function(v) return string.format("%.1f", v) end, function(d) return string.format("%.1f", math.abs(d)) end, false)
+            y = y - ch - 20
+        end
+
+        -- TROUBLE SPOTS: your hardest dungeons this scope, ranked by fail rate + your avg deaths.
+        local dstats = (History.DungeonStats and History.DungeonStats(scopeSeason(), charScope)) or {}
+        local trouble = {}
+        for _, d in ipairs(dstats) do
+            local completed = (d.totals and (d.totals.completed or 0)) or 0
+            if completed >= 1 then
+                local sc = (1 - (d.timedPct or 0)) * 100 + (d.avgDeaths or 0) * 12
+                if sc > 0.5 then trouble[#trouble + 1] = { d = d, score = sc } end
+            end
+        end
+        table.sort(trouble, function(a, bb) return a.score > bb.score end)
+        if #trouble > 0 then
+            y = b:Section("TROUBLE SPOTS", x, y); y = y - 26
+            local maxScore = trouble[1].score
+            for i = 1, math.min(3, #trouble) do
+                local d = trouble[i].d
+                b:Row(x, y, w, 24, { index = i })
+                b:Label(d.name or ("map " .. tostring(d.mapId)), x + 12, y - 6, C.text, 12)
+                b:Label(string.format("%.0f%% timed", (d.timedPct or 0) * 100), x + w - 330, y - 6, C.subtext, 11)
+                b:Label(string.format("%.1f deaths", d.avgDeaths or 0), x + w - 210, y - 6, C.subtext, 11)
+                local bx, bw = x + w - 116, 100
+                b:Box(bx, y - 8, bw, 8, 0.16, 1, C.border)
+                b:Box(bx, y - 8, bw * math.max(0.05, trouble[i].score / (maxScore > 0 and maxScore or 1)), 8, 0.95, 2, { 0.90, 0.45, 0.30 })
+                y = y - 26
+            end
+        end
+    end
+
     return y - 8
 end
 
@@ -1458,7 +1548,74 @@ local function charTipData(c)
     return { title = c.fullName or c.name or "Character", lines = lines }
 end
 
+-- Keystone-level color: the game's own rarity ramp, with a band-ramp fallback (higher key = hotter).
+local function keyColor(level)
+    if type(level) ~= "number" then return { 0.45, 0.47, 0.55 } end
+    local GK = _G.C_ChallengeMode and _G.C_ChallengeMode.GetKeystoneLevelRarityColor
+    if GK then local c = GK(level); if c and c.r then return { c.r, c.g, c.b } end end
+    if level >= 12 then return { 1.00, 0.50, 0.00 }
+    elseif level >= 10 then return { 0.64, 0.21, 0.93 }
+    elseif level >= 7 then return { 0.00, 0.44, 0.87 }
+    elseif level >= 2 then return { 0.19, 1.00, 0.19 }
+    else return { 0.75, 0.77, 0.82 } end
+end
+
+-- WEEKLY VAULT: per-character top-8 COMPLETED keys this reset week, sortable, with an at-a-glance status.
+-- The 1st / 4th / 8th keys feed the three Great Vault slots (marked); "all 10s" = the 8th key is +10.
+local function renderWeeklyVault(b, C, x, y, w, win)
+    local vault = History.WeeklyVault and History.WeeklyVault()
+    if not vault or #vault == 0 then return y end
+
+    applySort(vault, vaultSort, {
+        name  = function(v) return nil end,
+        keys  = function(v) return v.count end,
+        vault = function(v) return v.slot8 or -1 end,   -- 8th key = top vault slot; -1 sinks the <8 chars
+    }, function(a, bb) return (a.fullName or "") < (bb.fullName or "") end)
+
+    local rowW, kx, colW = w - 12, x + 300, 27
+    local secs = History.SecondsUntilReset and History.SecondsUntilReset()
+    local resetStr = ""
+    if secs then
+        resetStr = string.format("   -   resets in %dd %dh", math.floor(secs / 86400), math.floor((secs % 86400) / 3600))
+    end
+    b:Sub("WEEKLY VAULT  -  top 8 keys this week" .. resetStr, x, y); y = y - 28
+
+    b:Box(x, y + 4, rowW, 24, 0.12, 0, C.accent)
+    sortHdr(b, C, x + 30, y - 2, 90, "Character", "name", vaultSort, win)
+    sortHdr(b, C, x + 232, y - 2, 44, "Keys", "keys", vaultSort, win)
+    for i = 1, 8 do   -- column numbers; 1 / 4 / 8 (the vault reward slots) in accent
+        local slot = (i == 1 or i == 4 or i == 8)
+        b:Label(tostring(i), kx + (i - 1) * colW + 3, y - 2, slot and C.accent or C.subtext, 10)
+    end
+    sortHdr(b, C, x + rowW - 66, y - 2, 60, "Vault +", "vault", vaultSort, win)
+    y = y - 26
+
+    for i, v in ipairs(vault) do
+        local h, yTop = 26, y
+        local full = (v.count >= 8)
+        b:Row(x, yTop, rowW, h, { index = i })
+        classGlyph(b, x + 6, yTop - 4, 18, v.classFile)
+        b:Label(classColorText(v.classFile, v.name or v.fullName or "?"), x + 30, yTop - 8, C.text, 12)
+        local perfect = full and (v.slot8 or 0) >= 10          -- 8/8, all +10 ("all 10s") -> gold
+        local cntCol = perfect and { 1.00, 0.82, 0.28 }
+            or (full and { 0.42, 0.82, 0.45 })                 -- 8/8 but below +10 -> green
+            or (v.count > 0 and { 0.95, 0.70, 0.30 })          -- partial -> amber (needs more runs)
+            or { 0.55, 0.57, 0.62 }                            -- none this week -> gray
+        b:Label(v.count .. " / 8", x + 232, yTop - 8, cntCol, 12)
+        for si = 1, 8 do
+            local cxp = kx + (si - 1) * colW
+            if si == 1 or si == 4 or si == 8 then b:Box(cxp - 2, yTop - 1, colW, h - 2, 0.10, 0, C.accent) end
+            local lvl = v.keys[si]
+            b:Label(lvl and tostring(lvl) or "-", cxp + 3, yTop - 8, lvl and keyColor(lvl) or { 0.42, 0.44, 0.5 }, 12)
+        end
+        b:Label(v.slot8 and ("+" .. v.slot8) or "-", x + rowW - 62, yTop - 8, v.slot8 and keyColor(v.slot8) or { 0.42, 0.44, 0.5 }, 13)
+        y = yTop - h - 2
+    end
+    return y - 14
+end
+
 local function renderCharacters(b, C, x, y, w, win)
+    y = renderWeeklyVault(b, C, x, y, w, win)
     local list = History.CharacterList()
     applySort(list, charSort, {
         name = function(c) return nil end, runs = function(c) return c.totals.runs end,
@@ -2184,6 +2341,7 @@ local SETTINGS_TABS = {
     { "tooltips",    "Tooltips",     "message" },
     { "scoreboard",  "Scoreboard",   "award" },
     { "deathreport", "Death Report", "skull" },
+    { "livecoach",   "Live Coach",   "target" },
     { "tracking",    "Tracking",     "activity" },   -- Tracking + Data retention (2-column)
     { "regroup",     "Regroup",      "users" },
     { "misc",        "Misc",         "tools" },       -- Debug logging + minimap
@@ -2196,6 +2354,7 @@ local SETTINGS_META = {
     tooltips    = { "Tooltips",     "Add your shared Mythic+ history with a player to their Blizzard tooltip, and choose where it appears." },
     scoreboard  = { "Scoreboard",   "The end-of-run scoreboard: how it's scaled, its font, and the sound it plays." },
     deathreport = { "Death Report", "An on-screen overlay after each pull (or at the run's end) listing who died and why." },
+    livecoach   = { "Live Coach",   "After a boss (or a big pull), a quick on-screen reminder of what to work on - scored the same way your final grade is." },
     tracking    = { "Tracking",     "What gets recorded, the post-run summary, and how long your history is kept." },
     regroup     = { "Regroup",      "When you group up again with someone you've keyed with, show a short local-only recap of your history together." },
     misc        = { "Misc",         "Debug logging, and the minimap button." },
@@ -2478,6 +2637,116 @@ local function renderSettings(b, C, x, y, w, win)
         end
     end
 
+    local function secLiveCoach()
+        local lc = s.liveCoach
+        if type(lc) ~= "table" then lc = {}; s.liveCoach = lc end
+        local fullW, baseX = COLW, x
+        local halfW = math.floor((COLW - 28) / 2)
+        local refreshPrev = function() if ML.LiveCoach and ML.LiveCoach.RefreshPreview then ML.LiveCoach.RefreshPreview() end end
+        local rowTop = y
+
+        -- LEFT column: behavior. The enable switch is here; the rest appears once it's on.
+        x, COLW = baseX, halfW
+        b:Sub("BEHAVIOR", x, y, halfW); y = y - 30
+        toggle("Enable Live Coach", function() return lc.enabled end,
+            function(v) lc.enabled = v; win:Refresh() end,
+            "After a boss (or a big pull), score the run SO FAR with the same engine your final grade uses and "
+            .. "flash a quick reminder of what to work on - kick more, push your DPS, heal harder, and so on. It "
+            .. "never changes your score; the number shown is a 'so far' preview.")
+        if lc.enabled then
+            b:Label("Pop when", x, y - 2, C.subtext)
+            T(b, b:Dropdown(x + 90, y), "When to pop the coach",
+                "Only when slipping keeps it quiet unless something is below par. The 'every fight' options also "
+                .. "reassure you when you're doing well."):SetChoices(240, {
+                { "SLIP", "Only when I'm slipping" }, { "QUIET", "Every fight (brief when good)" },
+                { "ALWAYS", "Every fight (praise too)" },
+            }, function() return lc.popPolicy or "SLIP" end, function(v) lc.popPolicy = v end)
+            y = y - 40
+            b:Label("After", x, y - 2, C.subtext)
+            T(b, b:Dropdown(x + 90, y), "What triggers it",
+                "Bosses only = one nudge per boss. Bosses + big pulls also fires after a trash pack that lasted "
+                .. "a while."):SetChoices(240, {
+                { "BOSS", "Boss kills only" }, { "ALL", "Bosses + big trash pulls" },
+            }, function() return lc.cadence or "BOSS" end, function(v) lc.cadence = v; win:Refresh() end)
+            y = y - 40
+            if (lc.cadence or "BOSS") == "ALL" then
+                slider("Big pull is", 130, 170, 5, 30, 1, "%.0fs+",
+                    function() return lc.minCombat or 10 end, function(v) lc.minCombat = v end,
+                    "How long a trash pull must last to count as a 'big pull' (shorter pulls are skipped).")
+            end
+            b:Label("Detail", x, y - 2, C.subtext)
+            T(b, b:Dropdown(x + 90, y), "How much it shows",
+                "One reminder = a single glanceable line. Top 2 = your two biggest fixes. Mini-review adds a "
+                .. "headline and a strength."):SetChoices(240, {
+                { "ONE", "One reminder" }, { "TWO", "Top 2 fixes" }, { "MINI", "Mini-review" },
+            }, function() return lc.depth or "ONE" end, function(v) lc.depth = v; refreshPrev() end)
+            y = y - 40
+            b:Label("Dismiss", x, y - 2, C.subtext)
+            T(b, b:Dropdown(x + 90, y), "How it goes away",
+                "Auto = fades after the time below. Click to dismiss = stays until you click it. Both = fades or "
+                .. "click, whichever first."):SetChoices(240, {
+                { "AUTO", "Auto (fade after time)" }, { "CLICK", "Click to dismiss" }, { "BOTH", "Both (fade or click)" },
+            }, function() return lc.dismiss or "AUTO" end, function(v) lc.dismiss = v; win:Refresh() end)
+            y = y - 40
+            if (lc.dismiss or "AUTO") ~= "CLICK" then
+                slider("On screen for", 130, 170, 2, 20, 1, "%.0fs",
+                    function() return lc.duration or 7 end, function(v) lc.duration = v end,
+                    "How long the coach stays before it fades out.")
+            end
+        end
+        local lb = y
+
+        if lc.enabled then
+            -- RIGHT column: appearance.
+            x, y, COLW = baseX + halfW + 28, rowTop, halfW
+            b:Sub("APPEARANCE", x, y, halfW); y = y - 30
+            b:Label("Font", x, y - 2, C.subtext)
+            b:FontSelect(x + 90, y, { width = 200, value = (lc.font ~= "" and lc.font) or "UBUNTU",
+                onChange = function(key) lc.font = key; win:Refresh() end })
+            y = y - 30
+            T(b, b:Button(x, y, 120, "Use UI font", "default", function() lc.font = ""; win:Refresh() end),
+                "Use UI font", "Use the same font as the rest of the UI.")
+            y = y - 38
+            slider("Text size", 130, 170, 10, 30, 1, "%.0f",
+                function() return lc.fontSize or 15 end, function(v) lc.fontSize = v; win:Refresh() end, "Overlay text size.")
+            b:Label("Header", x, y - 2, C.subtext)
+            b:Swatch(x + 70, y - 2, lc.titleColor or { 0.36, 0.83, 0.92 }, refreshPrev, "Header color", "The grade / header line.")
+            b:Label("Focus", x + 130, y - 2, C.subtext)
+            b:Swatch(x + 190, y - 2, lc.fixColor or { 0.95, 0.62, 0.30 }, refreshPrev, "Focus color", "The 'work on this' lines.")
+            y = y - 30
+            b:Label("Praise", x, y - 2, C.subtext)
+            b:Swatch(x + 70, y - 2, lc.goodColor or { 0.42, 0.82, 0.45 }, refreshPrev, "Praise color", "The 'on pace' / strength lines.")
+            y = y - 34
+            toggle("Draw a background panel", function() return lc.background end, function(v) lc.background = v end,
+                "Draw a translucent panel behind the coach text.")
+            if lc.background then
+                b:Label("Panel color", x + 20, y - 2, C.subtext)
+                b:Swatch(x + 110, y - 2, lc.bgColor or { 0.03, 0.04, 0.06, 0.85 }, refreshPrev,
+                    "Panel color", "The backing panel color (opacity is the slider below).")
+                y = y - 30
+                slider("Panel opacity", 130, 170, 0, 1, 0.05, "%.2f",
+                    function() return (lc.bgColor and lc.bgColor[4]) or 0.85 end,
+                    function(v) lc.bgColor = lc.bgColor or { 0.03, 0.04, 0.06, 0.85 }; lc.bgColor[4] = v; refreshPrev() end,
+                    "How opaque the background panel is (0 = invisible).")
+            end
+            local rb = y
+
+            -- Full width below both columns: live preview + Test / Move.
+            x, y, COLW = baseX, math.min(lb, rb) - 12, fullW
+            b:Sub("PREVIEW", x, y, fullW); y = y - 30
+            local ph = (ML.LiveCoach and ML.LiveCoach.RenderPreview and ML.LiveCoach.RenderPreview(b, x, y)) or 40
+            y = y - ph - 14
+            T(b, b:Button(x, y, 90, "Test", "default", function() if ML.LiveCoach then ML.LiveCoach.Test() end end,
+                { icon = "eye", iconSize = 13 }), "Test", "Flash a sample coach with your current settings.")
+            T(b, b:Button(x + 100, y, 140, "Move on screen", "default", function()
+                if _G.TAP and _G.TAP.CloseWindow then _G.TAP:CloseWindow() end
+                if ML.LiveCoach then ML.LiveCoach.StartMove() end
+            end, { icon = "arrows-sort", iconSize = 13 }), "Move on screen",
+                "Drag a sample where you want it, then click Save (or Cancel) on the bar that appears.")
+            y = y - 40
+        end
+    end
+
     local function secTracking()
     b:Sub("TRACKING", x, y); y = y - 30
     toggle("Track abandoned runs", function() return s.trackAbandoned end, function(v) s.trackAbandoned = v end,
@@ -2676,6 +2945,7 @@ local function renderSettings(b, C, x, y, w, win)
         tooltips    = { single = { secTooltips } },
         scoreboard  = { single = { secScoreboard } },
         deathreport = { single = { secDeathReport } },
+        livecoach   = { single = { secLiveCoach } },
         tracking    = { cols   = { { secTracking }, { secRetention } } },
         regroup     = { single = { secRegroup } },
         misc        = { single = { secDebug, secMinimap } },
@@ -2993,6 +3263,336 @@ function specHeroCard(b, C, cx, cy, cw, ch, sp, classFile)   -- forward-declared
     b:Label(seg, cx + 52, cy - 50, C.subtext, 10)
 end
 
+----------------------------------------------------------------------
+-- PROGRESSION chart (shared by Character Details = overall, Dungeon Details = per-dungeon). One column per
+-- run (chronological), height = the selected metric normalized across the series, colored green if better
+-- than the previous run / red if worse (polarity per metric), with a per-run hover tooltip and an overall
+-- Improving/Regressing/Steady readout. A Per-run / Weekly toggle averages by reset week instead. Reads
+-- scoring READ-ONLY (Store.Summary) - changes nothing it computes.
+----------------------------------------------------------------------
+local PROG_METRICS = {
+    { key = "score",  label = "Ledger Score",  icon = "award",       higherIsGood = true,  blurb = "Group-relative performance - comparable across every dungeon.", fmt = function(v) return string.format("%d", math.floor((v or 0) + 0.5)) end },
+    { key = "key",    label = "Key Level",     icon = "key",         higherIsGood = true,  blurb = "The keystone level completed each run.",                       fmt = function(v) return "+" .. math.floor((v or 0) + 0.5) end },
+    { key = "time",   label = "Time vs timer", icon = "hourglass",   higherIsGood = false, blurb = "Percent of the dungeon timer used - lower is faster.",         fmt = function(v) return string.format("%d%%", math.floor((v or 0) * 100 + 0.5)) end },
+    { key = "deaths", label = "Deaths",        icon = "skull",       higherIsGood = false, blurb = "Your deaths per run - lower is cleaner.",                      fmt = function(v) return string.format("%.1f", v or 0) end },
+    { key = "dps",    label = "DPS",           icon = "sword",       higherIsGood = true,  blurb = "Your damage per second - reads best on a single dungeon.",     fmt = function(v) return Util.shortNum(v or 0) end },
+    { key = "hps",    label = "HPS",           icon = "heartbeat",   higherIsGood = true,  blurb = "Your healing per second - reads best on a single dungeon.",    fmt = function(v) return Util.shortNum(v or 0) end },
+}
+local PROG_BY_KEY, PROG_CHOICES = {}, {}
+for _, m in ipairs(PROG_METRICS) do PROG_BY_KEY[m.key] = m; PROG_CHOICES[#PROG_CHOICES + 1] = { m.key, m.label } end
+
+-- Date-range window for the chart (applied to the runs before charting).
+local PROG_RANGES = {
+    { "all", "All",           nil },
+    { "2w",  "Last 2 weeks",  14 * 86400 },
+    { "4w",  "Last 4 weeks",  28 * 86400 },
+    { "8w",  "Last 8 weeks",  56 * 86400 },
+    { "6m",  "Last 6 months", 182 * 86400 },
+}
+local PROG_RANGE_CHOICES, PROG_RANGE_SECS = {}, {}
+for _, r in ipairs(PROG_RANGES) do PROG_RANGE_CHOICES[#PROG_RANGE_CHOICES + 1] = { r[1], r[2] }; PROG_RANGE_SECS[r[1]] = r[3] end
+
+-- The selected metric's value for one run (nil = skip this run for this metric).
+local function progValue(mkey, run)
+    if mkey == "score" then
+        local g = run.character and run.character.guid
+        local St = ML.Scoring and ML.Scoring.Store
+        local ms = g and St and St.Summary and St.Summary(run)[g]
+        return ms and ms.overall
+    elseif mkey == "key" then
+        return (type(run.level) == "number") and run.level or nil
+    elseif mkey == "time" then
+        if run.status == STATUS.ABANDONED then return nil end
+        if type(run.duration) == "number" and type(run.timeLimit) == "number" and run.timeLimit > 0 then
+            return run.duration / run.timeLimit
+        end
+        return nil
+    elseif mkey == "deaths" then
+        local d = History.PlayerDeaths(run)
+        return (type(d) == "number") and d or nil
+    elseif mkey == "dps" then
+        return run.playerStats and run.playerStats.dps
+    elseif mkey == "hps" then
+        return run.playerStats and run.playerStats.hps
+    end
+end
+
+local progChart   -- managed frame for the line chart: real diagonal lines need CreateLine (the Builder only draws rects)
+local function renderProgression(b, C, x, y, w, win, runsNewestFirst, opts)
+    opts = opts or {}
+    local mkey = PROG_BY_KEY[view.progMetric] and view.progMetric or "score"
+    local mdef = PROG_BY_KEY[mkey]
+
+    -- Observed key-level span (from this character's runs) -> the choices for the key-level filter.
+    local kLo, kHi
+    for _, r in ipairs(runsNewestFirst) do
+        local lv = (type(r.level) == "number") and r.level or nil
+        if lv then kLo = math.min(kLo or lv, lv); kHi = math.max(kHi or lv, lv) end
+    end
+    local keyMinChoices, keyMaxChoices = { { "any", "Any" } }, { { "any", "Any" } }
+    if kLo and kHi then
+        for lv = kLo, kHi do
+            keyMinChoices[#keyMinChoices + 1] = { tostring(lv), "+" .. lv }
+            keyMaxChoices[#keyMaxChoices + 1] = { tostring(lv), "+" .. lv }
+        end
+    end
+
+    if not opts.noSection then y = b:Section("PROGRESSION", x, y); y = y - 28 end
+    local nx = scopeControl(b, C, x, y, "Metric", 150, "Metric",
+        "Which metric to chart across your runs. Ledger Score is comparable across dungeons; Key / Time / DPS / HPS read best on a single dungeon.",
+        PROG_CHOICES, function() return view.progMetric or "score" end,
+        function(v) view.progMetric = v; if win then win:Refresh() end end)
+    nx = scopeControl(b, C, nx, y, "View", 110, "View",
+        "Per run = one point per run.  Weekly = one point per reset week (averaged).",
+        { { "run", "Per run" }, { "week", "Weekly" } },
+        function() return view.progWeekly and "week" or "run" end,
+        function(v) view.progWeekly = (v == "week"); if win then win:Refresh() end end)
+    scopeControl(b, C, nx, y, "Date range", 140, "Date range",
+        "Limit the chart to a recent time window.",
+        PROG_RANGE_CHOICES, function() return view.progRange or "all" end,
+        function(v) view.progRange = v; if win then win:Refresh() end end)
+    y = y - 34
+
+    -- Second control row: key-level window (Min <= key <= Max). Choices come from this character's own runs.
+    local kx = scopeControl(b, C, x, y, "Key min", 110, "Lowest key level",
+        "Only include runs at or above this key level.",
+        keyMinChoices, function() return view.progKeyMin or "any" end,
+        function(v) view.progKeyMin = (v ~= "any") and v or nil; if win then win:Refresh() end end)
+    scopeControl(b, C, kx, y, "Key max", 110, "Highest key level",
+        "Only include runs at or below this key level.",
+        keyMaxChoices, function() return view.progKeyMax or "any" end,
+        function(v) view.progKeyMax = (v ~= "any") and v or nil; if win then win:Refresh() end end)
+    y = y - 40
+
+    -- Divider between the configuration selectors and the metric banner + content below.
+    b:Box(x, y + 6, w, 1, 0.55, 2, C.border)
+
+    -- Metric banner: clearly names the selected metric with its icon, what it measures, and its polarity.
+    do
+        b:Tex(x, y - 8, 30, 30, mdef.icon or "activity", nil, C.accent)
+        b:Label(mdef.label, x + 42, y - 6, C.text, 19)
+        if mdef.blurb then b:Label(mdef.blurb, x + 42, y - 30, C.subtext, 11) end
+        local polTxt = mdef.higherIsGood and "Higher is better" or "Lower is better"
+        local polCol = { 0.55, 0.62, 0.78 }
+        local pillW = math.floor(22 + 6.4 * #polTxt)
+        local px = x + w - pillW
+        b:Box(px, y - 6, pillW, 22, 0.16, 1, polCol)
+        b:Box(px, y - 6, 3, 22, 0.95, 2, polCol)
+        b:Label(polTxt, px + 12, y - 10, polCol, 11)
+    end
+    y = y - 50
+
+    -- chronological (oldest -> newest); FilterRuns returns newest-first.
+    local chron = {}
+    for i = #runsNewestFirst, 1, -1 do chron[#chron + 1] = runsNewestFirst[i] end
+    local rsecs = PROG_RANGE_SECS[view.progRange or "all"]
+    if rsecs then
+        local cutoff = time() - rsecs
+        local f = {}
+        for _, r in ipairs(chron) do if (r.completedAt or r.startedAt or 0) >= cutoff then f[#f + 1] = r end end
+        chron = f
+    end
+    local kmin, kmax = tonumber(view.progKeyMin), tonumber(view.progKeyMax)
+    if kmin and kmax and kmin > kmax then kmin, kmax = kmax, kmin end   -- tolerate a crossed pair
+    if kmin or kmax then
+        local f = {}
+        for _, r in ipairs(chron) do
+            local lv = (type(r.level) == "number") and r.level or nil
+            if lv and (not kmin or lv >= kmin) and (not kmax or lv <= kmax) then f[#f + 1] = r end
+        end
+        chron = f
+    end
+
+    local pts = {}
+    if view.progWeekly then
+        local weekStart = (History.WeekStart and History.WeekStart()) or (time() - 7 * 86400)
+        local WEEK = 7 * 86400
+        local buckets, order = {}, {}
+        for _, r in ipairs(chron) do
+            local v = progValue(mkey, r)
+            if type(v) == "number" then
+                local t = r.completedAt or r.startedAt or 0
+                local wi = math.max(0, math.ceil((weekStart - t) / WEEK))   -- 0 = this week, 1 = last, ...
+                local bk = buckets[wi]
+                if not bk then bk = { sum = 0, n = 0 }; buckets[wi] = bk; order[#order + 1] = wi end
+                bk.sum = bk.sum + v; bk.n = bk.n + 1
+            end
+        end
+        table.sort(order, function(a, bb) return a > bb end)   -- oldest first
+        for _, wi in ipairs(order) do
+            local bk = buckets[wi]
+            local avg = bk.sum / bk.n
+            pts[#pts + 1] = { value = avg, tip = { title = (wi == 0 and "This week" or (wi .. " week" .. (wi == 1 and "" or "s") .. " ago")),
+                lines = { { left = mdef.label, right = mdef.fmt(avg), rcolor = "accent" }, { left = "Runs", right = tostring(bk.n) } } } }
+        end
+    else
+        for _, r in ipairs(chron) do
+            local v = progValue(mkey, r)
+            if type(v) == "number" then pts[#pts + 1] = { value = v, run = r } end
+        end
+        if #pts > 40 then local t = {}; for i = #pts - 39, #pts do t[#t + 1] = pts[i] end; pts = t end
+        for _, p in ipairs(pts) do
+            local r = p.run
+            local g = r.character and r.character.guid
+            local St = ML.Scoring and ML.Scoring.Store
+            local ms = g and St and St.Summary and St.Summary(r)[g]
+            local lines = {}
+            if opts.showDungeon and r.dungeonName then lines[#lines + 1] = { left = "Dungeon", right = r.dungeonName } end
+            lines[#lines + 1] = { left = "Key", right = r.level and ("+" .. r.level) or "-", rcolor = (r.status == STATUS.TIMED) and "accent" or nil }
+            lines[#lines + 1] = { left = mdef.label, right = mdef.fmt(p.value), rcolor = "accent" }
+            if ms and ms.grade then lines[#lines + 1] = { left = "Grade", right = ms.grade } end
+            lines[#lines + 1] = { left = "When", right = Util.dateShort(r.completedAt or r.startedAt) }
+            p.tip = { title = (r.status == STATUS.TIMED and "Timed key") or (r.status == STATUS.DEPLETED and "Depleted") or "Run", lines = lines }
+        end
+    end
+
+    local minPts = view.progWeekly and 2 or 3
+    if #pts < minPts then
+        b:Label("Not enough runs yet to chart a trend" .. (view.progWeekly and " (need 2+ weeks)." or " (need 3+ runs)."), x + 2, y - 2, C.subtext, 12)
+        return y - 26
+    end
+
+    local n = #pts
+    local mn, mx = pts[1].value, pts[1].value
+    for _, p in ipairs(pts) do mn = math.min(mn, p.value); mx = math.max(mx, p.value) end
+    local span = (mx - mn > 0) and (mx - mn) or 1
+    local sum = 0; for _, p in ipairs(pts) do sum = sum + p.value end
+    local avg = sum / n
+
+    -- Trend (recent third vs earlier third) - headlines the chart.
+    local third = math.max(1, math.floor(n / 3))
+    local es, rs = 0, 0
+    for i = 1, third do es = es + pts[i].value end
+    for i = n - third + 1, n do rs = rs + pts[i].value end
+    local earlyAvg, recentAvg = es / third, rs / third
+    local goodCol, badCol, neutralCol = { 0.42, 0.82, 0.45 }, { 0.90, 0.42, 0.42 }, { 0.55, 0.58, 0.66 }
+    local dtrend = recentAvg - earlyAvg
+    local trendTxt, trendCol
+    if math.abs(dtrend) < span * 0.04 then trendTxt, trendCol = "Steady", neutralCol
+    elseif (dtrend > 0) == mdef.higherIsGood then trendTxt, trendCol = "Improving", goodCol
+    else trendTxt, trendCol = "Regressing", badCol end
+
+    -- Hero cards: Latest / Min / Max / Average of the selected metric over the shown series. (The big number
+    -- before was just the latest value; it is the LATEST card now, carrying the trend + its detail on hover.)
+    do
+        local gold, cool = { 1, 0.82, 0.28 }, { 0.55, 0.62, 0.78 }
+        local bestIsMax = mdef.higherIsGood
+        local gap, ch, isz = 12, 88, 34
+        local cw = math.floor((w - 3 * gap) / 4)
+        heroStatCard(b, C, x, y, cw, ch, {
+            label = "LATEST", value = mdef.fmt(pts[n].value), accent = trendCol, sub = trendTxt,
+            icon = "activity", iconSize = isz,
+            tipData = { title = "Latest " .. (view.progWeekly and "week" or "run"),
+                lines = { { left = mdef.label, right = mdef.fmt(pts[n].value), rcolor = "accent" },
+                          { left = "Trend", right = trendTxt },
+                          { left = "Earlier avg", right = mdef.fmt(earlyAvg) },
+                          { left = "Recent avg", right = mdef.fmt(recentAvg) } } } })
+        heroStatCard(b, C, x + (cw + gap), y, cw, ch, {
+            label = "MIN", value = mdef.fmt(mn), accent = bestIsMax and cool or gold,
+            icon = "arrow-down", iconSize = isz, sub = bestIsMax and "lowest" or "best" })
+        heroStatCard(b, C, x + 2 * (cw + gap), y, cw, ch, {
+            label = "MAX", value = mdef.fmt(mx), accent = bestIsMax and gold or cool,
+            icon = "arrow-up", iconSize = isz, sub = bestIsMax and "best" or "highest" })
+        heroStatCard(b, C, x + 3 * (cw + gap), y, cw, ch, {
+            label = "AVERAGE", value = mdef.fmt(avg), accent = { 0.95, 0.76, 0.32 },
+            icon = "minus", iconSize = isz, sub = string.format("%d %s", n, view.progWeekly and "weeks" or "runs") })
+    end
+    y = y - 104
+
+    -- Chart card: dark base + 1px border + accent top bar.
+    local axisW, chartH = 50, 110
+    local plotX, plotW = x + axisW, w - axisW - 6
+    local topY, botY = y, y - chartH
+    b:Box(plotX - 1, topY + 1, plotW + 2, chartH + 2, 0.9, 0, C.border)
+    b:Box(plotX, topY, plotW, chartH, 1, 1, { 0.055, 0.06, 0.085 })
+    b:Box(plotX, topY, plotW, 2, 1, 2, C.accent)
+
+    local padL, padR, padV = 16, 16, 14
+    local usableW = plotW - padL - padR
+    local step = (n > 1) and (usableW / (n - 1)) or 0
+    local function localY(v) return padV + ((v - mn) / span) * (chartH - 2 * padV) end   -- up from cf bottom
+    local function localX(i) return padL + (i - 1) * step end
+    local function contentY(v) return botY + localY(v) end                               -- cf bottom == botY
+
+    -- Gridlines (max / mid / min) + y labels.
+    for _, gl in ipairs({ mx, (mx + mn) / 2, mn }) do
+        local gy = contentY(gl)
+        b:Box(plotX + 6, gy, plotW - 12, 1, 0.13, 2, C.border)
+        b:Label(mdef.fmt(gl), x, gy + 5, C.subtext, 10)
+    end
+
+    -- Average reference line (dashed amber) + label.
+    local avgCol = { 0.95, 0.76, 0.32 }
+    local avgY = contentY(avg)
+    local dashN = 24
+    local dstep = (plotW - 12) / dashN
+    for k = 0, dashN - 1 do b:Box(plotX + 6 + k * dstep, avgY, dstep * 0.55, 1, 0.85, 3, avgCol) end
+
+    -- The line: real diagonal segments (CreateLine) on a managed frame, per-segment colored (improve/
+    -- regress) with a soft glow; hover regions live on the frame so they sit above the lines.
+    local cf = progChart
+    if not cf then cf = CreateFrame("Frame", nil, b.content); cf.segs, cf.glow, cf.dots, cf.hits = {}, {}, {}, {}; progChart = cf end
+    if cf:GetParent() ~= b.content then cf:SetParent(b.content) end
+    cf:ClearAllPoints(); cf:SetPoint("TOPLEFT", b.content, "TOPLEFT", plotX, topY); cf:SetSize(math.max(1, plotW), chartH); cf:Show()
+    if b.Transient then b:Transient(cf) end
+
+    -- Average label drawn ON the chart frame (OVERLAY) so the line never clips it, sitting above the line.
+    cf.avgLabel = cf.avgLabel or cf:CreateFontString(nil, "OVERLAY")
+    cf.avgLabel:SetFont(b.theme.FONT or _G.STANDARD_TEXT_FONT, 10)
+    cf.avgLabel:SetText("avg " .. mdef.fmt(avg)); cf.avgLabel:SetTextColor(avgCol[1], avgCol[2], avgCol[3])
+    local alY = localY(avg)
+    cf.avgLabel:ClearAllPoints()
+    cf.avgLabel:SetPoint("BOTTOMLEFT", cf, plotW - 78, (alY > chartH * 0.72) and (alY - 13) or (alY + 8))
+    cf.avgLabel:Show()
+
+    local bestI = 1
+    for i = 2, n do
+        local better = mdef.higherIsGood and (pts[i].value > pts[bestI].value) or ((not mdef.higherIsGood) and pts[i].value < pts[bestI].value)
+        if better then bestI = i end
+    end
+
+    for i = 1, n - 1 do
+        local x1, y1, x2, y2 = localX(i), localY(pts[i].value), localX(i + 1), localY(pts[i + 1].value)
+        local dd = pts[i + 1].value - pts[i].value
+        local col = neutralCol
+        if math.abs(dd) > 1e-9 then col = ((dd > 0) == mdef.higherIsGood) and goodCol or badCol end
+        local gl = cf.glow[i] or cf:CreateLine(); cf.glow[i] = gl
+        gl:SetThickness(6); gl:SetColorTexture(col[1], col[2], col[3], 0.18)
+        gl:SetStartPoint("BOTTOMLEFT", cf, x1, y1); gl:SetEndPoint("BOTTOMLEFT", cf, x2, y2); gl:Show()
+        local ln = cf.segs[i] or cf:CreateLine(); cf.segs[i] = ln
+        ln:SetThickness(2.5); ln:SetColorTexture(col[1], col[2], col[3], 1)
+        ln:SetStartPoint("BOTTOMLEFT", cf, x1, y1); ln:SetEndPoint("BOTTOMLEFT", cf, x2, y2); ln:Show()
+    end
+    for i = n, #cf.segs do if cf.segs[i] then cf.segs[i]:Hide() end; if cf.glow[i] then cf.glow[i]:Hide() end end
+
+    for i = 1, n do
+        local lx, ly = localX(i), localY(pts[i].value)
+        local dot = cf.dots[i] or cf:CreateTexture(nil, "OVERLAY"); cf.dots[i] = dot
+        if i == bestI then dot:SetColorTexture(1, 0.82, 0.28, 1); dot:SetSize(8, 8)
+        else dot:SetColorTexture(0.93, 0.95, 0.99, 1); dot:SetSize(5, 5) end
+        dot:ClearAllPoints(); dot:SetPoint("CENTER", cf, "BOTTOMLEFT", lx, ly); dot:Show()
+
+        local hit = cf.hits[i]
+        if not hit then
+            hit = CreateFrame("Button", nil, cf); cf.hits[i] = hit
+            hit.hl = hit:CreateTexture(nil, "HIGHLIGHT"); hit.hl:SetAllPoints(); hit.hl:SetColorTexture(1, 1, 1, 0.05)
+            hit:SetScript("OnEnter", function(s) if b.theme._showTip then b.theme:_showTip(s) end end)
+            hit:SetScript("OnLeave", function() if _G.GameTooltip_Hide then GameTooltip_Hide() end end)
+        end
+        if pts[i].tip and b.theme.SetTipData then b.theme:SetTipData(hit, pts[i].tip) end
+        hit:SetSize(math.max(12, step), chartH)
+        hit:ClearAllPoints(); hit:SetPoint("BOTTOM", cf, "BOTTOMLEFT", lx, 0); hit:Show()
+    end
+    for i = n + 1, #cf.dots do if cf.dots[i] then cf.dots[i]:Hide() end; if cf.hits[i] then cf.hits[i]:Hide() end end
+
+    if not view.progWeekly and pts[1].run and pts[n].run then
+        b:Label(Util.dateShort(pts[1].run.completedAt or pts[1].run.startedAt), plotX + padL - 8, botY - 3, C.subtext, 10)
+        b:Label(Util.dateShort(pts[n].run.completedAt or pts[n].run.startedAt), plotX + plotW - 92, botY - 3, C.subtext, 10)
+    end
+
+    return botY - 28
+end
+
 local function renderCharacterDetails(b, C, x, y, w, win)
     local key = view.detailCharacter
     local rowW = w - 12
@@ -3114,10 +3714,55 @@ end
 ----------------------------------------------------------------------
 -- Dispatch.
 ----------------------------------------------------------------------
+-- Dedicated PROGRESSION page: pick a character + a dungeon (or all) and chart the selected metric over that
+-- character's runs. Its own sidebar item; reuses renderProgression for the chart + metric/view controls.
+local function renderProgressionPage(b, C, x, y, w, win)
+    local chars = History.CharacterList()
+    if #chars == 0 then
+        b:Wrap("No runs recorded yet - your progression will show here once you've run some keys.", x, y, w - 20, C.subtext, 12)
+        return y - 30
+    end
+    local function charExists(fn) for _, c in ipairs(chars) do if c.fullName == fn then return true end end return false end
+    if not (view.progChar and charExists(view.progChar)) then
+        local me = API and API.PlayerContext and API.PlayerContext()
+        view.progChar = (me and me.fullName and charExists(me.fullName) and me.fullName) or chars[1].fullName
+        view.progDungeon = nil
+    end
+    local progChar = view.progChar
+
+    y = renderSeasonSelector(b, C, x, y, w, win)   -- Season row
+
+    -- Character + Dungeon row.
+    local charChoices = {}
+    for _, ch in ipairs(chars) do
+        local nm = (ch.name and ch.name ~= "?" and ch.name) or ch.fullName or "Unknown"
+        charChoices[#charChoices + 1] = { ch.fullName, classColorText(ch.classFile, nm) }
+    end
+    local nx = scopeControl(b, C, x, y, "Character", 190, "Character",
+        "Which character's progression to chart.",
+        charChoices, function() return view.progChar end,
+        function(v) view.progChar = v; view.progDungeon = nil; if win then win:Refresh() end end)
+
+    local det = History.CharacterDetail(progChar, scopeSeason())
+    local dunChoices = { { "all", "All dungeons" } }
+    for _, dn in ipairs((det and det.dungeons) or {}) do
+        dunChoices[#dunChoices + 1] = { dn.mapId, dn.name or ("Map " .. tostring(dn.mapId)) }
+    end
+    scopeControl(b, C, nx, y, "Dungeon", 200, "Dungeon",
+        "Chart all this character's dungeons together, or focus on one.",
+        dunChoices, function() return view.progDungeon or "all" end,
+        function(v) view.progDungeon = (v == "all") and nil or v; if win then win:Refresh() end end)
+    y = y - 40
+
+    local runs = History.FilterRuns({ character = progChar, mapId = view.progDungeon, seasonId = scopeSeason() })
+    y = renderProgression(b, C, x, y, w, win, runs, { showDungeon = (view.progDungeon == nil), noSection = true })
+    return y - 8
+end
+
 local TAB_RENDER = {
     overview = renderOverview, runs = renderRunsList, dungeons = renderDungeons,
-    characters = renderCharacters, players = renderPlayers, bests = renderBests,
-    settings = renderSettings, debug = renderDebug,
+    characters = renderCharacters, progression = renderProgressionPage, players = renderPlayers,
+    bests = renderBests, settings = renderSettings, debug = renderDebug,
 }
 
 -- Title + description for the standard page heading drawn on each list page (Settings draws its own;
@@ -3127,6 +3772,7 @@ local PAGE_META = {
     runs       = { "Runs",           "Every timed, depleted, or abandoned key you've recorded, newest first. Click a run for its full details." },
     dungeons   = { "Dungeons",       "Per-dungeon stats across your recorded runs - best time, timed %, and averages. Click one to drill in." },
     characters = { "Characters",     "Every character you've recorded runs on, with their season stats. Click one for its full history." },
+    progression = { "Progression",   "Chart a character's improvement or regression over their runs - overall or in one dungeon. Pick a metric and per-run or weekly." },
     players    = { "Players",        "Everyone you've keyed with - shared history, best run together, averages, and your private notes." },
     bests      = { "Personal Bests", "Your best recorded run for each dungeon this season, by keystone level and time." },
     debug      = { "Debug",          "Diagnostics and the recent activity log - handy when reporting an issue." },

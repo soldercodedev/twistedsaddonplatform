@@ -346,10 +346,16 @@ end
 ----------------------------------------------------------------------
 -- Page: Overview (dashboard - stats + a quick list that links to each module's page)
 ----------------------------------------------------------------------
+-- Frames of the FIRST add-on row's controls, recaptured every render so the setup tour can ring + arrow
+-- the REAL toggle / Open / What's New / Fully disable buttons (not a mock-up that could drift).
+local overviewAnchors = {}
+local openWelcome   -- setup-tour opener; forward-declared so the Help "Setup Tour" page can reach it
+
 local function pageOverview(b, win)
     local C = theme.C
     local w = b.contentWidth
     local x, y = 24, -18
+    wipe(overviewAnchors)
 
     -- Count ADD-ONS (one per installed add-on), not raw modules - the Mythic Ledger add-on registers a
     -- few modules (its main module + the Dungeon Guide + Scoring Guide pages) that share one Overview row.
@@ -376,7 +382,7 @@ local function pageOverview(b, win)
     y = b:Section("ADD-ONS", x, y); y = y - 30
     local rowW = w - 48
     local rpad = 14   -- inset for the right-aligned controls, so they don't sit flush to the row edge
-    for _, lead in ipairs(leads) do
+    for i, lead in ipairs(leads) do
         local spec = lead.spec
         local enabled = lead:IsEnabled()
         local rowTitle = spec.group or spec.title or spec.id   -- addon-level name (Mythic Ledger, not Dungeon Guide)
@@ -394,11 +400,12 @@ local function pageOverview(b, win)
                 { text = "v" .. mver, variant = isPre and "info" or "success" })
         end
         statusBadge(b, lead, x + rowW - 200 - rpad, hy - 5)
-        b:Toggle(x + rowW - 112 - rpad, hy - 4, enabled, function(v) setAddonModulesEnabled(spec.addon or spec.id, v) end, { color = C.accent })
-        b:Button(x + rowW - 66 - rpad, hy, 66, "Open", "default", function()
+        local tgl = b:Toggle(x + rowW - 112 - rpad, hy - 4, enabled, function(v) setAddonModulesEnabled(spec.addon or spec.id, v) end, { color = C.accent })
+        local openBtn = b:Button(x + rowW - 66 - rpad, hy, 66, "Open", "default", function()
             safeHook(lead.spec.OnSelect, lead)   -- reset module view state, as a sidebar click would
             win:SelectView(overviewDefaultView(lead))
         end)
+        if i == 1 then overviewAnchors.toggle, overviewAnchors.open = tgl, openBtn end
         y = y - 34   -- clear gap below the header band so the description doesn't hug the controls
         if spec.desc then
             local _, dh = b:Wrap(spec.desc, x + 42, y, rowW - 70, C.subtext, 10)
@@ -407,14 +414,15 @@ local function pageOverview(b, win)
         -- What's New (accent) + a red "Fully disable" (hard unload of the whole add-on).
         local wnY = y
         if spec.changelog then
-            b:Button(x + 42, wnY - 2, 116, "What's New", "primary",
+            local wnBtn = b:Button(x + 42, wnY - 2, 116, "What's New", "primary",
                 function() openWhatsNew(rowTitle, spec.changelog) end,
                 { icon = "sparkles", iconSize = 12, height = 22 })
+            if i == 1 then overviewAnchors.whatsnew = wnBtn end
         end
         do
             local aname, atitle = spec.addon or spec.id, rowTitle
             local fx = (spec.changelog and (x + 42 + 124)) or (x + 42)
-            theme:SetTip(b:Button(fx, wnY - 2, 150, "Fully disable", "danger", function()
+            local disBtn = theme:SetTip(b:Button(fx, wnY - 2, 150, "Fully disable", "danger", function()
                 theme:Confirm({
                     title = "Fully disable " .. atitle .. "?",
                     message = "The on/off toggle above just pauses this add-on. Fully disabling unloads its "
@@ -427,6 +435,7 @@ local function pageOverview(b, win)
                 })
             end, { icon = "power", iconSize = 12, height = 22 }), "Fully disable",
                 "Unload " .. atitle .. " entirely (reloads the UI). Different from the on/off toggle above, which just pauses it live.")
+            if i == 1 then overviewAnchors.disable = disBtn end
         end
         y = wnY - 30
         b:Box(x, yTop, rowW, yTop - y, enabled and 0.05 or 0.03, 0, enabled and C.accent or C.card)
@@ -1026,6 +1035,22 @@ local function buildModuleCategories(pages)
     end
 end
 
+-- Help > Setup Tour: a small landing that also (re)opens the guided tour - the same thing /tap tour does.
+local function pageSetupTour(b, win)
+    local C = theme.C
+    local x, y = 24, -18
+    y = b:PageHeading(x, y, "Setup Tour",
+        "New here? Take a quick guided walk-through of the platform - how to turn each add-on on or off, "
+        .. "open one to configure it, and theme the whole thing.")
+    y = y - 6
+    b:Button(x, y, 180, "Start the tour", "primary", function() if openWelcome then openWelcome() end end,
+        { icon = "compass", iconSize = 14, height = 30 })
+    y = y - 46
+    local _, h = b:Wrap("The tour rings each control on the Overview and explains what it does. You can also "
+        .. "start it any time by typing /tap tour.", x, y, (b.contentWidth or 700) - 48, C.subtext, 12)
+    return y - (h + 40)
+end
+
 local function buildPages()
     local pages = {
         { header = "Platform" },
@@ -1034,6 +1059,8 @@ local function buildPages()
     }
     if #Suite.modules > 0 then buildModuleCategories(pages) end
     pages[#pages + 1] = { header = "Help" }
+    pages[#pages + 1] = { view = "setuptour", label = "Setup Tour", icon = theme:GetIcon("compass"),
+        render = pageSetupTour, onSelect = function() if openWelcome then openWelcome() end end }
     pages[#pages + 1] = { view = "getinvolved", label = "Get Involved", icon = theme:GetIcon("heart"),
         render = pageGetInvolved, pulse = getInvolvedShouldPulse(), onSelect = function(w) markGetInvolvedEngaged(w) end }
     pages[#pages + 1] = { view = "commands", label = "Commands", icon = theme:GetIcon("chevron-right"), render = pageCommands }
@@ -1184,6 +1211,200 @@ do
             if m.welcomeSeen == WELCOME_CAMPAIGN then return end   -- opened/reset in the meantime
             m.welcomeSeen = WELCOME_CAMPAIGN
             Suite:OpenWindow("getinvolved")
+        end)
+    end)
+end
+
+----------------------------------------------------------------------
+-- First-launch setup: a light welcome dialog, then a short coached tour of the REAL window (turn add-ons
+-- on/off, open one to configure it, theme the platform). Shown once per account (managerDB().setupTourSeen),
+-- replayable with /tap tour. It teaches the actual controls instead of duplicating them, so it never goes
+-- stale. On a fresh install it takes priority over the Get Involved auto-open (claims that flag so the two
+-- never stack).
+----------------------------------------------------------------------
+-- A DISTINCT tutorial color (a bright teal) so the coach never blends into the user's chosen accent.
+local TOUR_C = { 0.36, 0.83, 0.92 }
+
+local coach, coachRing
+-- A pulsing highlight ring that lassos the exact control a step points at (anchored to the real frame,
+-- so it tracks the button even if the page reflows).
+local function ringFrame()
+    if coachRing then return coachRing end
+    local r = CreateFrame("Frame", "TAPSetupRing", UIParent)
+    r:SetFrameStrata("DIALOG")
+    local function edge()
+        local t = r:CreateTexture(nil, "OVERLAY")
+        t:SetColorTexture(TOUR_C[1], TOUR_C[2], TOUR_C[3], 1)
+        return t
+    end
+    local W = 2
+    r.eT, r.eB, r.eL, r.eR = edge(), edge(), edge(), edge()
+    r.eT:SetPoint("TOPLEFT"); r.eT:SetPoint("TOPRIGHT"); r.eT:SetHeight(W)
+    r.eB:SetPoint("BOTTOMLEFT"); r.eB:SetPoint("BOTTOMRIGHT"); r.eB:SetHeight(W)
+    r.eL:SetPoint("TOPLEFT"); r.eL:SetPoint("BOTTOMLEFT"); r.eL:SetWidth(W)
+    r.eR:SetPoint("TOPRIGHT"); r.eR:SetPoint("BOTTOMRIGHT"); r.eR:SetWidth(W)
+    local ag = r:CreateAnimationGroup(); ag:SetLooping("BOUNCE")
+    local a = ag:CreateAnimation("Alpha"); a:SetFromAlpha(1); a:SetToAlpha(0.25); a:SetDuration(0.7); a:SetSmoothing("IN_OUT")
+    r._ag = ag
+    coachRing = r
+    return r
+end
+local function showRing(target)
+    if not (target and target.GetObjectType) then if coachRing then coachRing:Hide() end return end
+    local r = ringFrame()
+    r:ClearAllPoints()
+    r:SetPoint("TOPLEFT", target, "TOPLEFT", -5, 5)
+    r:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 5, -5)
+    r:Show(); r._ag:Stop(); r._ag:Play()
+end
+
+local function coachFrame()
+    if coach then return coach end
+    local C = theme.C
+    local f = CreateFrame("Frame", "TAPSetupCoach", UIParent)
+    f:SetSize(320, 150); f:SetFrameStrata("DIALOG"); f:SetToplevel(true)
+
+    -- Float it clearly above the window: a soft tutorial-color halo + drop shadow + top-bar + border.
+    local glow = f:CreateTexture(nil, "BACKGROUND", nil, -7)
+    glow:SetColorTexture(TOUR_C[1], TOUR_C[2], TOUR_C[3], 0.30)
+    glow:SetPoint("TOPLEFT", -4, 4); glow:SetPoint("BOTTOMRIGHT", 4, -4)
+
+    theme:StylePanel(f, C.panel, TOUR_C)
+    theme:AttachShadow(f, { spread = 13, alpha = 0.6, offsetY = -5 })
+
+    local bar = f:CreateTexture(nil, "ARTWORK"); bar:SetHeight(4)
+    bar:SetPoint("TOPLEFT", 1, -1); bar:SetPoint("TOPRIGHT", -1, -1)
+    bar:SetColorTexture(TOUR_C[1], TOUR_C[2], TOUR_C[3], 1)
+
+    -- Chevron that points UP from the card's top edge at the ringed control (hidden for side-anchored steps).
+    f.arrow = f:CreateTexture(nil, "OVERLAY")
+    f.arrow:SetTexture("Interface\\Buttons\\UI-SortArrow"); f.arrow:SetTexCoord(0, 1, 1, 0)
+    f.arrow:SetVertexColor(TOUR_C[1], TOUR_C[2], TOUR_C[3]); f.arrow:SetSize(22, 14)
+    f.arrow:SetPoint("BOTTOM", f, "TOP", 0, -1)
+
+    f.icon = f:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(16, 16); f.icon:SetPoint("TOPLEFT", 14, -14)
+    f.icon:SetTexture(theme:IconPath("sparkles") or "sparkles")
+    f.icon:SetVertexColor(TOUR_C[1], TOUR_C[2], TOUR_C[3])
+
+    f.title = f:CreateFontString(nil, "OVERLAY"); f.title:SetFont(theme.FONT, 14); f.title:SetPoint("TOPLEFT", 36, -14)
+    f.title:SetTextColor(TOUR_C[1], TOUR_C[2], TOUR_C[3])
+    f.step  = f:CreateFontString(nil, "OVERLAY"); f.step:SetFont(theme.FONT, 11); f.step:SetPoint("TOPRIGHT", -14, -16)
+    f.step:SetTextColor(C.subtext[1], C.subtext[2], C.subtext[3])
+    f.body  = f:CreateFontString(nil, "OVERLAY"); f.body:SetFont(theme.FONT, 12); f.body:SetPoint("TOPLEFT", 14, -42)
+    f.body:SetWidth(292); f.body:SetJustifyH("LEFT"); f.body:SetJustifyV("TOP")
+    f.body:SetTextColor(C.text[1], C.text[2], C.text[3])
+    f.skip = theme:Button(f); f.skip:SetPoint("BOTTOMLEFT", 12, 10)
+    f.next = theme:Button(f); f.next:SetPoint("BOTTOMRIGHT", -12, 10)
+    coach = f
+    return f
+end
+
+local tourList
+local function stopTour()
+    if coach then coach:Hide() end
+    if coachRing then coachRing:Hide() end
+    managerDB().setupTourSeen = true
+end
+-- Place the card next to its target and point the ring + arrow at it. Side "right" sits beside the target
+-- (for the tall sidebar); the default drops the card just below the target with an up-arrow.
+local function positionCoach(f, s)
+    local target = s.target and s.target()
+    f:ClearAllPoints()
+    if target and target.GetObjectType then
+        if s.side == "right" then
+            f.arrow:Hide()
+            f:SetPoint("TOPLEFT", target, "TOPRIGHT", 22, -6)
+        else
+            f.arrow:Show()
+            f:SetPoint("TOP", target, "BOTTOM", 0, -16)
+        end
+        showRing(target)
+    else
+        f.arrow:Hide()
+        f:SetPoint("BOTTOM", win.frame, "BOTTOM", 40, 64)
+        showRing(nil)
+    end
+end
+local function showTourStep(i)
+    local s = tourList and tourList[i]
+    if not s or not (win and win:IsShown()) then return stopTour() end
+    if s.view then win:SelectView(s.view) end
+    -- Resolve the target AFTER the view renders; if this add-on doesn't have that control, skip ahead.
+    if s.target and not s.target() then return showTourStep(i + 1) end
+    local f = coachFrame()
+    f.title:SetText(s.title)
+    f.body:SetText(s.body)
+    f.step:SetText(i .. " / " .. #tourList)
+    f:SetHeight(90 + (f.body:GetStringHeight() or 40))
+    local last = (i == #tourList)
+    f.skip:Configure("Skip", 58, 24, "ghost", stopTour)
+    f.next:Configure(last and "Done" or "Next", 72, 24, "primary",
+        function() if last then stopTour() else showTourStep(i + 1) end end)
+    positionCoach(f, s); f:Show(); f:Raise()
+end
+local function startTour()
+    Suite:OpenWindow("overview")   -- renders Overview, which captures the first row's control frames
+    if not (win and win:IsShown()) then return end
+    tourList = {
+        { view = "overview", title = "The on/off switch",
+          target = function() return overviewAnchors.toggle end,
+          body = "Every add-on has this switch on its Overview row. Flip it off to pause the add-on instantly - no reload - and back on whenever you like." },
+        { view = "overview", title = "Open it up",
+          target = function() return overviewAnchors.open end,
+          body = "Open jumps straight into this add-on's own pages in the sidebar, where all of its settings live." },
+        { view = "overview", title = "What's New",
+          target = function() return overviewAnchors.whatsnew end,
+          body = "Catch up on exactly what changed in this add-on's latest update." },
+        { view = "overview", title = "Fully disable",
+          target = function() return overviewAnchors.disable end,
+          body = "Want it gone for good? This unloads the add-on to reclaim its memory. Unlike the on/off switch it needs a quick UI reload - you can re-enable it here any time." },
+        { view = "overview", title = "Your add-ons live here", side = "right",
+          target = function() return win and win.side end,
+          body = "Each add-on's pages sit under it in this sidebar, and Settings themes the whole platform. That's it - replay this any time with /tap tour." },
+    }
+    showTourStep(1)
+end
+
+function openWelcome()
+    theme:Modal({
+        title = "Welcome to the Twisteds Addon Platform",
+        icon = "sparkles", width = 500, color = TOUR_C,
+        dismissable = true, dim = false, closeOnClickOutside = false,   -- non-blocking: leave the camera free
+        message = "A hub for several add-ons - and you choose which ones run. Take a quick tour of how to "
+            .. "turn each one on or off and set it up, or skip and explore on your own.",
+        buttons = {
+            { label = "Skip", kind = "ghost", onClick = function(m) m:Close() end },
+            { label = "Show me around", kind = "primary", width = 150, onClick = function(m) m:Close(); startTour() end },
+        },
+    }):Open()
+    managerDB().setupTourSeen = true   -- shown once, however it's dismissed
+end
+
+Suite:RegisterCommand({
+    cmd = "/tap tour", sub = "tour", owner = "Platform",
+    desc = "Replay the first-launch setup tour (add 'reset' to auto-show it again next login)",
+    handler = function(rest)
+        if (rest or ""):lower():gsub("%s+", "") == "reset" then
+            managerDB().setupTourSeen = nil
+            print("|cffa06cf0Twisteds Addon Platform|r: setup tour re-armed - it'll pop again on next login/reload.")
+        else
+            openWelcome()
+        end
+    end,
+})
+
+-- Auto-show once per account, shortly after entering the world (so the module list is fully populated).
+do
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    f:SetScript("OnEvent", function(self)
+        self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        if managerDB().setupTourSeen then return end
+        managerDB().welcomeSeen = WELCOME_CAMPAIGN   -- first-run tour wins; don't stack Get Involved on top
+        if not (C_Timer and C_Timer.After) then return end
+        C_Timer.After(2.5, function()
+            if managerDB().setupTourSeen then return end
+            openWelcome()
         end)
     end)
 end

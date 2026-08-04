@@ -10,6 +10,12 @@ if not Suite then return end
 local CHANGELOG = [==[
 # Focus Target Interrupt - What's New
 
+## 1.2.0
+
+- **[NEW]** The Interrupt macro has a **Cast at** option, just like the Focus macro's focus source: interrupt your focus, your current target, or your mouseover, with fallback combos (focus, else target / mouseover, else focus). The default is still focus-only; save the macro again after changing it.
+- **[NEW]** The Macros page shows the detected interrupt and stun as a proper spell icon - hover it for the real Blizzard spell tooltip.
+- **[CHANGE]** The macro buttons now read **Update Macro** when that macro already exists in your macro book, so it's clear you're rewriting it rather than adding another.
+
 ## 1.1.1
 
 - **[CHANGE]** Loading Blizzard's macro UI now uses the current **C_AddOns** API directly. No functional change.
@@ -75,6 +81,10 @@ local ANNOUNCE_WHERE = {
 local FOCUS_SOURCE = {
     { "smart", "Mouseover, else target" }, { "target", "Current target" }, { "mouseover", "Mouseover only" },
 }
+local KICK_SOURCE = {
+    { "focus", "Focus only" }, { "focus_target", "Focus, else target" }, { "target", "Current target" },
+    { "mouseover", "Mouseover only" }, { "mouseover_focus", "Mouseover, else focus" },
+}
 local PALETTE_WHERE = {
     { "always", "Always" }, { "any_instance", "In any instance" },
     { "party", "In dungeons" }, { "raid", "In raids" }, { "group", "In a group" },
@@ -110,8 +120,24 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
 
     -- MACROS page: the three ready-made macros (Focus + Mark, Interrupt, Stun).
     local function renderMacros(y)
+        -- Create/Update button for one ready-made macro: the label and tooltip flip to "Update"
+        -- when the macro already exists in the macro book, and the page re-renders after a save
+        -- so the label stays true. buildFn returns the macro body at click time.
+        local function macroButton(cx, cy, bw, name, icon, buildFn, tipNote)
+            local exists = FTI.MacroExists(name)
+            local verb = exists and "Update" or "Create"
+            return tip(b:Button(cx, cy, bw, verb .. " Macro", "primary", function()
+                local ok, res = FTI.SaveMacro(name, icon, buildFn(), true)
+                print(FTI.PREFIX .. (ok and ((exists and "Updated macro |cffffff00" or "Saved character macro |cffffff00") .. name .. "|r.")
+                    or ("Not saved: " .. tostring(res))))
+                FTI.RefreshManager()
+            end), verb .. " macro",
+                exists and ("Overwrite the existing '" .. name .. "' macro with the text shown above" .. (tipNote or "") .. ".")
+                    or ("Save this as a per-character macro named '" .. name .. "'" .. (tipNote or "") .. "."))
+        end
         local _, ih = b:Wrap("Generate ready-made macros. |cffffffffCreate Macro|r saves it to your macro "
-            .. "list (out of combat only); |cffffffffCopy text|r opens it so you can paste it into a macro yourself.",
+            .. "list, or |cffffffffUpdate Macro|r rewrites it once it exists (out of combat only); "
+            .. "|cffffffffCopy text|r opens it so you can paste it into a macro yourself.",
             x, y, w - 48, C.subtext, 11)
         y = y - (ih + 14)
 
@@ -138,27 +164,28 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
             x, y, w - 48, C.subtext, 11)
         y = y - (mh + 8)
         y = macroBox(FTI.BuildFocusMacro(mac), x, y)
-        tip(b:Button(x, y, 140, "Create Macro", "primary", function()
-            local ok, res = FTI.SaveMacro("TAP Focus", "INV_Misc_QuestionMark", FTI.BuildFocusMacro(mac), true)
-            print(FTI.PREFIX .. (ok and "Saved character macro |cffffff00TAP Focus|r." or ("Not saved: " .. tostring(res))))
-        end), "Create macro", "Save this as a per-character macro named 'TAP Focus'.")
+        macroButton(x, y, 140, "TAP Focus", "INV_Misc_QuestionMark", function() return FTI.BuildFocusMacro(mac) end)
         tip(b:Button(x + 150, y, 110, "Copy text", "default", function() copy("TAP Focus macro", FTI.BuildFocusMacro(mac)) end),
             "Copy text", "Open the macro text so you can copy it.")
         y = y - 44
 
-        -- INTERRUPT @focus
-        b:Sub("INTERRUPT  @FOCUS  (auto-detected for your spec)", x, y); y = y - 30
-        local kickText, intr = FTI.BuildKickMacro()
+        -- INTERRUPT (aim is configurable; defaults to @focus)
+        b:Sub("INTERRUPT  (auto-detected for your spec)", x, y); y = y - 30
+        local kickText, intr = FTI.BuildKickMacro(mac)
         if kickText then
+            b:GameIcon(x, y, { spell = intr.id, size = 48 })   -- hover = the real Blizzard spell tooltip
             local line = "Detected: |cff33ff33" .. tostring(intr.name or "?") .. "|r"
             if intr.note then line = line .. "   |cffffcc00(" .. intr.note .. ")|r" end
-            b:Label(line, x, y - 2, C.text); y = y - 26
+            b:Label(line, x + 58, y - 4, C.text)
+            b:Label("Cast at", x + 58, y - 30, C.subtext)
+            dropdown(x + 112, y - 28, 200, KICK_SOURCE, function() return mac.kickTarget or "focus" end,
+                function(v) mac.kickTarget = v; FTI.RefreshManager() end,
+                "Interrupt target", "Who the macro interrupts: your focus, current target, or mouseover - with a fallback if the first isn't there. Save the macro again after changing this.")
+            y = y - 62
             y = macroBox(kickText, x, y)
-            tip(b:Button(x, y, 130, "Create Macro", "primary", function()
-                local ok, res = FTI.SaveMacro("TAP Interrupt", intr.icon or "INV_Misc_QuestionMark", (FTI.BuildKickMacro()), true)
-                print(FTI.PREFIX .. (ok and "Saved character macro |cffffff00TAP Interrupt|r." or ("Not saved: " .. tostring(res))))
-            end), "Create macro", "Save this as a per-character macro named 'TAP Interrupt' (spec-specific).")
-            tip(b:Button(x + 140, y, 110, "Copy text", "default", function() copy("TAP Interrupt macro", (FTI.BuildKickMacro())) end),
+            macroButton(x, y, 130, "TAP Interrupt", intr.icon or "INV_Misc_QuestionMark",
+                function() return (FTI.BuildKickMacro(mac)) end, " (spec-specific)")
+            tip(b:Button(x + 140, y, 110, "Copy text", "default", function() copy("TAP Interrupt macro", (FTI.BuildKickMacro(mac))) end),
                 "Copy text", "Open the macro text so you can copy it.")
             y = y - 48
         else
@@ -170,12 +197,12 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
         b:Sub("STUN  @FOCUS / @TARGET  (auto-detected for your talents)", x, y); y = y - 30
         local stunText, stun = FTI.BuildStunMacro()
         if stunText then
-            b:Label("Detected: |cff33ff33" .. tostring(stun.name or "?") .. "|r", x, y - 2, C.text); y = y - 26
+            b:GameIcon(x, y, { spell = stun.id, size = 48 })   -- hover = the real Blizzard spell tooltip
+            b:Label("Detected: |cff33ff33" .. tostring(stun.name or "?") .. "|r", x + 58, y - 16, C.text)
+            y = y - 56
             y = macroBox(stunText, x, y)
-            tip(b:Button(x, y, 130, "Create Macro", "primary", function()
-                local ok, res = FTI.SaveMacro("TAP Stun", stun.icon or "INV_Misc_QuestionMark", (FTI.BuildStunMacro()), true)
-                print(FTI.PREFIX .. (ok and "Saved character macro |cffffff00TAP Stun|r." or ("Not saved: " .. tostring(res))))
-            end), "Create macro", "Save this as a per-character macro named 'TAP Stun'.")
+            macroButton(x, y, 130, "TAP Stun", stun.icon or "INV_Misc_QuestionMark",
+                function() return (FTI.BuildStunMacro()) end)
             tip(b:Button(x + 140, y, 110, "Copy text", "default", function() copy("TAP Stun macro", (FTI.BuildStunMacro())) end),
                 "Copy text", "Open the macro text so you can copy it.")
             y = y - 48

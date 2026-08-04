@@ -98,14 +98,30 @@ function FTI.BuildFocusMacro(opts)
     return table.concat(lines, "\n")
 end
 
+-- Where the interrupt macro aims: ordered unit fallback chains (first usable unit wins).
+local KICK_UNITS = {
+    focus           = { "focus" },
+    focus_target    = { "focus", "target" },
+    target          = { "target" },
+    mouseover       = { "mouseover" },
+    mouseover_focus = { "mouseover", "focus" },
+}
+
 -- Returns macroText, interruptInfo  OR  nil, reasonString.
-function FTI.BuildKickMacro()
+-- opts.kickTarget picks the aim (a KICK_UNITS key; default focus-only). Ground-targeted
+-- interrupts (Solar Beam) drop at the unit's feet, so their conditions check
+-- exists/nodead instead of harm.
+function FTI.BuildKickMacro(opts)
+    opts = opts or {}
     local intr, reason = FTI.GetPlayerInterrupt()
     if not intr then return nil, reason end
     local name = intr.name or ("spell:" .. tostring(intr.id))
-    -- Ground-targeted interrupts (Solar Beam) drop at the focus's feet; the rest hit @focus.
-    local cond = intr.ground and "[@focus]" or "[@focus,harm]"
-    local body = "#showtooltip " .. name .. "\n/cast " .. cond .. " " .. name
+    local units = KICK_UNITS[opts.kickTarget] or KICK_UNITS.focus
+    local conds = {}
+    for _, u in ipairs(units) do
+        conds[#conds + 1] = intr.ground and ("[@" .. u .. ",exists,nodead]") or ("[@" .. u .. ",harm]")
+    end
+    local body = "#showtooltip " .. name .. "\n/cast " .. table.concat(conds) .. " " .. name
     return body, intr
 end
 
@@ -153,6 +169,15 @@ end
 -- Create / update an actual macro (out of combat only).
 -- Returns true, index  OR  false, reasonString.
 ----------------------------------------------------------------------
+-- True if a macro with this name already exists in the macro book (global or
+-- per-character). Loads the load-on-demand macro API first, same as SaveMacro.
+function FTI.MacroExists(name)
+    local loader = C_AddOns and C_AddOns.LoadAddOn
+    if loader then pcall(loader, "Blizzard_MacroUI") end
+    local idx = GetMacroIndexByName and GetMacroIndexByName(name)
+    return (idx or 0) > 0
+end
+
 function FTI.SaveMacro(name, icon, body, perCharacter)
     if InCombatLockdown and InCombatLockdown() then
         return false, "Can't create or edit macros while in combat."

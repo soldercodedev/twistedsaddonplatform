@@ -363,7 +363,7 @@ local RICH = {
 -- Rich components that expose :Configure(opts) can be POOLED (create-once, reconfigure-many) like the
 -- simple widgets, so a page that redraws often doesn't leak a frame every render. The rest keep the
 -- transient model (created fresh, hidden on Reset). Adding :Configure to a component opts it in here.
-local RICH_POOLABLE = { Badge = true, Glyph = true }
+local RICH_POOLABLE = { Badge = true, Glyph = true, GameIcon = true }
 local function acqRich(self, kind, opts)
     self._rich = self._rich or {}
     local p = self._rich[kind]; if not p then p = { items = {}, used = 0 }; self._rich[kind] = p end

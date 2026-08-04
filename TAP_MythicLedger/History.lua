@@ -745,6 +745,98 @@ function History.AvgScore(identityKey)
     return avg, (Score and Score.Grade and Score.Grade(avg)) or nil
 end
 
+-- Weekly trend for the current scope: rolling 7-day buckets (by completedAt), newest bucket = the current
+-- (possibly partial) week. Per week: run count, avg key level, timed %, YOUR avg Ledger score, and YOUR avg
+-- deaths. Returns up to `maxWeeks` buckets OLDEST-FIRST, each { weeksAgo, runs, avgLevel, timedPct, avgScore,
+-- avgDeaths } (a metric is nil for a week with no qualifying runs). Read-only - reuses the persisted per-run
+-- score summaries (no rescore here).
+function History.WeeklyTrend(seasonId, character, maxWeeks)
+    maxWeeks = math.max(2, maxWeeks or 4)
+    local Store = ML.Scoring and ML.Scoring.Store
+    local now, WEEK = time(), 7 * 86400
+    local buckets = {}
+    for _, r in ipairs(History.FilterRuns({ seasonId = seasonId, character = character })) do
+        local t = r.completedAt or r.startedAt or 0
+        local wi = (t > 0) and math.floor((now - t) / WEEK) or nil
+        if wi and wi >= 0 and wi < maxWeeks then
+            local b = buckets[wi]
+            if not b then
+                b = { runs = 0, levelSum = 0, levelN = 0, timed = 0, completed = 0,
+                      scoreSum = 0, scoreN = 0, deathsSum = 0, deathsN = 0 }
+                buckets[wi] = b
+            end
+            b.runs = b.runs + 1
+            if r.status ~= STATUS.ABANDONED then
+                b.completed = b.completed + 1
+                if r.status == STATUS.TIMED then b.timed = b.timed + 1 end
+                if type(r.level) == "number" then b.levelSum = b.levelSum + r.level; b.levelN = b.levelN + 1 end
+            end
+            local md = playerDeaths(r)   -- YOUR deaths (clean run = 0), not the whole party's
+            if type(md) == "number" then b.deathsSum = b.deathsSum + md; b.deathsN = b.deathsN + 1 end
+            if Store and Store.Summary and r.character and r.character.guid then
+                local sc = Store.Summary(r)[r.character.guid]
+                if sc and type(sc.overall) == "number" then b.scoreSum = b.scoreSum + sc.overall; b.scoreN = b.scoreN + 1 end
+            end
+        end
+    end
+    local out = {}
+    for wi = maxWeeks - 1, 0, -1 do   -- oldest -> newest
+        local b = buckets[wi]
+        out[#out + 1] = {
+            weeksAgo  = wi,
+            runs      = b and b.runs or 0,
+            avgLevel  = b and Util.safeDiv(b.levelSum, b.levelN) or nil,
+            timedPct  = b and Util.safeDiv(b.timed, b.completed) or nil,
+            avgScore  = b and Util.safeDiv(b.scoreSum, b.scoreN) or nil,
+            avgDeaths = b and Util.safeDiv(b.deathsSum, b.deathsN) or nil,
+        }
+    end
+    return out
+end
+
+-- Seconds until the next Mythic+ weekly reset (nil if the API is unavailable).
+function History.SecondsUntilReset()
+    local f = _G.C_DateAndTime and _G.C_DateAndTime.GetSecondsUntilWeeklyReset
+    if not f then return nil end
+    local ok, s = pcall(f)
+    if ok and type(s) == "number" and s > 0 then return s end
+    return nil
+end
+
+-- Start (epoch seconds) of the CURRENT reset week: derived from the reset countdown when available, else a
+-- rolling 7-day window.
+function History.WeekStart()
+    local s = History.SecondsUntilReset()
+    if s then return time() + s - 7 * 86400 end
+    return time() - 7 * 86400
+end
+
+-- Per-character Great Vault progress THIS reset week. The vault's three Mythic+ slots come from your 1st,
+-- 4th, and 8th highest COMPLETED keys (timed OR depleted both count), so per character we collect this
+-- week's completed key levels, sort them high-first, and keep the top 8. "All 10s" = the 8th is +10.
+-- Returns one entry per known character: { fullName, name, classFile, keys (top 8, desc), count, slot1,
+-- slot4, slot8 }. Read-only.
+function History.WeeklyVault()
+    local weekStart = History.WeekStart()
+    local out = {}
+    for _, c in ipairs(History.CharacterList()) do
+        local keys = {}
+        for _, r in ipairs(History.FilterRuns({ character = c.fullName, from = weekStart })) do
+            if r.status ~= STATUS.ABANDONED and type(r.level) == "number" then
+                keys[#keys + 1] = r.level
+            end
+        end
+        table.sort(keys, function(a, b) return a > b end)
+        local top = {}
+        for i = 1, math.min(8, #keys) do top[i] = keys[i] end
+        out[#out + 1] = {
+            fullName = c.fullName, name = c.name, classFile = c.classFile,
+            keys = top, count = #keys, slot1 = top[1], slot4 = top[4], slot8 = top[8],
+        }
+    end
+    return out
+end
+
 -- Runs shared with a specific party member (most recent first).
 function History.PlayerRuns(identityKey)
     return History.FilterRuns({ playerKey = identityKey })

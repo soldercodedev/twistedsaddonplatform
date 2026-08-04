@@ -21,6 +21,10 @@
 # Dev-only plugin: Mythic Ledger mock-data generator (local testing only, never shipped/pushed)
 /TAP_MythicLedger_Dev/
 
+# Beta-only module: WoW Token + Keystone Toolbox. Gitignored until it graduates to a public release;
+# distributed via the beta portal (tappack) only for now. Do NOT add to .github FOLDERS/EXPECT yet.
+/TAP_Toolbox/
+
 # Deploy / packaging / build scripts (local dev only)
 /deploy.ps1
 /package.ps1
@@ -44,6 +48,9 @@
 # Support-bot context (private - for the live help AI agent, never shipped/pushed)
 /context.md
 /guardrails.md
+
+# Local analysis / comparison reports (research output, never shipped/pushed)
+/reports/
 
 # Local screenshots (dev captures, not part of the shipped addon)
 /ScreenShots/

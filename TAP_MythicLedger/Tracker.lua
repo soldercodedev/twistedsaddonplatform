@@ -153,6 +153,28 @@ local function sumDeaths(party)
     return any and total or nil
 end
 
+-- Read-only snapshot of the run SO FAR, shaped exactly like a finalized run so the scorer can grade it
+-- unchanged (used by the Live Coach). Reads fresh aggregate stats OUT OF COMBAT and merges them into a
+-- throwaway party copy - it never mutates the live `current` run, changes no scoring, and returns nil when
+-- there is nothing meaningful to score yet. `onTime = false` so the healer outcome floor can't fire mid-run.
+function Tracker.ScoreSnapshot()
+    if state ~= STATE.ACTIVE or not current or not provider then return nil end
+    if UnitAffectingCombat and UnitAffectingCombat("player") then return nil end   -- meter is Secret in combat
+    local stats = provider.GetRunStats and provider:GetRunStats(runCtx())
+    if not stats then return nil end
+    local party = mergePartyStats(current.party, stats, current.dispelCapture)
+    if not party or #party == 0 then return nil end
+    return {
+        dungeonName = current.dungeonName, mapId = current.mapId, challengeMapId = current.challengeMapId,
+        level = current.level, affixes = current.affixes, affixNames = current.affixNames,
+        seasonId = current.seasonId, expansionId = current.expansionId, timeLimit = current.timeLimit,
+        startedAt = current.startedAt,
+        duration = current.startedAt and (time() - current.startedAt) or nil,
+        onTime = false,
+        character = current.character, party = party, bosses = current.bosses, _partial = true,
+    }
+end
+
 local function finalizeBosses()
     local list = {}
     for _, e in pairs(encounters or {}) do

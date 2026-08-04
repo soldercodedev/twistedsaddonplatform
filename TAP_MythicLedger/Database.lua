@@ -72,6 +72,26 @@ local DEFAULTS = {
             bgColor    = { 0.03, 0.04, 0.06, 0.82 },
             posPoint   = "CENTER", posX = 0, posY = 220,   -- screen anchor (drag-to-move in Settings)
         },
+        -- On-screen LIVE COACH: after a boss (or a big pull) settles, score the run SO FAR with the same
+        -- engine the final grade uses and flash the highest-leverage reminder(s). Uses scoring READ-ONLY.
+        liveCoach = {
+            enabled    = false,             -- off until opted in
+            popPolicy  = "SLIP",            -- SLIP (only when below par) / QUIET (every fight, brief "on pace") / ALWAYS (every fight, praise too)
+            cadence    = "BOSS",            -- BOSS (boss kills only) / ALL (bosses + big trash pulls)
+            minCombat  = 10,                -- ALL cadence: min seconds a pull must last to count as "big"
+            depth      = "ONE",             -- ONE (one reminder) / TWO (top 2) / MINI (headline + a strength)
+            dismiss    = "AUTO",            -- AUTO (fade after `duration`) / CLICK (stays until clicked) / BOTH
+            duration   = 7,
+            font       = "",
+            fontSize   = 15,
+            titleColor = { 0.36, 0.83, 0.92 },     -- grade/header line (teal - distinct from the death report)
+            textColor  = { 0.94, 0.95, 0.98 },
+            fixColor   = { 0.95, 0.62, 0.30 },     -- the "focus on" reminder lines
+            goodColor  = { 0.42, 0.82, 0.45 },     -- praise / "on pace" lines
+            background = true,
+            bgColor    = { 0.03, 0.04, 0.06, 0.85 },
+            posPoint   = "CENTER", posX = 0, posY = -160,   -- screen anchor (drag-to-move in Settings)
+        },
     },
     runs          = {},   -- array of finalized run records (raw-ish, but no combat events)
     activeRun     = nil,  -- reload/disconnect recovery record for an in-progress run
@@ -247,6 +267,7 @@ function DB.Ready() return ML._initialized and DB.root ~= nil end
 function DB.Settings() return DB.root and DB.root.settings or DEFAULTS.settings end
 function DB.Recap() return DB.Settings().recap end
 function DB.DeathReport() return DB.Settings().deathReport end
+function DB.LiveCoach() return DB.Settings().liveCoach end
 function DB.Runs() return DB.root and DB.root.runs or {} end
 function DB.CountRuns() return DB.root and #DB.root.runs or 0 end
 function DB.Characters() return DB.root and DB.root.characters or {} end

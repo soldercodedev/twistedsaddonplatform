@@ -1,5 +1,15 @@
 # Mythic Ledger - Changelog
 
+## 1.3.0
+
+A Live Coach that nudges you between fights, plus some week-over-week stats: trend cards and trouble spots on the Overview, a Great Vault tracker on the Characters page, and a new Progression page. Scoring is untouched.
+
+- **[NEW]** **Live Coach** - an on-screen nudge between fights. After a boss (or big pulls too, your call) it checks how the run is going and tells you the one thing to fix: "Kick more", "Cut avoidable damage", "Push your DPS". It grades with the same engine as your end-of-run score, so the advice matches your final grade - the real score still comes at the end. Off by default; turn it on in Settings > Live Coach, where you pick how often it speaks, how much it says, and how it looks. `/tap ml coach` tests it.
+- **[NEW]** The Overview has a **This Week** row - runs, timed %, average score, and deaths, each compared to last week. Shows up once you have two weeks of history.
+- **[NEW]** **Trouble Spots**, also on the Overview: the dungeons that keep beating you, ranked by fail rate and deaths.
+- **[NEW]** The Characters page now starts with a **Weekly Vault** panel - every character's top 8 keys this week, with the three vault slots marked and the reset timer. Depleted keys count too, same as the vault itself.
+- **[NEW]** A new **Progression** page charts a character's trajectory across their runs. Pick a metric - Ledger Score, Key Level, Time vs timer, Deaths, DPS or HPS - and read it as a line with an average line and an Improving / Steady / Regressing call, with Latest / Min / Max / Average cards above it. Switch between a per-run and a weekly view, and narrow to a date range and/or a key-level range.
+
 ## 1.2.0
 
 Throughput scoring goes back to "meeting your share is 100," the Death Causes breakdown now names what killed you, and the saved run history is leaner with lower memory use.
