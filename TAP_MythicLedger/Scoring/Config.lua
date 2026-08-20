@@ -181,7 +181,15 @@ Scoring.Config = Config
 -- v47: throughput curve reverts the v45 "firmer bar" - meeting your expected group share is 100 again
 --      (was 94, with 100 reserved for ~1.15x). Doing your fair share is a full mark; over-performance
 --      clamps at 100; falling short is still graded down. Retroactive rescore.
-Config.version = 47
+-- v48: SEASON PROFILE SELECTION FIX. A run is now scored against the utility profile for ITS OWN
+--      season (Config.SeasonProfileFor / SeasonDungeon take the run's seasonId). Selection used to key
+--      off the LIVE season, which was invisible while only one profile existed - but the moment Season 2
+--      shipped, every Season 1 run started resolving against the S2 profile, where its dungeons simply
+--      are not listed. SeasonDungeon returned nil, so those runs were scored with ZERO interrupt and
+--      dispel supply and their expectations collapsed. Season 1 runs use Season 1 data again, Season 2
+--      uses Season 2, and a run whose season has no profile falls back to the one profile that actually
+--      lists its dungeon rather than to nothing. Retroactive rescore.
+Config.version = 48
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -297,24 +305,54 @@ Config.snipeForgiveness = 0.5
 -- real workload and still scored. Mirrors the interrupt sniping idea but as a clean N/A on tiny shares.
 Config.dispelCoverage = { shareMax = 1.25, groupMin = 0.90 }
 
--- The season utility profile for the current M+ pool (registered from Scoring/Seasons/*.lua into
--- ML.Scoring.SeasonData), and a per-dungeon lookup within it. Season selection matches
--- C_MythicPlus.GetCurrentSeason() to a profile's declared season ids, else uses the sole loaded profile.
-function Config.SeasonProfile()
+-- Season utility profiles (registered from Scoring/Seasons/*.lua into ML.Scoring.SeasonData).
+--
+-- A run is scored against the profile for ITS OWN season. This matters the moment a second season
+-- exists: the new profile does not contain last season's dungeons at all, so picking by the LIVE
+-- season silently gave every older run zero interrupt/dispel supply and moved its score. Callers that
+-- hold a run pass run.seasonId; the no-argument form means "the season being played" and is for live
+-- surfaces (the Dungeon Guide, in-run diagnostics).
+function Config.SeasonProfileFor(seasonId)
     local all = ML.Scoring and ML.Scoring.SeasonData
     if not all then return nil end
-    local cur = ML.API and ML.API.GetCurrentSeason and ML.API.GetCurrentSeason()
-    local only
-    for _, prof in pairs(all) do
-        only = only or prof
-        if cur and prof.seasons and prof.seasons[cur] then return prof end
+    -- 1. A profile that explicitly declares this season.
+    if seasonId then
+        for _, prof in pairs(all) do
+            if prof.seasons and prof.seasons[seasonId] then return prof end
+        end
     end
-    return only
+    -- 2. Otherwise the live season's profile (an untagged run, or a season we have no data for yet).
+    local cur = ML.API and ML.API.GetCurrentSeason and ML.API.GetCurrentSeason()
+    if cur then
+        for _, prof in pairs(all) do
+            if prof.seasons and prof.seasons[cur] then return prof end
+        end
+    end
+    -- 3. A single loaded profile is unambiguous. With more than one we refuse to guess, because
+    --    pairs() order is undefined and picking arbitrarily would make scores non-deterministic.
+    local only, n = nil, 0
+    for _, prof in pairs(all) do only = only or prof; n = n + 1 end
+    return (n == 1) and only or nil
 end
-function Config.SeasonDungeon(dungeonName)
-    local prof = Config.SeasonProfile()
+function Config.SeasonProfile() return Config.SeasonProfileFor(nil) end
+
+-- Per-dungeon utility data for a run's season. `seasonId` is the RUN's season where the caller knows it.
+function Config.SeasonDungeon(dungeonName, seasonId)
     local nk = Config.NormDungeon(dungeonName)
-    return (prof and prof.dungeons and nk) and prof.dungeons[nk] or nil
+    if not nk then return nil end
+    local prof = Config.SeasonProfileFor(seasonId)
+    local d = prof and prof.dungeons and prof.dungeons[nk]
+    if d then return d end
+    -- The chosen profile doesn't list this dungeon (an untagged run, or a season boundary). If exactly
+    -- ONE loaded profile knows the dungeon, that is unambiguous - far better than scoring the run with
+    -- no supply at all, which is what silently happened before.
+    local all = ML.Scoring and ML.Scoring.SeasonData
+    local found, n = nil, 0
+    for _, p in pairs(all or {}) do
+        local e = p.dungeons and p.dungeons[nk]
+        if e then found = found or e; n = n + 1 end
+    end
+    return (n == 1) and found or nil
 end
 
 -- Expected interrupt CONTRIBUTIONS per minute for one spec's interrupt capability record (Capability.lua).
@@ -435,6 +473,46 @@ Config.dungeonDispelDebuffs = {
     ["skyreach"] = {
         magic  = { dbf("Rushing Winds", 1254670, true), dbf("Solar Barrier", 1273356, true) },
         enrage = { dbf("Wrathful Wind", 1254678, true) },
+    },
+    -- ---- Midnight Season 2 (2026-08): from the observed S2 catalog (Scoring/Seasons/MidnightS2.lua),
+    -- ---- dispel types verified per-id on wowhead.com. Same buff/debuff classification rules as above.
+    ["templeofsethraliss"] = {
+        magic  = { dbf("Imbued Conduction", 1296052), dbf("Accumulate Charge", 1310739, true) },
+        poison = { dbf("Cytotoxin", 1308148), dbf("Poison Spit", 267027) },
+    },
+    ["denofnalorakk"] = {
+        magic  = { dbf("Cryo Surge", 1239860), dbf("Glacial Torment", 1235549), dbf("Healing Breeze", 1297696, true) },
+        curse  = { dbf("Insatiable Hunger", 1238801) },
+        poison = { dbf("Toxic Spores", 1234846) },
+    },
+    ["kingsrest"] = {
+        magic   = { dbf("Frost Shock", 270499), dbf("Pit of Despair", 276031), dbf("Shadowfrost Bolt", 1294815),
+                    dbf("Bound by Shadow", 269935, true) },
+        curse   = { dbf("Hex Volley", 269972) },
+        poison  = { dbf("Putrid Seekers", 1298104), dbf("Serpent Strike", 1306763) },
+        disease = { dbf("Wretched Discharge", 267763) },
+    },
+    ["murderrow"] = {
+        magic  = { dbf("Corroding Spittle", 1217633) },
+        curse  = { dbf("Curse of Doom", 1217973) },
+        poison = { dbf("Heartstop Poison", 1216590) },
+    },
+    ["altaroffangs"] = {
+        magic   = { dbf("Paralyzing Shots", 1294569) },
+        poison  = { dbf("Envenom", 1307571) },
+        disease = { dbf("Regurgitate", 1296069) },
+    },
+    ["rubylifepools"] = {
+        magic = { dbf("Stormslam", 381515), dbf("Cold Claws", 1305234), dbf("Rolling Thunder", 392641),
+                  dbf("Stormcloud Barrier", 391031, true), dbf("Blaze of Glory", 373972, true) },
+    },
+    ["theblindingvale"] = {
+        magic  = { dbf("Bloodthorn Roots", 1259365), dbf("Spore Spines", 1238084), dbf("Spiny Shield", 1238581, true) },
+        poison = { dbf("Toxic Spew", 1250937) },
+    },
+    ["voidscararena"] = {
+        magic  = { dbf("Melt Armor", 1250043) },
+        enrage = { dbf("Bolster", 1310319, true) },
     },
 }
 

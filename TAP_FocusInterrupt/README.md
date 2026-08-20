@@ -14,10 +14,10 @@ Everything you need to focus, mark, and interrupt cleanly - built for your exact
   whoever you're looking at, live. Move it, resize it, lay it out as a **row or column**, and set its
   **background / border colors and opacity**. Choose when it shows (always, in instances, dungeons,
   raids, or a group).
-- **Interrupt & Stun macros** - auto-detected for your class, spec, and talents. It finds the
-  ability you actually have (baseline or talented, pet abilities included) so you just create and
-  bind it. The Interrupt macro's **Cast at** option picks who it fires at - your focus, current
-  target, or mouseover, with fallback combos.
+- **Interrupt & Stun macros** - auto-detected for your class, spec, and talents. It finds *every*
+  interrupt and targeted stun you actually have (baseline or talented, pet abilities included) and
+  makes a macro for each, so you just create and bind them. Every macro has its own **Cast at**
+  option that picks who it fires at - your focus, current target, or mouseover, with fallback combos.
 - **Call-outs** - optionally announce your focus (or a ready check) to say / party / raid, limited to
   the content you choose.
 

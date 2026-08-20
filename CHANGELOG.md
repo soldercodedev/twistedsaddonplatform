@@ -3,42 +3,38 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
-## 1.8.0-beta.2
+## 1.8.0
 
-A first-launch **Setup Tour** for the platform, Mythic Ledger's new Live Coach, week-over-week stats, Weekly Vault and a **Progression** page, and interrupt targeting options for Focus Target Interrupt.
+Updated for patch 12.1. A first-launch **Setup Tour** for the platform; Mythic Ledger adds **Midnight Season 2** support, a new **Live Coach**, week-over-week stats, a Weekly Vault panel and a **Progression** page; Focus Target Interrupt now builds a macro for every interrupt and stun you know. Mythic Ledger also stores much less, with one control for how long run history is kept in full.
 
 **Platform**
 
 - **[NEW]** A first-launch **Setup Tour**. On first login the platform offers a short guided walkthrough of the `/tap` Overview, pointing out how to enable, disable, configure and preview each add-on. Reopen it any time from Help > Setup Tour, or `/tap tour`.
+- **[CHANGE]** Every dropdown in the suite was rebuilt. Long lists (sounds, fonts, dungeons) now open with a **search box** - start typing to filter them; lists scroll smoothly with a slim scrollbar; arrow keys walk the options with Enter to pick and Escape to back out; options can be grouped under headings; and an option you cannot pick now tells you why when you hover it. Selects can also offer tick-box **multi-select** now, which the add-ons will start using where picking several things makes sense.
+- **[CHANGE]** Spell/item icons drawn on settings pages (the ones with the real Blizzard tooltip on hover) are now pooled and reused across page redraws instead of a fresh element per redraw, trimming memory growth over a session.
+- **[CHANGE]** Updated for WoW patch 12.1 across every add-on.
 
 ### Mythic Ledger (1.3.0)
 
+- **[CHANGE]** Saved data is about **35% smaller**. Every run stored the full talent list of all five players twice over, and nothing read it.
+- **[NEW]** **Run History** (Mythic Ledger > Settings > Tracking) is one control for how long a run keeps full detail and what happens after that: trim it or delete it. A trimmed run keeps its date, key, result, party, your numbers, score and grade, and still appears in every list and chart; it drops only the deep review detail, about 87% of its size. Nothing changes until you press Apply. A trimmed run's score is frozen, so a later scoring change cannot rewrite your history.
+- **[NEW]** **Keep** flags: lock a run to hold its full detail, or lock a player to protect their record and every run they appear in. A locked run is never trimmed or deleted.
+- **[BUG FIX]** Mythic Ledger scores a run against **its own season's** dungeon data again. When Season 2 began, Season 1 runs started resolving against the Season 2 profile, which does not list Season 1's dungeons, so they were graded as if there had been nothing to interrupt or dispel. Existing runs re-score on login.
+- **[NEW]** **Midnight Season 2** support: all eight dungeons have a full Dungeon Guide catalog - what to kick, what to dispel, who casts it, with the 3D caster preview - and kick/dispel scoring expectations calibrated from real Season 2 runs. Season 1 keeps its own profile for your history.
+- **[NEW]** Dungeon Guide entries now explain **why** each kick and dispel earned its tier - hover a spell for the mechanic and the observed evidence ("killing blow on the healer at +8", "removed 67% of applications"), with key numbers highlighted, dispel schools colored, and death evidence marked with a skull.
 - **[NEW]** **Live Coach** - an on-screen nudge between fights. After a boss (or big pulls too, your call) it checks how the run is going and tells you the one thing to fix: "Kick more", "Cut avoidable damage", "Push your DPS". It grades with the same engine as your end-of-run score, so the advice matches your final grade - the real score still comes at the end. Off by default; turn it on in Settings > Live Coach, where you pick how often it speaks, how much it says, and how it looks. `/tap ml coach` tests it.
 - **[NEW]** The Overview has a **This Week** row - runs, timed %, average score, and deaths, each compared to last week. Shows up once you have two weeks of history.
 - **[NEW]** **Trouble Spots**, also on the Overview: the dungeons that keep beating you, ranked by fail rate and deaths.
 - **[NEW]** The Characters page now starts with a **Weekly Vault** panel - every character's top 8 keys this week, with the three vault slots marked and the reset timer. Depleted keys count too, same as the vault itself.
 - **[NEW]** A new **Progression** page charts a character's trajectory across their runs. Pick a metric - Ledger Score, Key Level, Time vs timer, Deaths, DPS or HPS - and read it as a line with an average line and an Improving / Steady / Regressing call, with Latest / Min / Max / Average cards above it. Switch between a per-run and a weekly view, and narrow to a date range and/or a key-level range.
+- **[CHANGE]** The season filter names seasons properly ("Midnight Season 2" instead of "Season 18") and labels the current one.
 
-### Focus Target Interrupt (1.2.0)
+### Focus Target Interrupt (1.3.0)
 
-- **[NEW]** The Interrupt macro has a **Cast at** option, just like the Focus macro's focus source: interrupt your focus, your current target, or your mouseover, with fallback combos (focus, else target / mouseover, else focus). The default is still focus-only; save the macro again after changing it.
-- **[NEW]** The Macros page shows the detected interrupt and stun as a proper spell icon - hover it for the real Blizzard spell tooltip.
+- **[NEW]** A macro for **every** interrupt and targeted stun you know, not just your main one (pet abilities included). Your first of each kind keeps the classic "TAP Interrupt" / "TAP Stun" name so existing bindings keep updating; extras get short "TAP <ability>" names.
+- **[NEW]** Every macro has its own **Cast at** option: your focus, current target, or mouseover, with fallback combos (focus, else target / mouseover, else focus). The default is still focus-only; save a macro again after changing it.
+- **[NEW]** The Macros page shows each detected ability as a proper spell icon - hover it for the real Blizzard spell tooltip.
 - **[CHANGE]** The macro buttons now read **Update Macro** when that macro already exists in your macro book, so it's clear you're rewriting it rather than adding another.
-
-## 1.8.0-beta.1
-
-A beta preview of a new add-on, **Toolbox** - starting with a WoW Token gold-price tracker.
-
-**Platform**
-
-- **[CHANGE]** Spell/item icons drawn on settings pages (the ones with the real Blizzard tooltip on hover) are now pooled and reused across page redraws instead of a fresh element per redraw, trimming memory growth over a session.
-
-### Toolbox (0.1.0)
-
-- **[NEW]** See the current WoW Token price in gold on its own page, refreshable any time.
-- **[NEW]** A price-trend chart over the last 30, 60, or 90 days. Hover any point to read its exact price and time, with the high, low, median, and change shown as cards above it.
-- **[NEW]** Optional alerts on login and when you change zones: a toast showing the current price, and/or a heads-up when the price crosses a gold amount you set. Each alert is independent and fully configurable - position, color, size, duration, and sound - and can be silenced while you are in a dungeon, raid, or battleground.
-
 
 ## 1.7.1
 

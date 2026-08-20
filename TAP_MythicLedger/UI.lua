@@ -17,7 +17,7 @@ ML.UI = UI
 
 -- Module-local view state (reset via OnSelect / detail back buttons).
 local view = { season = "current", character = "all", detailRun = nil, detailPlayer = nil, detailDungeon = nil, detailCharacter = nil, review = nil,
-    progMetric = "score", progWeekly = false, progRange = "all" }   -- progression chart: metric + per-run/weekly + date range
+    progMetric = "score", progView = "run", progRange = "all" }   -- progression chart: metric + run/week/level view + date range
 -- Per-run player-review target (object refs, so it works for both saved and unsaved/preview runs).
 local reviewRunRef, reviewMemberRef = nil, nil
 
@@ -97,9 +97,21 @@ local runSort      = { key = "date", dir = "desc" }
 local dungeonRunSort = { key = "date", dir = "desc" }   -- shared sort for the character/dungeon detail run tables
 local playerFilter = { search = "", role = nil, favorite = false, minShared = 1, class = nil, spec = nil }
 local playerSort   = { key = "runs", dir = "desc" }
-local retentionPending = nil   -- staged retention cap; committed only via the Settings "Apply" button
-local retScopePending   = nil  -- staged retention scope (ALL / SEASON / EXPANSION); committed on Apply
-local retKeepTopPending = nil  -- staged "never remove a top run"; committed on Apply
+-- Measured size + policy preview for the Tracking tab. Walking every run is far too costly to repeat on
+-- each render (the settings page redraws on every toggle), so the whole thing is measured in ONE pass,
+-- cached, and cleared by any action that could change it.
+local storageStats = nil
+-- "1 run" / "3 runs". Sentences that count things go through this, so a count of 1 or 0 never produces
+-- the mangled plural you get from splicing "s" into a fixed verb.
+local function nRuns(n) return string.format("%d run%s", n or 0, (n == 1) and "" or "s") end
+-- Staged RUN HISTORY policy. Every control writes here, and only Apply commits + enforces, so the
+-- destructive half of this page can never fire from a stray click.
+local retentionPending  = nil  -- staged run ceiling (0 = unlimited)
+local retScopePending   = nil  -- staged full-detail window: ALL / SEASON / EXPANSION / DAYS
+local retKeepTopPending = nil  -- staged "never delete a top run"
+local retActionPending  = nil  -- staged action beyond the window: TRIM / DELETE
+local retDaysPending    = nil  -- staged window length when the window is DAYS
+local retAutoPending    = nil  -- staged "apply automatically"
 local charSort     = { key = "runs", dir = "desc" }
 local vaultSort    = { key = "keys", dir = "desc" }   -- Weekly Vault table (top-8 keys this reset)
 local statsFilter  = { season = "current", character = nil, mapId = nil, minKey = 0 }
@@ -202,9 +214,14 @@ local function scopeCharacter()
 end
 
 local function seasonChoices()
-    local c = { { "current", "Current Season" }, { "all", "All Seasons" } }
+    local curId = currentSeason()
+    local curName = curId and ML.SeasonLabel(curId)
+    local c = {
+        { "current", curName and ("Current Season (" .. curName .. ")") or "Current Season" },
+        { "all", "All Seasons" },
+    }
     for _, id in ipairs(History.SeasonsPresent()) do
-        c[#c + 1] = { id, ML.SeasonLabel(id) }
+        if id ~= curId then c[#c + 1] = { id, ML.SeasonLabel(id) } end   -- current is already the option above
     end
     return c
 end
@@ -1393,6 +1410,26 @@ local function renderRunDetails(b, C, x, y, w, win)
             message = "Permanently delete this run record?",
             onConfirm = function() DB.DeleteRun(r.id); view.detailRun = nil; win:Refresh() end })
     end, { icon = "trash", iconSize = 13 }), "Delete run", "Permanently remove this run from your ledger.")
+    y = y - 36
+
+    -- KEEP THIS RUN: the user's explicit lock. Exempt from every retention policy, and (once detail
+    -- tiers land) from being trimmed too. Deliberately its own field, never run.pinned - MarkKeepers
+    -- rewrites that automatically on every save.
+    local lockRow = b:Toggle(x, y, r.protected and true or false, function(v)
+        r.protected = v and true or nil
+        if DB.MarkProtected then DB.MarkProtected() end
+        storageStats = nil   -- the trim preview on the Tracking tab just changed
+        win:Refresh()
+    end)
+    b.theme:SetTip(lockRow, "Keep this run",
+        "Never let a retention policy remove or trim this run. It keeps full detail no matter what the "
+        .. "policy says, and it is not counted against any 'keep the newest N' limit.")
+    b:Label("Keep this run", x + 46, y - 2, C.text)
+    if r._protectedBy then
+        local who = DB.PlayerIndex()[r._protectedBy]
+        b:Label("also kept: " .. ((who and who.name) or "a protected player") .. " is in this run",
+            x + 190, y - 2, C.subtext, 11)
+    end
     return y - 34
 end
 
@@ -1859,6 +1896,15 @@ local function renderPlayerDetails(b, C, x, y, w, win)
 
     -- Runs with this player (shared by the spec breakdown and the history table below).
     local runs = History.FilterRuns({ playerKey = p.identityKey })   -- newest-first
+
+    -- KEEP: protects this player's record from being pruned AND locks every run they appear in. The
+    -- run count is spelled out because this toggle reaches further than the page it sits on.
+    T(b, b:Toggle(x + w - 150, y + 56, p.protected and true or false,
+        function(v) History.SetPlayerProtected(p.identityKey, v); storageStats = nil; win:Refresh() end),
+        "Keep this player",
+        string.format("Never prune this player's record, and never let a retention policy remove or trim "
+            .. "the %d run%s they appear in.", #runs, (#runs == 1) and "" or "s"))
+    b:Label("Keep", x + w - 106, y + 55, C.text, 11)
 
     -- Headline stats as responsive hero tiles - the SAME look, sizing and reflow as the character-
     -- details page (color-scaled metrics via HeroStatStyle; the run-outcome tallies carry fixed
@@ -2841,85 +2887,293 @@ local function renderSettings(b, C, x, y, w, win)
     end
     end
 
-    local function secRetention()
+    ----------------------------------------------------------------------
+    -- RUN HISTORY. ONE section for the whole life of a run's data, because there is only one question
+    -- being answered: how long do we keep it, and what happens then. It reads as a single ladder -
+    --   full detail  ->  trimmed (run kept, review detail dropped)  ->  deleted
+    -- with one window, one action, one set of locks and one Apply. Splitting trimming and deleting into
+    -- two blocks made the user reconcile two overlapping policies that both had a window, both had a
+    -- "don't touch my best runs" toggle and both had their own button.
+    ----------------------------------------------------------------------
+    local function secRunHistory()
     b:Sub("RUN HISTORY", x, y); y = y - 30
-    -- The scope, numeric cap and keep-top toggle only STAGE a policy; nothing is removed until Apply
-    -- is clicked (guarding against accidental deletion). The applied policy still auto-enforces as new
-    -- runs save.
-    if retentionPending  == nil then retentionPending  = s.retentionRuns or 0 end
-    if retScopePending   == nil then retScopePending   = s.retentionScope or "ALL" end
-    if retKeepTopPending == nil then retKeepTopPending = (s.retentionKeepTop ~= false) end
-    local count = DB.CountRuns()
-    b:Label(string.format("Currently storing |cfff4f6fb%d|r recorded run%s.", count, count == 1 and "" or "s"),
+    local Arch = ML.Archive
+
+    -- Everything below only STAGES a policy; nothing is trimmed or removed until Apply is pressed.
+    if retentionPending   == nil then retentionPending   = s.retentionRuns or 0 end
+    if retScopePending    == nil then retScopePending    = s.retentionScope or "ALL" end
+    if retKeepTopPending  == nil then retKeepTopPending  = (s.retentionKeepTop ~= false) end
+    if retActionPending   == nil then retActionPending   = s.retentionAction or "TRIM" end
+    if retDaysPending     == nil then retDaysPending     = s.retentionDays or 90 end
+    if retAutoPending     == nil then retAutoPending     = s.retentionAuto and true or false end
+
+    -- ONE measuring pass, cached: size, per-season breakdown, trimmed/locked counts and the previews.
+    -- The settings page redraws on every toggle, so nothing here may walk the database per render.
+    if storageStats == nil and DB.root and Arch then
+        local st = { total = Arch.SizeOf(DB.root), seasons = {}, seasonPlan = {},
+                     trimmed = 0, locked = 0, lockedPlayers = 0 }
+        for _, r in ipairs(DB.Runs()) do
+            local sid = r.seasonId
+            if sid ~= nil then
+                local e = st.seasons[sid]
+                if not e then e = { n = 0, bytes = 0, trimmed = 0 }; st.seasons[sid] = e end
+                e.n = e.n + 1
+                e.bytes = e.bytes + Arch.SizeOf(r)
+                if Arch.IsCompact(r) then e.trimmed = e.trimmed + 1 end
+            end
+            if Arch.IsCompact(r) then st.trimmed = st.trimmed + 1 end
+            if DB.IsLocked(r) then st.locked = st.locked + 1 end
+        end
+        for _, m in pairs(DB.PlayerMeta() or {}) do
+            if type(m) == "table" and m.protected then st.lockedPlayers = st.lockedPlayers + 1 end
+        end
+        for sid in pairs(st.seasons) do st.seasonPlan[sid] = Arch.PlanSeason(sid) end
+        storageStats = st
+    end
+    local stat = storageStats or { total = 0, seasons = {}, seasonPlan = {},
+                                   trimmed = 0, locked = 0, lockedPlayers = 0 }
+
+    -- Headline: what you are storing right now.
+    local runsN = DB.CountRuns()
+    b:Label(string.format("Storing |cfff4f6fb%s|r, about |cfff4f6fb%.1f MB|r%s.",
+        nRuns(runsN), stat.total / 1048576,
+        stat.trimmed > 0 and string.format("  (%s already trimmed)", nRuns(stat.trimmed)) or ""),
         x, y - 2, C.subtext, 11)
-    y = y - 28
-    b:Label("Retain", x, y - 2, C.subtext)
-    T(b, b:Dropdown(x + 90, y), "Retention scope",
-        "Which runs to keep. Current season / expansion delete every run OUTSIDE that window when you "
-        .. "Apply; All keeps every season. Runs recorded before this tag existed are always kept."):SetChoices(200, {
-        { "ALL", "All seasons" }, { "SEASON", "Current season only" }, { "EXPANSION", "Current expansion only" },
-    }, function() return retScopePending end, function(v) retScopePending = v; win:Refresh() end)
+    y = y - 26
+
+    ------------------------------------------------------------------
+    -- 1. The window: how long a run keeps FULL detail.
+    ------------------------------------------------------------------
+    b:Label("Keep full detail for", x, y - 2, C.subtext)
+    T(b, b:Dropdown(x + 150, y), "Full-detail window",
+        "How long a run keeps everything. Anything older is trimmed or deleted, whichever you pick "
+        .. "below. Runs with no season, expansion or date recorded are always kept."):SetChoices(210, {
+        { "ALL",       "All runs (keep everything)" },
+        { "SEASON",    "The current season" },
+        { "EXPANSION", "The current expansion" },
+        { "DAYS",      "A number of days" },
+    }, function() return retScopePending end,
+       function(v) retScopePending = v; win:Refresh() end)
     y = y - 34
-    -- Keep everything (no limit) OR keep only the newest N. Both only STAGE; Apply enforces.
+    if retScopePending == "DAYS" then
+        slider("Days to keep", 150, 200, 7, 365, 1, "%d days",
+            function() return retDaysPending end,
+            function(v) retDaysPending = v; win:Refresh() end,
+            "Runs older than this lose their full detail.")
+    end
+
+    ------------------------------------------------------------------
+    -- 2. The action: what happens to a run once it falls outside that window.
+    ------------------------------------------------------------------
+    if retScopePending ~= "ALL" then
+        b:Label("Then", x, y - 2, C.subtext)
+        T(b, b:Dropdown(x + 150, y), "What happens to older runs",
+            "Trim keeps the run - date, key, result, party, your numbers, score and grade all stay, and "
+            .. "it still shows in every list and chart. It only drops the deep review detail (death "
+            .. "recaps, per-spell breakdowns, the combat timeline), which is about 87% of its size. "
+            .. "Delete removes the run entirely."):SetChoices(210, {
+            { "TRIM",   "Trim the detail (keep the run)" },
+            { "DELETE", "Delete the run" },
+        }, function() return retActionPending end,
+           function(v) retActionPending = v; win:Refresh() end)
+        y = y - 34
+    end
+
+    ------------------------------------------------------------------
+    -- 3. The ceiling: a hard cap on how many runs are stored at all.
+    ------------------------------------------------------------------
     local unlimited = (retentionPending or 0) <= 0
     local keepAll = b:Toggle(x, y, unlimited, function(v)
         if v then
-            -- Turning ON "keep every run" - warn that history can grow with no limit, then stage it.
             b.theme:Confirm({
                 title = "Keep every run?",
-                message = "Your runs will never be cleaned up, so over time they can add up and use more memory. "
-                    .. "Keep them all anyway?",
+                message = "Your runs will never be cleaned up, so over time they can add up and use more "
+                    .. "memory. Keep them all anyway?",
                 variant = "warning", confirmLabel = "Keep everything",
                 onConfirm = function() retentionPending = 0; win:Refresh() end,
                 onCancel  = function() win:Refresh() end,   -- pending stays > 0, so the toggle snaps back off
             })
         else
-            -- Turning OFF - enable a limit (keep a prior value, else default to 2000 newest).
             retentionPending = (retentionPending and retentionPending > 0) and retentionPending or 2000
             win:Refresh()
         end
     end)
-    b.theme:SetTip(keepAll, "Keep every run", "Never delete old runs. Your saved history can grow with no limit over time.")
-    b:Label("Keep every run", x + 46, y - 2, C.text)
+    b.theme:SetTip(keepAll, "Never delete a run",
+        "Keep every run forever, however old. Trimming can still reclaim space without losing runs.")
+    b:Label("Never delete a run", x + 46, y - 2, C.text)
     y = y - 34
     if not unlimited then
-        b:Label("Keep the newest runs", x, y - 2, C.subtext)
-        y = y - 38   -- extra gap leaves room for the value readout that floats just above the slider
-        T(b, b:Slider(x, y), "Runs to keep",
-            "Keep at most this many of your newest runs; older ones are removed when you Apply.")
-            :Configure(200, 100, 5000, 100, function() return retentionPending end,
-                function(v) retentionPending = v; win:Refresh() end, "%d")
-        y = y - 34
+        slider("Store at most", 150, 200, 100, 5000, 100, "%d runs",
+            function() return retentionPending end,
+            function(v) retentionPending = v; win:Refresh() end,
+            "A ceiling on stored runs regardless of age. Once you are over it the oldest are DELETED, "
+            .. "since a ceiling is about how much you keep, not how detailed it is.")
     end
+
+    ------------------------------------------------------------------
+    -- 4. What is protected from all of the above.
+    ------------------------------------------------------------------
     local kt = b:Toggle(x, y, retKeepTopPending, function(v) retKeepTopPending = v; win:Refresh() end)
-    b.theme:SetTip(kt, "Never remove a top run",
-        "Protect your best key per dungeon, your top 10, and every crowned best-of-kind run - they are "
-        .. "never deleted by retention, even outside the retained season/expansion.")
-    b:Label("Never remove a top run", x + 46, y - 2, C.text)
+    b.theme:SetTip(kt, "Never delete a top run",
+        "Protect your best key per dungeon, your top 10 and every crowned run from DELETION. They can "
+        .. "still be trimmed: a trimmed run is still there, still crowned and still scored, so nothing "
+        .. "you would call a 'top run' is lost. To hold one at full detail, use Keep on the run itself.")
+    b:Label("Never delete a top run", x + 46, y - 2, C.text)
     y = y - 34
+
+    local autoTg = b:Toggle(x, y, retAutoPending, function(v) retAutoPending = v; win:Refresh() end)
+    b.theme:SetTip(autoTg, "Apply automatically",
+        "Enforce this policy on its own, at login and when a season ends. With it off, nothing ever "
+        .. "happens until you press Apply.")
+    b:Label("Apply automatically", x + 46, y - 2, C.text)
+    y = y - 32
+
+    if stat.locked > 0 then
+        b:Label(string.format("|cff8fbf6bKept:|r %s locked%s. Never trimmed, never deleted.",
+            nRuns(stat.locked),
+            stat.lockedPlayers > 0 and string.format(" (including everything with %d protected player%s in it)",
+                stat.lockedPlayers, stat.lockedPlayers == 1 and "" or "s") or ""),
+            x, y - 2, C.subtext, 11)
+        y = y - 24
+    end
+
+    ------------------------------------------------------------------
+    -- 5. Apply, with a preview of exactly what it will do.
+    ------------------------------------------------------------------
     local dirty = (retentionPending ~= (s.retentionRuns or 0))
         or (retScopePending ~= (s.retentionScope or "ALL"))
         or (retKeepTopPending ~= (s.retentionKeepTop ~= false))
+        or (retActionPending ~= (s.retentionAction or "TRIM"))
+        or (retDaysPending ~= (s.retentionDays or 90))
+        or (retAutoPending ~= (s.retentionAuto and true or false))
+
+    -- Preview the STAGED window, not the saved one, so the button describes what Apply would really do.
+    local preview = (Arch and retScopePending ~= "ALL")
+        and Arch.Plan({ scope = retScopePending, days = retDaysPending }) or { compact = 0, bytes = 0, locked = 0 }
+    local willTrim = (retActionPending == "TRIM") and preview.compact or 0
+    local overCap = 0
+    if (retentionPending or 0) > 0 then overCap = math.max(0, runsN - retentionPending) end
+
+    local what
+    if retScopePending == "ALL" and overCap == 0 then
+        what = "Nothing to do - you are keeping everything."
+    else
+        local bits = {}
+        if willTrim > 0 then
+            bits[#bits + 1] = string.format("trim %s (about %.1f MB back)", nRuns(willTrim), preview.bytes / 1048576)
+        elseif retActionPending == "DELETE" and preview.compact > 0 then
+            bits[#bits + 1] = string.format("delete %s outside the window", nRuns(preview.compact))
+        end
+        if overCap > 0 then bits[#bits + 1] = string.format("delete %s over the limit", nRuns(overCap)) end
+        what = (#bits > 0) and ("Will " .. table.concat(bits, ", and ") .. ".") or "Nothing currently matches."
+    end
+
     T(b, b:Button(x, y, 90, "Apply", dirty and "primary" or "default", function()
-        s.retentionScope   = retScopePending
-        s.retentionRuns    = retentionPending
-        s.retentionKeepTop = retKeepTopPending
-        DB.ApplyRetention()
-        win:Refresh()
-    end), "Apply retention", "Commit the policy above and prune now. Runs are never removed until you click this.")
-    if dirty then b:Label("staged - not yet applied", x + 100, y - 2, b.theme:Color("e0a030", C.subtext), 11) end
-    y = y - 28
-    local _, wh = b:Wrap("|cffe0a030Warning:|r applying removes every run that falls outside the policy above. "
-        .. "This permanently deletes runs and cannot be undone.", x, y, COLW - 20, { 0.85, 0.68, 0.35 }, 11)
-    y = y - (wh + 14)
+        local theme = _G.TAP and _G.TAP.uiTheme
+        local destructive = (retActionPending == "DELETE" and preview.compact > 0) or overCap > 0
+        local function commit()
+            s.retentionScope  = retScopePending
+            s.retentionRuns   = retentionPending
+            s.retentionKeepTop = retKeepTopPending
+            s.retentionAction = retActionPending
+            s.retentionDays   = retDaysPending
+            s.retentionAuto   = retAutoPending
+            local res = DB.ApplyRetention()
+            storageStats = nil
+            if theme and theme.Toast and type(res) == "table" then
+                local msg
+                if res.trimmed > 0 and res.removed > 0 then
+                    msg = string.format("Trimmed %s and removed %s. %.1f MB back.",
+                        nRuns(res.trimmed), nRuns(res.removed), res.bytes / 1048576)
+                elseif res.trimmed > 0 then
+                    msg = string.format("Trimmed %s. %.1f MB back.", nRuns(res.trimmed), res.bytes / 1048576)
+                elseif res.removed > 0 then
+                    msg = string.format("Removed %s.", nRuns(res.removed))
+                end
+                if msg then theme:Toast({ variant = "success", icon = "check", text = msg }) end
+            end
+            win:Refresh()
+        end
+        if destructive then
+            theme:Confirm({
+                title = "Apply this policy?", variant = "danger", confirmLabel = "Apply",
+                message = what .. "\n\nDeleted runs cannot be recovered."
+                    .. ((stat.locked > 0) and ("\n\n" .. nRuns(stat.locked) .. " you locked will be left alone.") or ""),
+                onConfirm = commit,
+            })
+        else
+            commit()
+        end
+    end), "Apply", "Commit the policy above and enforce it now. Nothing changes until you press this.")
+    b:Label(dirty and "|cffe0a030staged - not yet applied|r" or what, x + 100, y - 2, C.subtext, 11)
+    y = y - 30
+    if dirty then b:Label(what, x, y - 2, C.subtext, 11); y = y - 22 end
+
+    ------------------------------------------------------------------
+    -- 6. Per-season table: what each season costs, and act on just that one.
+    ------------------------------------------------------------------
+    local seasons = History.SeasonsPresent()
+    if Arch and #seasons > 0 then
+        y = y - 6
+        b:Label("BY SEASON", x, y, C.accent, 11); y = y - 22
+        local cur = currentSeason()
+        for _, sid in ipairs(seasons) do
+            local e = stat.seasons[sid] or { n = 0, bytes = 0, trimmed = 0 }
+            local sp = stat.seasonPlan[sid] or { compact = 0, bytes = 0 }
+            local isCur = (sid == cur)
+            b:Label(ML.SeasonLabel(sid) .. (isCur and "  |cff8fbf6b(current)|r" or ""), x, y - 2, C.text, 12)
+            b:Label(string.format("%s  -  %.1f MB%s", nRuns(e.n), e.bytes / 1048576,
+                e.trimmed > 0 and string.format("  -  %d trimmed", e.trimmed) or ""),
+                x + 230, y - 2, C.subtext, 11)
+            if sp.compact > 0 then
+                T(b, b:Button(x + COLW - 150, y + 2, 110, "Trim", "default", function()
+                    local theme = _G.TAP and _G.TAP.uiTheme
+                    theme:Confirm({
+                        title = "Trim " .. ML.SeasonLabel(sid) .. "?",
+                        variant = isCur and "danger" or "warning",
+                        confirmLabel = "Trim " .. nRuns(sp.compact),
+                        message = string.format(
+                            "%s will lose the deep review detail, freeing about %.1f MB. Dates, keys, "
+                            .. "results, parties, scores and grades are all kept.%s",
+                            nRuns(sp.compact), sp.bytes / 1048576,
+                            isCur and "\n\nThis is your CURRENT season, so you will lose the review "
+                                .. "detail on runs you may still want to study." or ""),
+                        onConfirm = function()
+                            local res = Arch.CompactSeason(sid)
+                            storageStats = nil
+                            if theme and theme.Toast then
+                                theme:Toast({ variant = "success", icon = "check",
+                                    text = string.format("Trimmed %s. %.1f MB back.",
+                                        nRuns(res.runs), res.bytes / 1048576) })
+                            end
+                            win:Refresh()
+                        end,
+                    })
+                end, { height = 22 }), "Trim this season",
+                    string.format("%s here can be trimmed, freeing about %.1f MB.", nRuns(sp.compact), sp.bytes / 1048576))
+            else
+                b:Label((e.n > 0 and e.trimmed >= e.n) and "all trimmed" or "nothing to trim",
+                    x + COLW - 150, y - 2, C.subtext, 11)
+            end
+            y = y - 28
+        end
+    end
+
+    ------------------------------------------------------------------
+    -- 7. The nuclear option.
+    ------------------------------------------------------------------
+    y = y - 8
     T(b, b:Button(x, y, 160, "Delete All History", "danger", function()
         local theme = _G.TAP and _G.TAP.uiTheme
         theme:Confirm({ title = "Delete ALL history?", variant = "danger", confirmLabel = "Delete everything",
-            message = "This permanently erases every recorded run and summary. Notes/tags are kept. This can't be undone.",
-            onConfirm = function() DB.WipeHistory(); win:Refresh() end })
-    end, { icon = "trash", iconSize = 13 }), "Delete all", "Permanently erase every recorded run. Notes/tags are kept.")
+            message = "This permanently erases every recorded run and summary, including runs you locked. "
+                .. "Your player notes, tags and favorites are kept. This cannot be undone.",
+            onConfirm = function() DB.WipeHistory(); storageStats = nil; win:Refresh() end })
+    end, { icon = "trash", iconSize = 13 }), "Delete all",
+        "Permanently erase every recorded run. Player notes, tags and favorites are kept.")
     y = y - 44
     end
+
 
     local function secDebug()
     b:Sub("DEBUG", x, y); y = y - 30
@@ -2946,7 +3200,9 @@ local function renderSettings(b, C, x, y, w, win)
         scoreboard  = { single = { secScoreboard } },
         deathreport = { single = { secDeathReport } },
         livecoach   = { single = { secLiveCoach } },
-        tracking    = { cols   = { { secTracking }, { secRetention } } },
+        -- One column: RUN HISTORY is a single tall block now (window, action, cap, locks, per-season),
+        -- and splitting it across columns would break the ladder it is trying to read as.
+        tracking    = { single = { secTracking, secRunHistory } },
         regroup     = { single = { secRegroup } },
         misc        = { single = { secDebug, secMinimap } },
     }
@@ -3264,19 +3520,136 @@ function specHeroCard(b, C, cx, cy, cw, ch, sp, classFile)   -- forward-declared
 end
 
 ----------------------------------------------------------------------
--- PROGRESSION chart (shared by Character Details = overall, Dungeon Details = per-dungeon). One column per
--- run (chronological), height = the selected metric normalized across the series, colored green if better
--- than the previous run / red if worse (polarity per metric), with a per-run hover tooltip and an overall
--- Improving/Regressing/Steady readout. A Per-run / Weekly toggle averages by reset week instead. Reads
--- scoring READ-ONLY (Store.Summary) - changes nothing it computes.
+-- PROGRESSION chart (shared by Character Details = overall, Dungeon Details = per-dungeon).
+--
+-- The chart FORM follows the metric rather than forcing one shape on all six (see PROG_METRICS):
+-- continuous metrics get a line with a rolling mean and a least-squares fit, discrete per-run counts
+-- get bars on a zero baseline, and Time vs timer gets deviation bars either side of the timer itself.
+-- Three views: Per run, Weekly (averaged by reset week), and By key level (one bar per keystone
+-- level, which answers "how do I hold up as keys scale" - the question chronology can't).
+--
+-- Under the chart sits the stat strip: mean/median/IQR/SD/CV plus the regression slope, its R2, and
+-- the metric's correlation with key level, each explaining itself on hover. The point is that a
+-- jagged line should be readable as "noisy but flat" rather than as a crisis, and the numbers should
+-- be there for anyone who wants to check that claim.
+--
+-- Reads scoring READ-ONLY (Store.Summary) - nothing on this page can change a score.
 ----------------------------------------------------------------------
+-- Descriptive statistics over the series ALREADY ON SCREEN. Pure + deterministic: they read the
+-- charted values only, never the scoring engine, so nothing here can move a grade. Sample (n-1)
+-- standard deviation; quantiles interpolate between order statistics (the R type-7 / Excel default),
+-- so a 4-point series still reports a sensible IQR.
+local Stat = {}
+function Stat.sorted(vals)
+    local s = {}
+    for i = 1, #vals do s[i] = vals[i] end
+    table.sort(s)
+    return s
+end
+function Stat.mean(vals)
+    if #vals == 0 then return nil end
+    local sum = 0
+    for _, v in ipairs(vals) do sum = sum + v end
+    return sum / #vals
+end
+function Stat.quantile(sorted, q)
+    local n = #sorted
+    if n == 0 then return nil end
+    if n == 1 then return sorted[1] end
+    local pos = (n - 1) * q + 1
+    local lo = math.floor(pos)
+    local frac = pos - lo
+    if lo >= n then return sorted[n] end
+    return sorted[lo] + (sorted[lo + 1] - sorted[lo]) * frac
+end
+function Stat.stdev(vals, mu)
+    local n = #vals
+    if n < 2 then return nil end
+    mu = mu or Stat.mean(vals)
+    local ss = 0
+    for _, v in ipairs(vals) do ss = ss + (v - mu) ^ 2 end
+    return math.sqrt(ss / (n - 1))
+end
+-- Ordinary least-squares fit of ys against xs. Returns slope, intercept, r2 (the share of the
+-- variance the straight line explains: 0 = the trend says nothing, 1 = the points sit on the line).
+-- nil when the sample is too small or every x is identical (a vertical fit has no slope).
+function Stat.fit(xs, ys)
+    local n = #xs
+    if n < 3 then return nil end
+    local mx, my = Stat.mean(xs), Stat.mean(ys)
+    local sxx, sxy = 0, 0
+    for i = 1, n do
+        local dx = xs[i] - mx
+        sxx = sxx + dx * dx
+        sxy = sxy + dx * (ys[i] - my)
+    end
+    if sxx <= 0 then return nil end
+    local slope = sxy / sxx
+    local intercept = my - slope * mx
+    local ssTot, ssRes = 0, 0
+    for i = 1, n do
+        ssTot = ssTot + (ys[i] - my) ^ 2
+        ssRes = ssRes + (ys[i] - (slope * xs[i] + intercept)) ^ 2
+    end
+    local r2 = (ssTot > 0) and (1 - ssRes / ssTot) or nil
+    return slope, intercept, r2
+end
+-- Pearson correlation of two paired series (-1..1). nil when either side never varies.
+function Stat.pearson(xs, ys)
+    local n = #xs
+    if n < 3 then return nil end
+    local mx, my = Stat.mean(xs), Stat.mean(ys)
+    local sxy, sxx, syy = 0, 0, 0
+    for i = 1, n do
+        local dx, dy = xs[i] - mx, ys[i] - my
+        sxy = sxy + dx * dy; sxx = sxx + dx * dx; syy = syy + dy * dy
+    end
+    if sxx <= 0 or syy <= 0 then return nil end
+    return sxy / math.sqrt(sxx * syy)
+end
+-- TRAILING rolling mean (window w, partial at the start so the smoothed line spans the whole chart).
+function Stat.rollmean(vals, w)
+    local out, sum = {}, 0
+    for i = 1, #vals do
+        sum = sum + vals[i]
+        if i > w then sum = sum - vals[i - w] end
+        out[i] = sum / math.min(i, w)
+    end
+    return out
+end
+
+-- Each metric declares HOW it should be drawn, because one chart form does not fit all six:
+--   line      = a continuous quantity worth smoothing + fitting (Score, DPS, HPS).
+--   bars      = a discrete per-run count that belongs on a zero baseline (Key Level, Deaths) - a
+--               line between integers implies in-between values that never existed.
+--   deviation = a quantity with a natural PIVOT (Time vs timer pivots on the 100% line): bars grow
+--               down for under-timer and up for over, so "how much room did I have" is the picture.
+-- fmt = axis/tooltip value, dfmt = a signed CHANGE (regression slope), sfmt = an unsigned SPREAD
+-- (standard deviation). Time is a fraction of the timer, so its spread/slope read in percentage
+-- POINTS - "sigma 4pp" is meaningful where "sigma 0.04" is not.
+local function fmtSignedShort(v)
+    local a = math.abs(v)
+    return (v < 0 and "-" or "+") .. Util.shortNum(a)
+end
 local PROG_METRICS = {
-    { key = "score",  label = "Ledger Score",  icon = "award",       higherIsGood = true,  blurb = "Group-relative performance - comparable across every dungeon.", fmt = function(v) return string.format("%d", math.floor((v or 0) + 0.5)) end },
-    { key = "key",    label = "Key Level",     icon = "key",         higherIsGood = true,  blurb = "The keystone level completed each run.",                       fmt = function(v) return "+" .. math.floor((v or 0) + 0.5) end },
-    { key = "time",   label = "Time vs timer", icon = "hourglass",   higherIsGood = false, blurb = "Percent of the dungeon timer used - lower is faster.",         fmt = function(v) return string.format("%d%%", math.floor((v or 0) * 100 + 0.5)) end },
-    { key = "deaths", label = "Deaths",        icon = "skull",       higherIsGood = false, blurb = "Your deaths per run - lower is cleaner.",                      fmt = function(v) return string.format("%.1f", v or 0) end },
-    { key = "dps",    label = "DPS",           icon = "sword",       higherIsGood = true,  blurb = "Your damage per second - reads best on a single dungeon.",     fmt = function(v) return Util.shortNum(v or 0) end },
-    { key = "hps",    label = "HPS",           icon = "heartbeat",   higherIsGood = true,  blurb = "Your healing per second - reads best on a single dungeon.",    fmt = function(v) return Util.shortNum(v or 0) end },
+    { key = "score",  label = "Ledger Score",  icon = "award",       higherIsGood = true,  form = "line", bands = true,
+      blurb = "Group-relative performance - comparable across every dungeon.", fmt = function(v) return string.format("%d", math.floor((v or 0) + 0.5)) end,
+      dfmt = function(v) return string.format("%+.1f", v) end, sfmt = function(v) return string.format("%.1f", v) end },
+    { key = "key",    label = "Key Level",     icon = "key",         higherIsGood = true,  form = "bars",
+      blurb = "The keystone level completed each run.",                       fmt = function(v) return "+" .. string.format("%.10g", math.floor((v or 0) * 10 + 0.5) / 10) end,
+      dfmt = function(v) return string.format("%+.2f", v) end, sfmt = function(v) return string.format("%.2f", v) end },
+    { key = "time",   label = "Time vs timer", icon = "hourglass",   higherIsGood = false, form = "deviation",
+      blurb = "Percent of the dungeon timer used - lower is faster.",         fmt = function(v) return string.format("%d%%", math.floor((v or 0) * 100 + 0.5)) end,
+      dfmt = function(v) return string.format("%+.1fpp", v * 100) end, sfmt = function(v) return string.format("%.1fpp", v * 100) end },
+    { key = "deaths", label = "Deaths",        icon = "skull",       higherIsGood = false, form = "bars",
+      blurb = "Your deaths per run - lower is cleaner.",                      fmt = function(v) return string.format("%.1f", v or 0) end,
+      dfmt = function(v) return string.format("%+.2f", v) end, sfmt = function(v) return string.format("%.2f", v) end },
+    { key = "dps",    label = "DPS",           icon = "sword",       higherIsGood = true,  form = "line",
+      blurb = "Your damage per second - reads best on a single dungeon.",     fmt = function(v) return Util.shortNum(v or 0) end,
+      dfmt = fmtSignedShort, sfmt = function(v) return Util.shortNum(v) end },
+    { key = "hps",    label = "HPS",           icon = "heartbeat",   higherIsGood = true,  form = "line",
+      blurb = "Your healing per second - reads best on a single dungeon.",    fmt = function(v) return Util.shortNum(v or 0) end,
+      dfmt = fmtSignedShort, sfmt = function(v) return Util.shortNum(v) end },
 }
 local PROG_BY_KEY, PROG_CHOICES = {}, {}
 for _, m in ipairs(PROG_METRICS) do PROG_BY_KEY[m.key] = m; PROG_CHOICES[#PROG_CHOICES + 1] = { m.key, m.label } end
@@ -3322,6 +3695,12 @@ local function renderProgression(b, C, x, y, w, win, runsNewestFirst, opts)
     opts = opts or {}
     local mkey = PROG_BY_KEY[view.progMetric] and view.progMetric or "score"
     local mdef = PROG_BY_KEY[mkey]
+    local vmode = view.progView or "run"
+    local weekly, byLevel = (vmode == "week"), (vmode == "level")
+    -- The chart FORM comes from the metric, except "By key level" which is always a bar chart (its x
+    -- axis is the keystone level, not time, so a connecting line would imply a progression it isn't).
+    local form = byLevel and "bars" or (mdef.form or "line")
+    local unit = byLevel and "level" or (weekly and "week" or "run")
 
     -- Observed key-level span (from this character's runs) -> the choices for the key-level filter.
     local kLo, kHi
@@ -3342,11 +3721,13 @@ local function renderProgression(b, C, x, y, w, win, runsNewestFirst, opts)
         "Which metric to chart across your runs. Ledger Score is comparable across dungeons; Key / Time / DPS / HPS read best on a single dungeon.",
         PROG_CHOICES, function() return view.progMetric or "score" end,
         function(v) view.progMetric = v; if win then win:Refresh() end end)
-    nx = scopeControl(b, C, nx, y, "View", 110, "View",
-        "Per run = one point per run.  Weekly = one point per reset week (averaged).",
-        { { "run", "Per run" }, { "week", "Weekly" } },
-        function() return view.progWeekly and "week" or "run" end,
-        function(v) view.progWeekly = (v == "week"); if win then win:Refresh() end end)
+    nx = scopeControl(b, C, nx, y, "View", 130, "View",
+        "Per run = one point per run (noisy, but every run is visible).  Weekly = one point per reset "
+        .. "week, averaged.  By key level = one bar per keystone level, so you can see how the metric "
+        .. "holds up as keys scale instead of reading it chronologically.",
+        { { "run", "Per run" }, { "week", "Weekly" }, { "level", "By key level" } },
+        function() return view.progView or "run" end,
+        function(v) view.progView = v; if win then win:Refresh() end end)
     scopeControl(b, C, nx, y, "Date range", 140, "Date range",
         "Limit the chart to a recent time window.",
         PROG_RANGE_CHOICES, function() return view.progRange or "all" end,
@@ -3404,7 +3785,40 @@ local function renderProgression(b, C, x, y, w, win, runsNewestFirst, opts)
     end
 
     local pts = {}
-    if view.progWeekly then
+    if byLevel then
+        -- One bar per keystone level: the metric AVERAGED over every run at that level, with the
+        -- sample size and timed rate carried along (a +10 average built from one run is not the same
+        -- claim as one built from nine, and the tooltip has to say so).
+        local buckets, order = {}, {}
+        for _, r in ipairs(chron) do
+            local lv = (type(r.level) == "number") and r.level or nil
+            local v = lv and progValue(mkey, r)
+            if lv and type(v) == "number" then
+                local bk = buckets[lv]
+                if not bk then bk = { n = 0, timed = 0, vals = {} }; buckets[lv] = bk; order[#order + 1] = lv end
+                bk.n = bk.n + 1; bk.vals[#bk.vals + 1] = v
+                if r.status == STATUS.TIMED then bk.timed = bk.timed + 1 end
+            end
+        end
+        table.sort(order)
+        for _, lv in ipairs(order) do
+            local bk = buckets[lv]
+            local sv = Stat.sorted(bk.vals)
+            local avg = Stat.mean(bk.vals)
+            pts[#pts + 1] = { value = avg, x = lv, xlabel = "+" .. lv, n = bk.n, timedPct = bk.timed / bk.n,
+                tip = { title = "Keystone +" .. lv,
+                    lines = { { left = "Runs", right = tostring(bk.n) },
+                              { left = "Timed", right = string.format("%d of %d", bk.timed, bk.n),
+                                rcolor = (bk.timed == bk.n) and "accent" or nil },
+                              { sep = true },
+                              { left = "Mean " .. mdef.label, right = mdef.fmt(avg), rcolor = "accent" },
+                              { left = "Median", right = mdef.fmt(Stat.quantile(sv, 0.5)) },
+                              { left = "Range", right = mdef.fmt(sv[1]) .. "  ..  " .. mdef.fmt(sv[#sv]) },
+                              { blank = true },
+                              { text = (bk.n < 3) and "Small sample - treat this bar as provisional."
+                                    or "Averaged over the runs in scope.", color = "subtext" } } } }
+        end
+    elseif weekly then
         local weekStart = (History.WeekStart and History.WeekStart()) or (time() - 7 * 86400)
         local WEEK = 7 * 86400
         local buckets, order = {}, {}
@@ -3446,79 +3860,218 @@ local function renderProgression(b, C, x, y, w, win, runsNewestFirst, opts)
         end
     end
 
-    local minPts = view.progWeekly and 2 or 3
+    local minPts = (vmode == "run") and 3 or 2
     if #pts < minPts then
-        b:Label("Not enough runs yet to chart a trend" .. (view.progWeekly and " (need 2+ weeks)." or " (need 3+ runs)."), x + 2, y - 2, C.subtext, 12)
+        b:Label("Not enough data yet to chart a trend (need " .. minPts .. "+ " .. unit .. "s in scope).",
+            x + 2, y - 2, C.subtext, 12)
         return y - 26
     end
 
     local n = #pts
-    local mn, mx = pts[1].value, pts[1].value
-    for _, p in ipairs(pts) do mn = math.min(mn, p.value); mx = math.max(mx, p.value) end
-    local span = (mx - mn > 0) and (mx - mn) or 1
-    local sum = 0; for _, p in ipairs(pts) do sum = sum + p.value end
-    local avg = sum / n
+    local vals = {}
+    for i, p in ipairs(pts) do vals[i] = p.value end
+    local svals = Stat.sorted(vals)
+    local minV, maxV = svals[1], svals[n]
+    local avg = Stat.mean(vals)
+    local median = Stat.quantile(svals, 0.5)
+    local p25, p75 = Stat.quantile(svals, 0.25), Stat.quantile(svals, 0.75)
+    local sd = Stat.stdev(vals, avg)
+    local cv = (sd and avg and math.abs(avg) > 1e-9) and (sd / math.abs(avg)) or nil
 
-    -- Trend (recent third vs earlier third) - headlines the chart.
+    -- Least-squares fit. x is the chronological INDEX in the per-run/weekly views and the keystone
+    -- LEVEL in the by-level view, so the slope reads "per run" / "per week" / "per +1 key" to match.
+    local xs = {}
+    for i, p in ipairs(pts) do xs[i] = p.x or i end
+    local slope, intercept, r2 = Stat.fit(xs, vals)
+
+    -- How the metric tracks KEY LEVEL (per-run view only). A strongly negative r on Ledger Score says
+    -- the wheels come off as keys scale - something a chronological line can never show, because your
+    -- key levels bounce around from day to day.
+    local kxs, kys = {}, {}
+    for _, p in ipairs(pts) do
+        if p.run and type(p.run.level) == "number" then kxs[#kxs + 1] = p.run.level; kys[#kys + 1] = p.value end
+    end
+    local rKey = Stat.pearson(kxs, kys)
+
+    -- Timed rate across everything charted (context for every metric, not just Time vs timer).
+    local timedN, runN = 0, 0
+    for _, p in ipairs(pts) do
+        if p.run then
+            runN = runN + 1
+            if p.run.status == STATUS.TIMED then timedN = timedN + 1 end
+        elseif p.timedPct and p.n then
+            runN = runN + p.n; timedN = timedN + p.timedPct * p.n
+        end
+    end
+    local timedPct = (runN > 0) and (timedN / runN) or nil
+
+    local goodCol, badCol, neutralCol = { 0.42, 0.82, 0.45 }, { 0.90, 0.42, 0.42 }, { 0.55, 0.58, 0.66 }
+    local amberCol, fitCol, rollCol = { 0.95, 0.72, 0.30 }, { 1, 0.82, 0.28 }, { 0.62, 0.72, 1 }
+
+    -- Kept for the LATEST tooltip: the plain-language version of the trend.
     local third = math.max(1, math.floor(n / 3))
     local es, rs = 0, 0
     for i = 1, third do es = es + pts[i].value end
     for i = n - third + 1, n do rs = rs + pts[i].value end
     local earlyAvg, recentAvg = es / third, rs / third
-    local goodCol, badCol, neutralCol = { 0.42, 0.82, 0.45 }, { 0.90, 0.42, 0.42 }, { 0.55, 0.58, 0.66 }
-    local dtrend = recentAvg - earlyAvg
+
+    -- TREND comes from the fitted line, not from comparing two noisy thirds: "Steady" now means the
+    -- fit is flat OR too scattered to believe (low r2), rather than two small means happening to land
+    -- close together. Judged on the total change the fit predicts across the whole window.
+    local spanV = (maxV - minV > 0) and (maxV - minV) or 1
+    local fitDelta = slope and (slope * (xs[n] - xs[1])) or 0
     local trendTxt, trendCol
-    if math.abs(dtrend) < span * 0.04 then trendTxt, trendCol = "Steady", neutralCol
-    elseif (dtrend > 0) == mdef.higherIsGood then trendTxt, trendCol = "Improving", goodCol
+    if not slope or math.abs(fitDelta) < spanV * 0.10 or (r2 or 0) < 0.08 then
+        trendTxt, trendCol = "Steady", neutralCol
+    elseif (fitDelta > 0) == mdef.higherIsGood then trendTxt, trendCol = "Improving", goodCol
     else trendTxt, trendCol = "Regressing", badCol end
 
-    -- Hero cards: Latest / Min / Max / Average of the selected metric over the shown series. (The big number
-    -- before was just the latest value; it is the LATEST card now, carrying the trend + its detail on hover.)
+    -- Smoothing window, scaled to the sample: too wide on a short series and the mean says nothing,
+    -- too narrow and it just retraces the raw line. nil = not enough points to smooth at all.
+    local rollW = (n >= 12) and 5 or ((n >= 7) and 3 or nil)
+
+    -- Hero cards. MIN/MAX/AVERAGE were three views of the same middle; these four answer four
+    -- different questions: where am I now, what is my typical result, what have I proven I can do,
+    -- and how repeatable am I. The full five-number summary lives in the MEDIAN card's tooltip and
+    -- the stat strip under the chart.
     do
         local gold, cool = { 1, 0.82, 0.28 }, { 0.55, 0.62, 0.78 }
         local bestIsMax = mdef.higherIsGood
+        local bestV, worstV = bestIsMax and maxV or minV, bestIsMax and minV or maxV
         local gap, ch, isz = 12, 88, 34
         local cw = math.floor((w - 3 * gap) / 4)
         heroStatCard(b, C, x, y, cw, ch, {
             label = "LATEST", value = mdef.fmt(pts[n].value), accent = trendCol, sub = trendTxt,
             icon = "activity", iconSize = isz,
-            tipData = { title = "Latest " .. (view.progWeekly and "week" or "run"),
+            tipData = { title = "Latest " .. unit,
                 lines = { { left = mdef.label, right = mdef.fmt(pts[n].value), rcolor = "accent" },
-                          { left = "Trend", right = trendTxt },
-                          { left = "Earlier avg", right = mdef.fmt(earlyAvg) },
-                          { left = "Recent avg", right = mdef.fmt(recentAvg) } } } })
+                          { left = "Trend", right = trendTxt, rcolor = trendCol },
+                          { sep = true },
+                          { left = "First third avg", right = mdef.fmt(earlyAvg) },
+                          { left = "Last third avg", right = mdef.fmt(recentAvg) },
+                          { left = "Fit predicts", right = slope and (mdef.dfmt(fitDelta) .. " across " .. n .. " " .. unit .. "s") or DASH },
+                          { blank = true },
+                          { text = "The trend is read off the fitted line, and stays Steady unless the fit "
+                                .. "is both large enough and consistent enough to mean something.", color = "subtext" } } } })
         heroStatCard(b, C, x + (cw + gap), y, cw, ch, {
-            label = "MIN", value = mdef.fmt(mn), accent = bestIsMax and cool or gold,
-            icon = "arrow-down", iconSize = isz, sub = bestIsMax and "lowest" or "best" })
+            label = "MEDIAN", value = mdef.fmt(median), accent = cool, icon = "minus", iconSize = isz,
+            sub = (p25 and p75) and ("IQR " .. mdef.fmt(p25) .. " - " .. mdef.fmt(p75)) or nil,
+            tipData = { title = "Typical " .. unit,
+                lines = { { left = "Median (p50)", right = mdef.fmt(median), rcolor = "accent" },
+                          { left = "Mean", right = mdef.fmt(avg) },
+                          { sep = true },
+                          { left = "Max", right = mdef.fmt(maxV) },
+                          { left = "Upper quartile (p75)", right = mdef.fmt(p75) },
+                          { left = "Lower quartile (p25)", right = mdef.fmt(p25) },
+                          { left = "Min", right = mdef.fmt(minV) },
+                          { blank = true },
+                          { text = "The median ignores one disaster or one hero run, so it describes your "
+                                .. "normal better than the mean. Half your results sit inside the IQR band "
+                                .. "shaded on the chart.", color = "subtext" } } } })
         heroStatCard(b, C, x + 2 * (cw + gap), y, cw, ch, {
-            label = "MAX", value = mdef.fmt(mx), accent = bestIsMax and gold or cool,
-            icon = "arrow-up", iconSize = isz, sub = bestIsMax and "best" or "highest" })
+            label = "BEST", value = mdef.fmt(bestV), accent = gold, icon = bestIsMax and "arrow-up" or "arrow-down",
+            iconSize = isz, sub = "worst " .. mdef.fmt(worstV),
+            tipData = { title = "Best " .. unit,
+                lines = { { left = "Best", right = mdef.fmt(bestV), rcolor = "accent" },
+                          { left = "Worst", right = mdef.fmt(worstV) },
+                          { left = "Spread", right = mdef.sfmt(maxV - minV) },
+                          { blank = true },
+                          { text = mdef.higherIsGood and "Higher is better for this metric."
+                                or "Lower is better for this metric.", color = "subtext" } } } })
         heroStatCard(b, C, x + 3 * (cw + gap), y, cw, ch, {
-            label = "AVERAGE", value = mdef.fmt(avg), accent = { 0.95, 0.76, 0.32 },
-            icon = "minus", iconSize = isz, sub = string.format("%d %s", n, view.progWeekly and "weeks" or "runs") })
+            label = "CONSISTENCY", value = sd and mdef.sfmt(sd) or DASH, accent = { 0.95, 0.76, 0.32 },
+            icon = "activity", iconSize = isz,
+            sub = cv and string.format("SD  -  CV %.0f%%", cv * 100) or "SD",
+            tipData = { title = "How repeatable you are",
+                lines = { { left = "Standard deviation", right = sd and mdef.sfmt(sd) or DASH, rcolor = "accent" },
+                          { left = "Coefficient of variation", right = cv and string.format("%.1f%%", cv * 100) or DASH },
+                          { left = "Sample", right = n .. " " .. unit .. "s" },
+                          { blank = true },
+                          { text = "Standard deviation is the typical distance from your own average. CV is "
+                                .. "that same spread as a percentage of the average, so it compares across "
+                                .. "metrics and gear levels: under 10% is metronomic, over 30% is streaky.", color = "subtext" } } } })
     end
     y = y - 104
 
     -- Chart card: dark base + 1px border + accent top bar.
-    local axisW, chartH = 50, 110
+    local axisW, chartH = 54, 124
     local plotX, plotW = x + axisW, w - axisW - 6
     local topY, botY = y, y - chartH
     b:Box(plotX - 1, topY + 1, plotW + 2, chartH + 2, 0.9, 0, C.border)
     b:Box(plotX, topY, plotW, chartH, 1, 1, { 0.055, 0.06, 0.085 })
     b:Box(plotX, topY, plotW, 2, 1, 2, C.accent)
 
+    -- AXIS WINDOW per form. Bars sit on a zero baseline so their heights are honest; a deviation
+    -- chart pivots on its reference (the dungeon timer) with symmetric room either side; a line gets
+    -- a padded window so ordinary variance stops filling the plot - clamping exactly to min..max, as
+    -- this chart used to, turns a 4-point wobble into a cliff. Ledger Score additionally stays inside
+    -- 0..100: that scale means something and shouldn't be reinvented per render.
+    local base, mn, mx
+    if form == "bars" then
+        base = math.min(0, minV)
+        mn = base
+        mx = maxV + math.max((maxV - base) * 0.15, 0.5)
+    elseif form == "deviation" then
+        base = 1.0
+        local dev = math.max(math.abs(maxV - base), math.abs(base - minV), 0.04)
+        mn, mx = base - dev * 1.25, base + dev * 1.25
+    else
+        local pad = (maxV - minV) * 0.12
+        if pad <= 0 then pad = math.max(1, math.abs(maxV) * 0.05) end
+        mn, mx = minV - pad, maxV + pad
+        if mkey == "score" then mn, mx = math.max(0, mn), math.min(100, mx) end
+    end
+    local span = (mx - mn > 0) and (mx - mn) or 1
+
     local padL, padR, padV = 16, 16, 14
     local usableW = plotW - padL - padR
     local step = (n > 1) and (usableW / (n - 1)) or 0
-    local function localY(v) return padV + ((v - mn) / span) * (chartH - 2 * padV) end   -- up from cf bottom
-    local function localX(i) return padL + (i - 1) * step end
-    local function contentY(v) return botY + localY(v) end                               -- cf bottom == botY
+    local slotW = usableW / n
+    local function localY(v)                                     -- up from cf bottom; clamped so a
+        local t = (v - mn) / span                                 -- clipped fit line can't escape the card
+        if t < 0 then t = 0 elseif t > 1 then t = 1 end
+        return padV + t * (chartH - 2 * padV)
+    end
+    -- A line spans edge to edge (one vertex per point); bars sit centred in their own slot.
+    local function localX(i)
+        if form == "line" then return padL + (i - 1) * step end
+        return padL + (i - 0.5) * slotW
+    end
+    local function contentY(v) return botY + localY(v) end        -- cf bottom == botY
 
-    -- Gridlines (max / mid / min) + y labels.
-    for _, gl in ipairs({ mx, (mx + mn) / 2, mn }) do
-        local gy = contentY(gl)
-        b:Box(plotX + 6, gy, plotW - 12, 1, 0.13, 2, C.border)
-        b:Label(mdef.fmt(gl), x, gy + 5, C.subtext, 10)
+    -- REFERENCE LINES carry meaning wherever the metric has any. Ledger Score gets its GRADE
+    -- boundaries (crossing from B into A is the event worth seeing, not an arbitrary mid-point);
+    -- Time vs timer gets the chest thresholds it is actually judged against; everything else falls
+    -- back to min / mid / max.
+    local MAJOR_GRADES = { S = true, A = true, B = true, C = true, D = true }
+    local refs = {}
+    local sCfg = ML.Scoring and ML.Scoring.Config
+    if mdef.bands and sCfg and sCfg.grades then
+        for _, g in ipairs(sCfg.grades) do
+            if MAJOR_GRADES[g.grade] and g.min > mn and g.min < mx then
+                refs[#refs + 1] = { v = g.min, label = g.grade .. " " .. g.min, strong = true }
+            end
+        end
+    elseif form == "deviation" then
+        for _, t in ipairs({ { 0.6, "+3 chest" }, { 0.8, "+2 chest" }, { 1.0, "timer" } }) do
+            if t[1] > mn and t[1] < mx then refs[#refs + 1] = { v = t[1], label = t[2], strong = (t[1] == base) } end
+        end
+    end
+    if #refs == 0 then
+        refs = { { v = mx }, { v = (mx + mn) / 2 }, { v = mn } }
+        if form == "bars" and base == 0 then refs[#refs] = { v = 0, label = "0", strong = true } end
+    end
+    for _, gl in ipairs(refs) do
+        local gy = contentY(gl.v)
+        b:Box(plotX + 6, gy, plotW - 12, 1, gl.strong and 0.34 or 0.13, 2, gl.strong and C.accent or C.border)
+        b:Label(gl.label or mdef.fmt(gl.v), x, gy + 5, C.subtext, 10)
+    end
+
+    -- IQR band: the middle half of every result in scope, shaded behind the series. A thin band is a
+    -- repeatable player; a tall one is the swing the raw line is already fighting you with.
+    if p25 and p75 and p75 > p25 then
+        local yHi, yLo = contentY(p75), contentY(p25)
+        b:Box(plotX + 6, yHi, plotW - 12, math.max(1, yHi - yLo), 0.10, 1, C.accent)
     end
 
     -- Average reference line (dashed amber) + label.
@@ -3528,10 +4081,12 @@ local function renderProgression(b, C, x, y, w, win, runsNewestFirst, opts)
     local dstep = (plotW - 12) / dashN
     for k = 0, dashN - 1 do b:Box(plotX + 6 + k * dstep, avgY, dstep * 0.55, 1, 0.85, 3, avgCol) end
 
-    -- The line: real diagonal segments (CreateLine) on a managed frame, per-segment colored (improve/
-    -- regress) with a soft glow; hover regions live on the frame so they sit above the lines.
+    -- Diagonal geometry (the raw line, the rolling mean, the fit) needs real CreateLine textures, so
+    -- it lives on a managed frame that survives the Builder's per-render reset; hover regions sit on
+    -- the same frame so they stay above everything drawn.
     local cf = progChart
     if not cf then cf = CreateFrame("Frame", nil, b.content); cf.segs, cf.glow, cf.dots, cf.hits = {}, {}, {}, {}; progChart = cf end
+    cf.roll = cf.roll or {}     -- added later than the frame; a pooled frame from an older render lacks it
     if cf:GetParent() ~= b.content then cf:SetParent(b.content) end
     cf:ClearAllPoints(); cf:SetPoint("TOPLEFT", b.content, "TOPLEFT", plotX, topY); cf:SetSize(math.max(1, plotW), chartH); cf:Show()
     if b.Transient then b:Transient(cf) end
@@ -3545,32 +4100,98 @@ local function renderProgression(b, C, x, y, w, win, runsNewestFirst, opts)
     cf.avgLabel:SetPoint("BOTTOMLEFT", cf, plotW - 78, (alY > chartH * 0.72) and (alY - 13) or (alY + 8))
     cf.avgLabel:Show()
 
+    local function hideFrom(t, from) for i = from, #t do if t[i] then t[i]:Hide() end end end
+
     local bestI = 1
     for i = 2, n do
         local better = mdef.higherIsGood and (pts[i].value > pts[bestI].value) or ((not mdef.higherIsGood) and pts[i].value < pts[bestI].value)
         if better then bestI = i end
     end
 
-    for i = 1, n - 1 do
-        local x1, y1, x2, y2 = localX(i), localY(pts[i].value), localX(i + 1), localY(pts[i + 1].value)
-        local dd = pts[i + 1].value - pts[i].value
-        local col = neutralCol
-        if math.abs(dd) > 1e-9 then col = ((dd > 0) == mdef.higherIsGood) and goodCol or badCol end
-        local gl = cf.glow[i] or cf:CreateLine(); cf.glow[i] = gl
-        gl:SetThickness(6); gl:SetColorTexture(col[1], col[2], col[3], 0.18)
-        gl:SetStartPoint("BOTTOMLEFT", cf, x1, y1); gl:SetEndPoint("BOTTOMLEFT", cf, x2, y2); gl:Show()
-        local ln = cf.segs[i] or cf:CreateLine(); cf.segs[i] = ln
-        ln:SetThickness(2.5); ln:SetColorTexture(col[1], col[2], col[3], 1)
-        ln:SetStartPoint("BOTTOMLEFT", cf, x1, y1); ln:SetEndPoint("BOTTOMLEFT", cf, x2, y2); ln:Show()
+    -- BARS. Their color carries the OUTCOME, not just the height: timed vs depleted for a run, the
+    -- timed rate for a key level, and for Deaths / Time vs timer the good-or-bad side of the metric.
+    local function barColor(p)
+        if byLevel then
+            local t = p.timedPct or 0
+            if t >= 0.999 then return goodCol elseif t >= 0.5 then return amberCol else return badCol end
+        end
+        if mkey == "deaths" then
+            if p.value <= 0 then return goodCol elseif p.value <= 2 then return amberCol else return badCol end
+        end
+        if form == "deviation" then return (p.value <= base) and goodCol or badCol end
+        if p.run then
+            if p.run.status == STATUS.TIMED then return goodCol
+            elseif p.run.status == STATUS.DEPLETED then return amberCol end
+        end
+        return neutralCol
     end
-    for i = n, #cf.segs do if cf.segs[i] then cf.segs[i]:Hide() end; if cf.glow[i] then cf.glow[i]:Hide() end end
+    if form ~= "line" then
+        local barW = math.max(3, math.min(30, slotW * 0.62))
+        local baseY = contentY(base)
+        for i, p in ipairs(pts) do
+            local cx, vy = plotX + localX(i), contentY(p.value)
+            -- A value sitting exactly on the baseline (a clean 0-death run) still draws a hairline,
+            -- so "nothing happened" reads as a deliberate result instead of a gap.
+            b:Box(cx - barW / 2, math.max(vy, baseY), barW, math.max(1, math.abs(vy - baseY)), 0.92, 2, barColor(p))
+        end
+    end
+
+    -- RAW LINE: per-segment colored improve/regress with a soft glow (line metrics only).
+    if form == "line" then
+        for i = 1, n - 1 do
+            local x1, y1, x2, y2 = localX(i), localY(pts[i].value), localX(i + 1), localY(pts[i + 1].value)
+            local dd = pts[i + 1].value - pts[i].value
+            local col = neutralCol
+            if math.abs(dd) > 1e-9 then col = ((dd > 0) == mdef.higherIsGood) and goodCol or badCol end
+            local alpha = rollW and 0.45 or 1                  -- dim the raw line when a mean rides on top
+            local gl = cf.glow[i] or cf:CreateLine(); cf.glow[i] = gl
+            gl:SetThickness(6); gl:SetColorTexture(col[1], col[2], col[3], 0.18 * alpha)
+            gl:SetStartPoint("BOTTOMLEFT", cf, x1, y1); gl:SetEndPoint("BOTTOMLEFT", cf, x2, y2); gl:Show()
+            local ln = cf.segs[i] or cf:CreateLine(); cf.segs[i] = ln
+            ln:SetThickness(2.5); ln:SetColorTexture(col[1], col[2], col[3], alpha)
+            ln:SetStartPoint("BOTTOMLEFT", cf, x1, y1); ln:SetEndPoint("BOTTOMLEFT", cf, x2, y2); ln:Show()
+        end
+        hideFrom(cf.segs, n); hideFrom(cf.glow, n)
+    else
+        hideFrom(cf.segs, 1); hideFrom(cf.glow, 1)
+    end
+
+    -- ROLLING MEAN: the signal under the scatter. Trailing window, so each point is "my average over
+    -- the last N" - the same smoothing you do by eye, done consistently.
+    if form == "line" and rollW then
+        local rm = Stat.rollmean(vals, rollW)
+        for i = 1, n - 1 do
+            local ln = cf.roll[i] or cf:CreateLine(); cf.roll[i] = ln
+            ln:SetThickness(3); ln:SetColorTexture(rollCol[1], rollCol[2], rollCol[3], 0.95)
+            ln:SetStartPoint("BOTTOMLEFT", cf, localX(i), localY(rm[i]))
+            ln:SetEndPoint("BOTTOMLEFT", cf, localX(i + 1), localY(rm[i + 1]))
+            ln:Show()
+        end
+        hideFrom(cf.roll, n)
+    else
+        hideFrom(cf.roll, 1)
+    end
+
+    -- FITTED TREND, drawn only when the fit explains enough of the variance to be worth believing.
+    local fitShown = false
+    if slope and (r2 or 0) >= 0.05 then
+        local ln = cf.fit or cf:CreateLine(); cf.fit = ln
+        ln:SetThickness(2); ln:SetColorTexture(fitCol[1], fitCol[2], fitCol[3], 0.55)
+        ln:SetStartPoint("BOTTOMLEFT", cf, localX(1), localY(intercept + slope * xs[1]))
+        ln:SetEndPoint("BOTTOMLEFT", cf, localX(n), localY(intercept + slope * xs[n]))
+        ln:Show()
+        fitShown = true
+    elseif cf.fit then cf.fit:Hide() end
 
     for i = 1, n do
         local lx, ly = localX(i), localY(pts[i].value)
-        local dot = cf.dots[i] or cf:CreateTexture(nil, "OVERLAY"); cf.dots[i] = dot
-        if i == bestI then dot:SetColorTexture(1, 0.82, 0.28, 1); dot:SetSize(8, 8)
-        else dot:SetColorTexture(0.93, 0.95, 0.99, 1); dot:SetSize(5, 5) end
-        dot:ClearAllPoints(); dot:SetPoint("CENTER", cf, "BOTTOMLEFT", lx, ly); dot:Show()
+        local dot = cf.dots[i]
+        if form == "line" then                        -- bars are their own marker; dots would just add noise
+            dot = dot or cf:CreateTexture(nil, "OVERLAY"); cf.dots[i] = dot
+            if i == bestI then dot:SetColorTexture(1, 0.82, 0.28, 1); dot:SetSize(8, 8)
+            else dot:SetColorTexture(0.93, 0.95, 0.99, 1); dot:SetSize(5, 5) end
+            dot:ClearAllPoints(); dot:SetPoint("CENTER", cf, "BOTTOMLEFT", lx, ly); dot:Show()
+        elseif dot then dot:Hide() end
 
         local hit = cf.hits[i]
         if not hit then
@@ -3580,17 +4201,122 @@ local function renderProgression(b, C, x, y, w, win, runsNewestFirst, opts)
             hit:SetScript("OnLeave", function() if _G.GameTooltip_Hide then GameTooltip_Hide() end end)
         end
         if pts[i].tip and b.theme.SetTipData then b.theme:SetTipData(hit, pts[i].tip) end
-        hit:SetSize(math.max(12, step), chartH)
+        hit:SetSize(math.max(12, (form == "line") and step or slotW), chartH)
         hit:ClearAllPoints(); hit:SetPoint("BOTTOM", cf, "BOTTOMLEFT", lx, 0); hit:Show()
     end
     for i = n + 1, #cf.dots do if cf.dots[i] then cf.dots[i]:Hide() end; if cf.hits[i] then cf.hits[i]:Hide() end end
 
-    if not view.progWeekly and pts[1].run and pts[n].run then
-        b:Label(Util.dateShort(pts[1].run.completedAt or pts[1].run.startedAt), plotX + padL - 8, botY - 3, C.subtext, 10)
-        b:Label(Util.dateShort(pts[n].run.completedAt or pts[n].run.startedAt), plotX + plotW - 92, botY - 3, C.subtext, 10)
+    -- X AXIS. By key level labels every bar (with its sample size, because a +10 average off one run
+    -- is not the same claim as one off nine); the chronological views anchor first / middle / last in
+    -- time, which the chart never used to say at all.
+    local axisBottom = botY - 18            -- clear of the x-axis label row
+    if byLevel then
+        for i, p in ipairs(pts) do
+            local lx = plotX + localX(i)
+            b:Label(p.xlabel or "", lx - 9, botY - 3, C.subtext, 10)
+            if p.n then b:Label("n=" .. p.n, lx - 11, botY - 15, C.subtext, 9) end
+        end
+        axisBottom = botY - 30              -- two label rows: the level, then its sample size
+    elseif not weekly then
+        local function dateAt(i) local r = pts[i].run; return r and Util.dateShort(r.completedAt or r.startedAt) or nil end
+        local dFirst, dMid, dLast = dateAt(1), dateAt(math.floor((n + 1) / 2)), dateAt(n)
+        if dFirst then b:Label(dFirst, plotX + padL - 8, botY - 3, C.subtext, 10) end
+        if dMid and n >= 6 then b:Label(dMid, plotX + plotW / 2 - 24, botY - 3, C.subtext, 10) end
+        if dLast then b:Label(dLast, plotX + plotW - 92, botY - 3, C.subtext, 10) end
     end
 
-    return botY - 28
+    -- Legend for whatever overlays are actually on screen (never a key to things you can't see).
+    if form == "line" and (rollW or fitShown) then
+        local legX, legY = plotX + padL, axisBottom - 2
+        local function legendItem(col, text)
+            b:Box(legX, legY, 14, 3, 0.95, 2, col)
+            local lb = b:Label(text, legX + 18, legY + 4, C.subtext, 9)
+            legX = legX + 18 + (lb:GetStringWidth() or 40) + 14
+        end
+        legendItem({ 0.93, 0.95, 0.99 }, "each " .. unit)
+        if rollW then legendItem(rollCol, rollW .. "-" .. unit .. " mean") end
+        if fitShown then legendItem(fitCol, "fit") end
+        axisBottom = legY - 14
+    end
+
+    -- STAT STRIP: the numbers behind the picture, each explaining itself on hover. The chart says
+    -- what happened; these say how much of it is signal and how much is noise.
+    local chips = {}
+    local function chip(label, value, col, tipTitle, tipBody)
+        if value ~= nil then chips[#chips + 1] = { label = label, value = value, col = col, tt = tipTitle, tb = tipBody } end
+    end
+    chip("n", n .. " " .. unit .. "s", nil, "Sample size",
+        "How many " .. unit .. "s this chart is built from. Small samples swing hard on one good or bad "
+        .. "night - under about 8, read everything here as provisional.")
+    chip("mean", mdef.fmt(avg), nil, "Mean",
+        "The plain average. Pulled around by outliers, which is exactly why the median sits next to it.")
+    chip("median", mdef.fmt(median), nil, "Median",
+        "The middle result: half your " .. unit .. "s are better, half worse. When the mean and median "
+        .. "disagree, a few extreme " .. unit .. "s are doing the talking.")
+    chip("range", mdef.fmt(minV) .. " - " .. mdef.fmt(maxV), nil, "Range", "Your worst and best result in scope.")
+    if p25 and p75 then
+        chip("IQR", mdef.fmt(p25) .. " - " .. mdef.fmt(p75), nil, "Interquartile range",
+            "The middle half of your results, shaded on the chart. Ignores the top and bottom quarter, "
+            .. "so it shows your normal band without the flukes at either end.")
+    end
+    if sd then
+        chip("SD", mdef.sfmt(sd), nil, "Standard deviation",
+            "The typical distance between a single " .. unit .. " and your own average.")
+    end
+    if cv then
+        chip("CV", string.format("%.0f%%", cv * 100), nil, "Coefficient of variation",
+            "Standard deviation as a percentage of the mean, so it compares across metrics and gear "
+            .. "levels. Under 10% is metronomic; over 30% is streaky.")
+    end
+    if slope then
+        chip("slope", mdef.dfmt(slope) .. " / " .. unit, trendCol, "Trend slope",
+            "The straight line that best fits your " .. unit .. "s, expressed as change per " .. unit
+            .. ". Across all " .. n .. " that adds up to " .. mdef.dfmt(fitDelta) .. ".")
+    end
+    if r2 then
+        chip("R2", string.format("%.2f", r2), nil, "Fit quality (R squared)",
+            "How much of the movement the trend line actually explains, from 0 to 1. Near 0 means the "
+            .. "slope is noise and you should ignore it; above about 0.3 the trend is real. This is why "
+            .. "a big-looking slope can still read as Steady.")
+    end
+    if rKey then
+        local rkCol
+        if math.abs(rKey) >= 0.4 then
+            local hurts = mdef.higherIsGood and (rKey < 0) or ((not mdef.higherIsGood) and (rKey > 0))
+            rkCol = hurts and badCol or goodCol
+        end
+        chip("r vs key", string.format("%+.2f", rKey), rkCol, "Correlation with key level",
+            "How this metric moves as keystone level rises, from -1 to +1. 0 means key level makes no "
+            .. "difference to it. Anything past about 0.4 either way is a real relationship - and for "
+            .. (mdef.higherIsGood and "this metric a negative one means you fall off as keys get harder."
+                or "this metric a positive one means it gets worse as keys get harder."))
+    end
+    if timedPct then
+        chip("timed", string.format("%.0f%%", timedPct * 100), nil, "Timed rate",
+            "The share of the charted runs that beat the dungeon timer.")
+    end
+
+    local chipH, chipGap = 22, 8
+    local chipX, chipY = x, axisBottom - 8
+    for _, c in ipairs(chips) do
+        local cwid = math.floor(20 + 6.1 * #(c.label .. "  " .. c.value))
+        if chipX + cwid > x + w and chipX > x then chipX = x; chipY = chipY - (chipH + 6) end
+        local col = c.col or C.border
+        b:Box(chipX, chipY, cwid, chipH, 0.16, 1, col)
+        b:Box(chipX, chipY, 2, chipH, 0.9, 2, col)
+        b:Label(c.label .. "  |cfff2f4f8" .. c.value .. "|r", chipX + 9, chipY - 6, C.subtext, 11)
+        -- SetTipData (not the Hit tipTitle/tipBody path): b:Hit pools its frames, and a pooled frame
+        -- that once carried rich lines would otherwise keep showing them behind a plain tip.
+        local hit = b:Hit(chipX, chipY, cwid, chipH)
+        if b.theme.SetTipData then
+            b.theme:SetTipData(hit, { title = c.tt, minWidth = 300,
+                lines = { { left = c.label, right = c.value, rcolor = "accent" },
+                          { blank = true }, { text = c.tb, color = "subtext" } } })
+        end
+        chipX = chipX + cwid + chipGap
+    end
+
+    return chipY - chipH - 14
 end
 
 local function renderCharacterDetails(b, C, x, y, w, win)
@@ -3772,7 +4498,7 @@ local PAGE_META = {
     runs       = { "Runs",           "Every timed, depleted, or abandoned key you've recorded, newest first. Click a run for its full details." },
     dungeons   = { "Dungeons",       "Per-dungeon stats across your recorded runs - best time, timed %, and averages. Click one to drill in." },
     characters = { "Characters",     "Every character you've recorded runs on, with their season stats. Click one for its full history." },
-    progression = { "Progression",   "Chart a character's improvement or regression over their runs - overall or in one dungeon. Pick a metric and per-run or weekly." },
+    progression = { "Progression",   "Chart a character's improvement or regression over their runs - overall or in one dungeon. Pick a metric, then read it per run, per week, or by key level, with the distribution and trend stats underneath." },
     players    = { "Players",        "Everyone you've keyed with - shared history, best run together, averages, and your private notes." },
     bests      = { "Personal Bests", "Your best recorded run for each dungeon this season, by keystone level and time." },
     debug      = { "Debug",          "Diagnostics and the recent activity log - handy when reporting an issue." },
@@ -4300,7 +5026,7 @@ function renderPlayerReview(b, C, x, y, w, win)
     -- Reference only; never changes the score. One shared renderer, called for kicks and for dispels.
     do
         local scfg = ML.Scoring and ML.Scoring.Config
-        local cat = scfg and scfg.SeasonDungeon and scfg.SeasonDungeon(r.dungeonName)
+        local cat = scfg and scfg.SeasonDungeon and scfg.SeasonDungeon(r.dungeonName, r.seasonId)
         local you, them = m.isPlayer and "you" or "they", m.isPlayer and "you" or "them"
         local OFFLIST = { order = 9, color = "8b91a0" }
 

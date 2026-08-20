@@ -10,6 +10,11 @@ if not Suite then return end
 local CHANGELOG = [==[
 # Focus Target Interrupt - What's New
 
+## 1.3.0
+
+- **[NEW]** **Cast at now covers every detected interrupt and stun.** The Macros page lists every interrupt and targeted stun your spec and talents actually give you (not just the first) - so a Prot Paladin sees Rebuke, Avenger's Shield and Divine Toll, a Feral sees Skull Bash plus Mighty Bash and Maim, and so on. Each ability gets its own **Cast at** dropdown (focus, target, mouseover, or a fallback combo) and its own macro. Stuns had no Cast at before; now they do (default: focus, else target).
+- **[CHANGE]** The first interrupt keeps the name **TAP Interrupt** and the first stun **TAP Stun**, so your existing macros keep updating. Extra abilities get their own short names (e.g. TAP AvShield, TAP Maim).
+
 ## 1.2.0
 
 - **[NEW]** The Interrupt macro has a **Cast at** option, just like the Focus macro's focus source: interrupt your focus, your current target, or your mouseover, with fallback combos (focus, else target / mouseover, else focus). The default is still focus-only; save the macro again after changing it.
@@ -118,7 +123,7 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
     end
     local function copy(title, text) if b.theme.ShowCopyDialog then b.theme:ShowCopyDialog(title, text) end end
 
-    -- MACROS page: the three ready-made macros (Focus + Mark, Interrupt, Stun).
+    -- MACROS page: Focus + Mark, then one macro per detected interrupt and per detected stun.
     local function renderMacros(y)
         -- Create/Update button for one ready-made macro: the label and tooltip flip to "Update"
         -- when the macro already exists in the macro book, and the page re-renders after a save
@@ -169,45 +174,54 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
             "Copy text", "Open the macro text so you can copy it.")
         y = y - 44
 
-        -- INTERRUPT (aim is configurable; defaults to @focus)
-        b:Sub("INTERRUPT  (auto-detected for your spec)", x, y); y = y - 30
-        local kickText, intr = FTI.BuildKickMacro(mac)
-        if kickText then
-            b:GameIcon(x, y, { spell = intr.id, size = 48 })   -- hover = the real Blizzard spell tooltip
-            local line = "Detected: |cff33ff33" .. tostring(intr.name or "?") .. "|r"
-            if intr.note then line = line .. "   |cffffcc00(" .. intr.note .. ")|r" end
-            b:Label(line, x + 58, y - 4, C.text)
-            b:Label("Cast at", x + 58, y - 30, C.subtext)
-            dropdown(x + 112, y - 28, 200, KICK_SOURCE, function() return mac.kickTarget or "focus" end,
-                function(v) mac.kickTarget = v; FTI.RefreshManager() end,
-                "Interrupt target", "Who the macro interrupts: your focus, current target, or mouseover - with a fallback if the first isn't there. Save the macro again after changing this.")
-            y = y - 62
-            y = macroBox(kickText, x, y)
-            macroButton(x, y, 130, "TAP Interrupt", intr.icon or "INV_Misc_QuestionMark",
-                function() return (FTI.BuildKickMacro(mac)) end, " (spec-specific)")
-            tip(b:Button(x + 140, y, 110, "Copy text", "default", function() copy("TAP Interrupt macro", (FTI.BuildKickMacro(mac))) end),
+        -- Render ONE detected ability (icon + Cast at + macro text + Create/Copy). Shared by interrupts
+        -- and stuns. The per-ability Cast at is stored in mac.castTargets keyed by spell id, falling
+        -- back to `defaultTarget`. The FIRST of each kind keeps its classic macro name (see AbilityMacroName).
+        local function renderAbility(cy, kind, ability, index, defaultTarget, castTip, macroNote)
+            local id = ability.id
+            local getT = function() return (mac.castTargets and mac.castTargets[id]) or defaultTarget end
+            local mname = FTI.AbilityMacroName(kind, ability, index)
+            b:GameIcon(x, cy, { spell = id, size = 48 })   -- hover = the real Blizzard spell tooltip
+            local line = "Detected: |cff33ff33" .. tostring(ability.name or "?") .. "|r"
+            if ability.note then line = line .. "   |cffffcc00(" .. ability.note .. ")|r" end
+            b:Label(line, x + 58, cy - 4, C.text)
+            b:Label("Cast at", x + 58, cy - 30, C.subtext)
+            dropdown(x + 112, cy - 28, 200, KICK_SOURCE, getT,
+                function(v) mac.castTargets = mac.castTargets or {}; mac.castTargets[id] = v; FTI.RefreshManager() end,
+                (kind == "stun") and "Stun target" or "Interrupt target", castTip)
+            cy = cy - 62
+            cy = macroBox(FTI.BuildAbilityMacro(ability, getT()), x, cy)
+            macroButton(x, cy, 130, mname, ability.icon or "INV_Misc_QuestionMark",
+                function() return FTI.BuildAbilityMacro(ability, getT()) end, macroNote)
+            tip(b:Button(x + 140, cy, 110, "Copy text", "default", function() copy(mname .. " macro", FTI.BuildAbilityMacro(ability, getT())) end),
                 "Copy text", "Open the macro text so you can copy it.")
-            y = y - 48
+            return cy - 48
+        end
+
+        -- INTERRUPTS (every one your spec/talents give you; each gets its own Cast at + macro)
+        b:Sub("INTERRUPTS  (auto-detected for your spec)", x, y); y = y - 30
+        local interrupts, ireason = FTI.GetPlayerInterrupts()
+        if interrupts[1] then
+            for i, intr in ipairs(interrupts) do
+                y = renderAbility(y, "interrupt", intr, i, mac.kickTarget or "focus",
+                    "Who this interrupt hits: your focus, current target, or mouseover - with a fallback if the first isn't there. Save the macro again after changing this.",
+                    " (spec-specific)")
+            end
         else
-            local _, nh = b:Wrap("|cffffcc00No interrupt macro for your spec.|r  " .. tostring(intr), x, y - 2, w - 48, C.subtext, 12)
+            local _, nh = b:Wrap("|cffffcc00No interrupt macro for your spec.|r  " .. tostring(ireason), x, y - 2, w - 48, C.subtext, 12)
             y = y - (nh + 14)
         end
 
-        -- STUN @focus / @target
-        b:Sub("STUN  @FOCUS / @TARGET  (auto-detected for your talents)", x, y); y = y - 30
-        local stunText, stun = FTI.BuildStunMacro()
-        if stunText then
-            b:GameIcon(x, y, { spell = stun.id, size = 48 })   -- hover = the real Blizzard spell tooltip
-            b:Label("Detected: |cff33ff33" .. tostring(stun.name or "?") .. "|r", x + 58, y - 16, C.text)
-            y = y - 56
-            y = macroBox(stunText, x, y)
-            macroButton(x, y, 130, "TAP Stun", stun.icon or "INV_Misc_QuestionMark",
-                function() return (FTI.BuildStunMacro()) end)
-            tip(b:Button(x + 140, y, 110, "Copy text", "default", function() copy("TAP Stun macro", (FTI.BuildStunMacro())) end),
-                "Copy text", "Open the macro text so you can copy it.")
-            y = y - 48
+        -- STUNS (every targeted stun your talents give you; each gets its own Cast at + macro)
+        b:Sub("STUNS  (auto-detected for your talents)", x, y); y = y - 30
+        local stuns, sreason = FTI.GetPlayerStuns()
+        if stuns[1] then
+            for i, stun in ipairs(stuns) do
+                y = renderAbility(y, "stun", stun, i, "focus_target",
+                    "Who this stun hits: your focus, current target, or mouseover - with a fallback if the first isn't there. Save the macro again after changing this.")
+            end
         else
-            local _, sh = b:Wrap("|cffffcc00No stun macro:|r  " .. tostring(stun), x, y - 2, w - 48, C.subtext, 12)
+            local _, sh = b:Wrap("|cffffcc00No stun macro:|r  " .. tostring(sreason), x, y - 2, w - 48, C.subtext, 12)
             y = y - (sh + 14)
         end
         return y

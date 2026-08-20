@@ -135,28 +135,27 @@ end
 ----------------------------------------------------------------------
 function Mixin:SoundSelect(parent, opts)
     opts = opts or {}
-    local theme, C = self, self.C
-    local w = opts.width or 220
-    local b = CreateFrame("Button", nil, parent); theme:StylePanel(b, C.card); b:SetSize(w, 26)
-    b.fs = b:CreateFontString(nil, "OVERLAY"); b.fs:SetFont(theme.FONT, 12); b.fs:SetPoint("LEFT", 8, 0); b.fs:SetPoint("RIGHT", -20, 0); b.fs:SetJustifyH("LEFT"); b.fs:SetTextColor(unpack(C.text))
-    b.caret = b:CreateFontString(nil, "OVERLAY"); b.caret:SetFont(theme.FONT, 10); b.caret:SetPoint("RIGHT", -7, -1); b.caret:SetText("v"); b.caret:SetTextColor(unpack(C.accent))
-    b._value = opts.value or (theme:SoundList()[1] and theme:SoundList()[1].key)
-    b:SetScript("OnEnter", function(self) theme:FillPaint(self, theme.C.hover) end)
-    b:SetScript("OnLeave", function(self) theme:FillPaint(self, theme.C.card) end)
-    function b:Refresh() self.fs:SetText(theme:SoundLabel(self._value)) end
-    b:SetScript("OnClick", function(self)
-        local items, startedCustom = {}, false
-        items[#items + 1] = { label = "Blizzard Sounds", header = true }
+    local theme = self
+    local dd = theme:Dropdown(parent)
+    dd._value = opts.value or (theme:SoundList()[1] and theme:SoundList()[1].key)
+    local function items()
+        local list, startedCustom = {}, false
+        list[#list + 1] = { label = "Blizzard Sounds", header = true }
         for _, s in ipairs(theme:SoundList()) do
-            if s.file and not startedCustom then items[#items + 1] = { label = "Custom Sounds", header = true }; startedCustom = true end
-            items[#items + 1] = { label = s.label, value = s.key }
+            if s.file and not startedCustom then list[#list + 1] = { label = "Custom Sounds", header = true }; startedCustom = true end
+            list[#list + 1] = { label = s.label, value = s.key, keywords = s.key }
         end
-        theme:OpenMenu(self, items, function() return self._value end, function(v)
-            self._value = v; self:Refresh()
+        return list
+    end
+    -- The catalog runs to a hundred-odd entries, so the menu's filter box is the whole point
+    -- here: type "bell", hear it, move on.
+    dd:SetMenu(opts.width or 220, items, function() return dd._value end,
+        function(v)
+            dd._value = v
             if opts.preview ~= false then theme:PlaySound(v, opts.channel) end
             if opts.onChange then opts.onChange(v) end
-        end)
-    end)
-    b:Refresh()
-    return b
+        end,
+        function(v) return theme:SoundLabel(v) end,
+        { search = true, placeholder = "Search sounds...", maxHeight = opts.maxHeight or 320 })
+    return dd
 end

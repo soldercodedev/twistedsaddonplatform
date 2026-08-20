@@ -12,7 +12,8 @@
 --   b:Label("Enable addon", 70, -56, theme.C.text)
 --   b:Button(24, -100, 120, "Save", "primary", function() end)
 --
--- Chaining widgets (dropdown / slider) return the widget so you can :SetChoices/:Configure.
+-- Chaining widgets (dropdown / slider) return the widget so you can :SetChoices/:Configure
+-- (a dropdown also takes :SetIconChoices / :SetMenu / :SetMulti - see Widgets.lua).
 -- SetTip works on anything returned:  theme:SetTip(b:Dropdown(x,y), "Title", "Body"):SetChoices(...)
 
 local ADDON, TAP = ...

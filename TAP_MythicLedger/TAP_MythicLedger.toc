@@ -1,4 +1,4 @@
-## Interface: 120007
+## Interface: 120100
 ## Title: |cffa06cf0TAP:|r Mythic Ledger
 ## Notes: Account-wide Mythic+ run, party, and performance history. A module of the Twisteds Addon Platform - configure with /tap.
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
@@ -32,6 +32,7 @@ History.lua
 # -> composition -> baselines -> category scorers -> weight redistribution -> overall + explanation.
 Scoring\Config.lua
 Scoring\Seasons\MidnightS1.lua
+Scoring\Seasons\MidnightS2.lua
 Scoring\Capability.lua
 Scoring\Normalize.lua
 Scoring\Composition.lua
@@ -45,6 +46,10 @@ Scoring\Score.lua
 Scoring\Review.lua
 Scoring\Store.lua
 Scoring\Tests.lua
+
+# Data retention: compaction of old runs. Loads after Scoring (it freezes scores before stripping)
+# and after History (it rebuilds derived caches afterwards).
+Archive.lua
 
 # Returning-player recap service (local-only, anti-spam, role-aware).
 Recap.lua

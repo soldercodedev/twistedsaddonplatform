@@ -14,7 +14,7 @@ ML.ADDON      = ADDON                 -- "TAP_MythicLedger"
 ML.MODULE_ID  = "mythicLedger"        -- Suite module id (matches ## X-Suite-Module)
 ML.NAME       = "Mythic Ledger"
 ML.PREFIX     = "|cffa06cf0Mythic Ledger|r "   -- chat print prefix (suite violet)
-ML.SCHEMA_VERSION = 4
+ML.SCHEMA_VERSION = 5
 
 -- Run outcome, kept as stable string keys (never localise these - they are saved).
 ML.STATUS = {
@@ -157,15 +157,38 @@ end
 -- pool in game (C_MythicPlus.GetCurrentSeason / C_ChallengeMode.GetMapTable); unknown ids fall
 -- back to "Season <n>" and still record every run.
 ----------------------------------------------------------------------
--- seasonId -> descriptor. Populate verified ids here; anything else uses the fallback.
+-- The CURRENT live M+ season, declared by hand. C_MythicPlus.GetCurrentSeason() is a single global
+-- counter that ticks up by 1 each season, so rather than hardcode a fragile absolute id we ANCHOR on
+-- the live one: we state which expansion + in-expansion season number the CURRENT season is, and every
+-- other season's name derives relative to the live id (the live id minus 1 is the previous season, and
+-- so on). This stays correct no matter what the raw id actually is. Maintenance:
+--   * New season    -> bump seasonNumber.
+--   * New expansion -> set expansion to the new one and seasonNumber back to 1. If you want the outgoing
+--                      expansion's runs to keep their names in history, bake their ids into SEASON_LABELS
+--                      below first (the derivation only names the CURRENT expansion's seasons).
+-- Verify the live id any time in game with:  /dump C_MythicPlus.GetCurrentSeason()
+ML.SEASON_ANCHOR = { expansion = "Midnight", seasonNumber = 2 }
+
+-- Explicit per-id overrides (win over the anchor derivation). seasonId -> { label = "..." }. Normally
+-- empty; use it to pin a specific id (e.g. to preserve an old expansion's names after the anchor moves).
 ML.SEASON_LABELS = {
-    -- [<liveSeasonId>] = { label = "Midnight Season 1", expansion = "Midnight", short = "M S1" },
+    -- [17] = { label = "Midnight Season 1" },
 }
 
+-- Friendly "Midnight Season 2" style name. Prefers an explicit override, then the anchor derivation,
+-- then a plain "Season <n>" for anything we can't place (a pre-anchor / off-expansion id, or before the
+-- season API is primed). Never errors; every run still records regardless of what this returns.
 function ML.SeasonLabel(seasonId)
     if seasonId == nil then return "Unknown Season" end
     local d = ML.SEASON_LABELS[seasonId]
     if d and d.label then return d.label end
+    local a = ML.SEASON_ANCHOR
+    local cur = ML.API and ML.API.GetCurrentSeason and ML.API.GetCurrentSeason()
+    if a and a.expansion and type(a.seasonNumber) == "number"
+        and type(cur) == "number" and cur > 0 and type(seasonId) == "number" then
+        local n = a.seasonNumber - (cur - seasonId)   -- in-expansion season number for this id
+        if n >= 1 then return a.expansion .. " Season " .. n end
+    end
     return "Season " .. tostring(seasonId)
 end
 

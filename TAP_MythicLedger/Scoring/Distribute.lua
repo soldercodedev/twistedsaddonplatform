@@ -96,7 +96,7 @@ end
 function Distribute.Interrupts(players, run)
     local out = {}
     if type(players) ~= "table" then return out end
-    local sd = Cfg.SeasonDungeon and Cfg.SeasonDungeon(run and run.dungeonName)
+    local sd = Cfg.SeasonDungeon and Cfg.SeasonDungeon(run and run.dungeonName, run and run.seasonId)
     if not sd then return out end                              -- no season data: caller falls back to N/A
     local scale = Cfg.supplyScale or {}
     local kickMinutes = math.max(0, ((run and run.duration) or 0)) / 60
@@ -172,7 +172,7 @@ local OFF_TYPES = { "magic", "enrage" }
 function Distribute.Dispels(players, run)
     local out = {}
     if type(players) ~= "table" then return out end
-    local sd = Cfg.SeasonDungeon and Cfg.SeasonDungeon(run and run.dungeonName)
+    local sd = Cfg.SeasonDungeon and Cfg.SeasonDungeon(run and run.dungeonName, run and run.seasonId)
     if not sd then return out end                              -- no season data: caller falls back to N/A
     local scale = Cfg.supplyScale or {}
     local dispelMinutes = math.max(0, ((run and run.duration) or 0)) / 60

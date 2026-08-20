@@ -28,9 +28,17 @@ local DEFAULTS = {
         postRunAfterLoot   = false,     -- true = wait to pop the summary until you loot the run-end chest
         postRunDelay       = 5,         -- seconds to wait after the trigger before the summary pops (0 = instant)
         confirmAbandonSave = true,
-        retentionScope     = "ALL",    -- retention window: ALL / SEASON (current) / EXPANSION (current)
+        -- RUN HISTORY: one policy, one ladder - full detail -> trimmed -> gone.
+        --   retentionScope  = how long a run keeps FULL detail
+        --   retentionAction = what happens to it after that (trim the detail, or delete the run)
+        --   retentionRuns   = a hard ceiling on stored runs, independent of age (always deletes)
+        -- The default (ALL + no cap) means nothing ever happens, exactly as before.
+        retentionScope     = "ALL",    -- full detail for: ALL / SEASON (current) / EXPANSION (current) / DAYS
+        retentionDays      = 90,       -- window length when retentionScope == "DAYS"
+        retentionAction    = "TRIM",   -- beyond the window: TRIM (keep the run, drop review detail) / DELETE
         retentionRuns      = 0,        -- 0 = no numeric cap; otherwise keep only the newest N
-        retentionKeepTop   = true,     -- never prune a protected top run (best-per-dungeon, top 10, crowns)
+        retentionKeepTop   = true,     -- never DELETE a top run (best-per-dungeon, top 10, crowns)
+        retentionAuto      = false,    -- apply on login + season rollover; off = only when you press Apply
         cardStyle          = "COMPACT", -- Overview stat cards: CLEAN / PANEL / COMPACT
         dateFormat         = "NA",      -- timestamp date part: NA (mm/dd/yy) / ISO (yyyy-mm-dd) / EU (dd/mm/yy)
         clockFormat        = "24H",     -- timestamp time part (always local): 24H (hh:mm) / 12H (h:mm AM/PM)
@@ -97,10 +105,15 @@ local DEFAULTS = {
     activeRun     = nil,  -- reload/disconnect recovery record for an in-progress run
     characters    = {},   -- derived: charKey -> character aggregate (rebuilt by History)
     playerIndex   = {},   -- derived: identityKey -> party-member summary (rebuilt by History)
-    playerMeta    = {},   -- PERSISTENT user annotations: identityKey -> { notes, tags, favorite }
+    playerMeta    = {},   -- PERSISTENT user annotations: identityKey -> { notes, tags, favorite, protected }
     personalBests = {},   -- derived: keyed personal bests (rebuilt by History)
     summaryCache  = {},   -- derived: assorted page caches, invalidatable
+    -- PERSISTENT, NOT derived: the frozen score of every compacted run (Scoring/Store.Freeze). Kept out
+    -- of summaryCache on purpose - that one is thrown away on an engine-version bump, which is precisely
+    -- the event these have to outlive. runId -> { v, at, by = { guid -> {overall,grade,role,specID} } }.
+    frozenScores  = {},
     migrations    = {},   -- log of applied migrations { version, at }
+    lastSeenSeason = nil, -- last M+ season observed, so Archive.AutoRun can detect a rollover ONCE
     _runSeq       = 0,    -- monotonic counter feeding unique run ids
 }
 
@@ -130,8 +143,8 @@ DB.MIGRATIONS = {
         local Providers = ML.Providers
         if not (Providers and Providers.LooksFeignDeath) then return end
         local Cfg = ML.Scoring and ML.Scoring.Config
-        local function kicksFor(dungeon)
-            local cat = Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(dungeon)
+        local function kicksFor(dungeon, seasonId)
+            local cat = Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(dungeon, seasonId)
             if not (cat and type(cat.kicks) == "table") then return nil end
             local ks = {}
             for _, e in ipairs(cat.kicks) do if e.id then ks[e.id] = true end end
@@ -156,7 +169,7 @@ DB.MIGRATIONS = {
                         end
                         local n = (type(s) == "table" and s.deaths) or 0
                         if n > 0 and Providers.ClassifyDeaths then
-                            m.deathCauses = Providers.ClassifyDeaths(m.attribution, m.deathRecaps, m.role, n, kicksFor(run.dungeonName))
+                            m.deathCauses = Providers.ClassifyDeaths(m.attribution, m.deathRecaps, m.role, n, kicksFor(run.dungeonName, run.seasonId))
                         else
                             m.deathCauses = nil
                         end
@@ -206,6 +219,37 @@ DB.MIGRATIONS = {
             end
         end
     end,
+    -- v5: drop the raw talent ID arrays. They were captured "for future modelling" and stored TWICE -
+    -- once per party member and again inside run.dispelCapture - which measured 4.1 MB on a 11.6 MB
+    -- database (35% of the whole file) while NOTHING ever read them: no code indexes or iterates a
+    -- talents array anywhere in the addon. Scoring only ever uses the DERIVED values, and every one of
+    -- them is already folded onto the member at save time by mergePartyStats (Tracker.lua:98-127):
+    -- specId, itemLevel, dispelTalent (from hasTool), heroTree and talentCount. So dispelCapture as a
+    -- whole is redundant once saved and goes too.
+    -- The one thing to preserve first: Norm.Player (Scoring/Normalize.lua:26-29) falls back to
+    -- dispelCapture[guid].specID when a member has no spec, so fold that in BEFORE dropping the table,
+    -- or a spec-less pug would rescore as a class guess. Scoring reads nothing else here, so there is
+    -- no Config.version bump - this is a pure storage strip, like v3.
+    [5] = function(root)
+        for _, run in ipairs(root.runs or {}) do
+            if type(run) == "table" then
+                local cap = (type(run.dispelCapture) == "table") and run.dispelCapture or nil
+                for _, m in ipairs(run.party or {}) do
+                    if type(m) == "table" then
+                        -- Rescue the inspected spec before the capture table is discarded.
+                        if not (m.specId or m.specID) and cap and m.guid then
+                            local c = cap[m.guid]
+                            if type(c) == "table" and type(c.specID) == "number" and c.specID > 0 then
+                                m.specId = c.specID
+                            end
+                        end
+                        m.talents = nil        -- the big array; talentCount + heroTree are kept (cheap, and heroTree IS displayed)
+                    end
+                end
+                run.dispelCapture = nil
+            end
+        end
+    end,
 }
 
 local function runMigrations(root)
@@ -241,8 +285,11 @@ function DB.Init()
     if type(root.runs) ~= "table" then root.runs = {} end
     if type(root.settings) ~= "table" then root.settings = {} end
     CopyDefaults(DEFAULTS, root)
+    -- runMigrations stamps schemaVersion itself, and ONLY on success - a failed step halts with the
+    -- version left behind so the next login retries it. Do not re-stamp here: doing so marked failed
+    -- migrations as done and they were never retried, silently stranding whatever the step was meant
+    -- to fix.
     runMigrations(root)
-    root.schemaVersion = ML.SCHEMA_VERSION
     ML._initialized = true
     -- Prime C_MythicPlus so GetCurrentSeason() returns a real id (it reports -1 until requested).
     if ML.API and ML.API.RequestSeasonInfo then pcall(ML.API.RequestSeasonInfo) end
@@ -255,6 +302,23 @@ function DB.Init()
     -- (no-op when already current). Keeps persisted score summaries in step with scoring-logic bumps.
     if ML.Scoring and ML.Scoring.Store and ML.Scoring.Store.EnsureCurrent then
         pcall(ML.Scoring.Store.EnsureCurrent)
+    end
+    -- Automatic data policy (Archive.lua). Deferred, and retried, because GetCurrentSeason() reports -1
+    -- until the request fired above resolves - and this must never act on an unknown season. It also has
+    -- to come after EnsureCurrent: compaction freezes each run's score, so the score must be current
+    -- first. Gives up quietly if the API never answers this session.
+    if ML.Archive and ML.Archive.AutoRun and C_Timer and C_Timer.After then
+        local tries = 0
+        local function attempt()
+            tries = tries + 1
+            local cur = ML.API and ML.API.GetCurrentSeason and ML.API.GetCurrentSeason()
+            if type(cur) == "number" and cur > 0 then
+                pcall(ML.Archive.AutoRun)
+            elseif tries < 10 then
+                C_Timer.After(3, attempt)
+            end
+        end
+        C_Timer.After(5, attempt)
     end
     ML._debugEcho = root.settings.debug and true or false
     ML.Log("DB ready: %d run(s), schema v%d", #root.runs, root.schemaVersion)
@@ -330,6 +394,79 @@ function DB.DeleteRun(id)
     if ML.History and ML.History.RebuildAll then pcall(ML.History.RebuildAll) end
 end
 
+----------------------------------------------------------------------
+-- USER PROTECTION. Two explicit, user-set locks that no policy may override:
+--   * run.protected            - this run keeps full detail forever.
+--   * playerMeta[key].protected - this player's record is kept, AND every run they appear in is locked.
+-- Both are deliberately SEPARATE from run.pinned / run.bestOfKind: those are auto-heuristics that
+-- MarkKeepers/MarkBestRuns recompute from scratch on every call (clearing the field first), so a user
+-- value stored there would be silently wiped on the next save.
+----------------------------------------------------------------------
+-- Resolve player-level protection down to the runs it covers. Writes run._protectedBy (the identity key
+-- that locked it). It is DERIVED, not authoritative: recomputed here on every rebuild and before every
+-- policy pass, so a stale value can never outlive one login. Cheap: one pass over runs x ~5 members, and
+-- IdentityKey is a pure table read (no API call).
+function DB.MarkProtected()
+    if not DB.root then return end
+    local meta = DB.root.playerMeta or {}
+    local locked, any = {}, false
+    for key, m in pairs(meta) do
+        if type(m) == "table" and m.protected then locked[key] = true; any = true end
+    end
+    local idKey = ML.API and ML.API.IdentityKey
+    for _, r in ipairs(DB.root.runs) do
+        r._protectedBy = nil
+        if any and idKey then
+            for _, m in ipairs(r.party or {}) do
+                local k = idKey(m)
+                if k and locked[k] then r._protectedBy = k; break end
+            end
+        end
+    end
+end
+
+-- Is this run locked by the USER? Their own lock on the run, or one inherited from a protected player.
+-- Unconditional: no other setting can override it, for either trimming or deletion.
+function DB.IsLocked(r)
+    return (r and (r.protected or r._protectedBy)) and true or false
+end
+
+-- May a policy DELETE this run? User locks always win; keepTop additionally spares the automatic
+-- keepers (best-per-dungeon, top 10, crowns). Deliberately not consulted for TRIMMING: a trimmed run
+-- is still there, still crowned and still scored, so "never remove a top run" has nothing to defend.
+function DB.IsProtected(r, keepTop)
+    if not r then return false end
+    if DB.IsLocked(r) then return true end
+    return keepTop and (r.pinned or r.bestOfKind) and true or false
+end
+
+-- Is this run OUTSIDE the "keep full detail" window? One predicate, shared by both policy actions so
+-- trimming and deleting can never disagree about which runs are old. A run we cannot classify (no
+-- season / expansion / timestamp) is always treated as INSIDE - never acted on from a guess.
+function DB.OutsideWindow(r, scope, days, cur, expac, now)
+    if type(r) ~= "table" then return false end
+    if scope == "SEASON" then
+        return cur ~= nil and type(r.seasonId) == "number" and r.seasonId ~= cur
+    elseif scope == "EXPANSION" then
+        return expac ~= nil and type(r.expansionId) == "number" and r.expansionId ~= expac
+    elseif scope == "DAYS" then
+        local n = tonumber(days) or 0
+        if n <= 0 then return false end
+        local t = r.completedAt or r.startedAt
+        return type(t) == "number" and (now - t) > n * 86400
+    end
+    return false   -- "ALL" keeps everything at full detail
+end
+
+-- The live window parameters, resolved once.
+function DB.WindowParams()
+    local st = DB.Settings()
+    local cur = ML.API and ML.API.GetCurrentSeason and ML.API.GetCurrentSeason()
+    if type(cur) ~= "number" or cur <= 0 then cur = nil end
+    local expac = ML.API and ML.API.GetExpansionLevel and ML.API.GetExpansionLevel()
+    return st.retentionScope or "ALL", tonumber(st.retentionDays) or 90, cur, expac, (time and time() or 0)
+end
+
 -- Flag the "keeper" runs so retention never destroys them:
 --   1. the single best TIMED run per dungeon (highest key, tie-broken by fastest time), and
 --   2. the overall TOP 10 TIMED runs (by key, then time).
@@ -389,49 +526,46 @@ function DB.MarkBestRuns()
     for _, v in pairs(best) do v.run.bestOfKind = true end
 end
 
--- Enforce the retention policy. Two independent phases run in order:
---   1. SCOPE prune - drop runs that fall OUTSIDE the retained window (SEASON = current season only,
---      EXPANSION = current expansion only, ALL = keep every season/expansion).
---   2. numeric CAP - if retentionRuns > 0, trim oldest runs until at most that many remain.
--- While Keep-Top is on (the default) protected "top" runs (best key per dungeon, the top 10, and
--- crowned best-of-kind) are never dropped by either phase. Runs we can't classify (missing seasonId
--- or expansionId - e.g. history recorded before the tag existed) are KEPT, never pruned on a guess.
--- Called on every save and from the Settings "Apply" button. Destructive: only ever removes runs.
+-- Enforce the ONE retention policy. Two phases, in order:
+--   1. WINDOW - runs outside the "keep full detail" window (retentionScope: SEASON / EXPANSION / DAYS)
+--      are either TRIMMED (detail stripped, run kept - Archive.lua) or DELETED, per retentionAction.
+--   2. numeric CAP - if retentionRuns > 0, DELETE the oldest until at most that many remain. A cap is
+--      a ceiling on how much you store, so it always deletes; trimming would not honour it.
+-- User locks (run.protected / a protected player) are never touched by either phase. Keep-Top
+-- additionally spares the automatic keepers from DELETION only - a trimmed top run is still there,
+-- still crowned and still scored, so there is nothing for that toggle to defend against trimming.
+-- Runs we cannot classify (no season / expansion / timestamp) are KEPT, never acted on from a guess.
+-- Called on every save and from the Settings "Apply" button.
 function DB.ApplyRetention()
     if not DB.root then return end
     local st = DB.Settings()
     local scope   = st.retentionScope or "ALL"
     local cap     = tonumber(st.retentionRuns) or 0
     local keepTop = st.retentionKeepTop ~= false   -- default true
-    -- Retention off (ALL scope + no numeric cap, the default) keeps EVERYTHING - nothing to enforce.
-    -- A cap of 0 means "unlimited" on purpose; history only trims when you set a scope or a numeric cap.
+    local action  = st.retentionAction or "TRIM"
+    -- Policy off (ALL window + no cap, the default) keeps EVERYTHING at full detail - nothing to do.
     if scope == "ALL" and cap <= 0 then return end
 
     local runs = DB.root.runs
-    -- Refresh keeper flags so the top-run guard is accurate before we prune anything.
+    -- Refresh keeper flags so the top-run guard is accurate before we touch anything.
     DB.MarkKeepers()
     DB.MarkBestRuns()   -- crowned best-per-(dungeon+key+spec) runs are keepers too
-    local function protected(r) return keepTop and (r.pinned or r.bestOfKind) end
-    local removed = 0
+    DB.MarkProtected()  -- resolve player-level locks down to the runs they cover
+    local function protected(r) return DB.IsProtected(r, keepTop) end
+    local removed, trimmed, freed = 0, 0, 0
 
-    -- Phase 1: SCOPE prune. Reverse iteration so table.remove is index-safe.
-    if scope == "SEASON" then
-        local cur = ML.API and ML.API.GetCurrentSeason and ML.API.GetCurrentSeason()
-        if cur then
-            for i = #runs, 1, -1 do
-                local r = runs[i]
-                if r.seasonId ~= nil and r.seasonId ~= cur and not protected(r) then
-                    table.remove(runs, i); removed = removed + 1
-                end
-            end
-        end
-    elseif scope == "EXPANSION" then
-        local cur = ML.API and ML.API.GetExpansionLevel and ML.API.GetExpansionLevel()
-        if cur then
-            for i = #runs, 1, -1 do
-                local r = runs[i]
-                if r.expansionId ~= nil and r.expansionId ~= cur and not protected(r) then
-                    table.remove(runs, i); removed = removed + 1
+    -- Phase 1: the WINDOW. Reverse iteration so table.remove stays index-safe.
+    if scope ~= "ALL" then
+        local sc, days, cur, expac, now = DB.WindowParams()
+        local Arch = ML.Archive
+        for i = #runs, 1, -1 do
+            local r = runs[i]
+            if DB.OutsideWindow(r, sc, days, cur, expac, now) then
+                if action == "DELETE" then
+                    if not protected(r) then table.remove(runs, i); removed = removed + 1 end
+                elseif Arch and Arch.CompactRun and not DB.IsLocked(r) then
+                    local bytes = Arch.CompactRun(r)
+                    if bytes then trimmed = trimmed + 1; freed = freed + bytes end
                 end
             end
         end
@@ -449,12 +583,13 @@ function DB.ApplyRetention()
         end
     end
 
-    if removed > 0 then
+    if removed > 0 or trimmed > 0 then
         if ML.Scoring and ML.Scoring.Store and ML.Scoring.Store.PruneOrphans then ML.Scoring.Store.PruneOrphans() end
         if ML.History and ML.History.RebuildAll then pcall(ML.History.RebuildAll) end
     end
-    ML.Log("Retention applied: scope=%s cap=%d keepTop=%s -> %d kept, %d removed",
-        scope, cap, tostring(keepTop), #runs, removed)
+    ML.Log("Retention applied: window=%s action=%s cap=%d keepTop=%s -> %d kept, %d removed, %d trimmed (%.2f MB)",
+        scope, action, cap, tostring(keepTop), #runs, removed, trimmed, freed / 1048576)
+    return { removed = removed, trimmed = trimmed, bytes = freed, kept = #runs }
 end
 
 function DB.WipeHistory()

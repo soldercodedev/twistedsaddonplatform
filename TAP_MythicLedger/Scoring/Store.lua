@@ -68,9 +68,49 @@ local function compact(result)
     return by
 end
 
+----------------------------------------------------------------------
+-- FROZEN scores. A COMPACTED run (Archive.lua) has had its review-only detail stripped, so it can no
+-- longer be rescored honestly - Score.ScoreRun would still return a structurally valid result, just
+-- computed from missing inputs, which is the worst kind of wrong. Before stripping, the run's score is
+-- frozen here and that becomes its permanent answer.
+--
+-- This deliberately lives in its OWN root table, NOT in summaryCache: scoreCache() throws the whole
+-- cache away whenever the engine version changes (see below), which is exactly the event a frozen score
+-- has to survive.
+----------------------------------------------------------------------
+local function frozenStore(create)
+    if not DB.root then return nil end
+    if not DB.root.frozenScores and create then DB.root.frozenScores = {} end
+    return DB.root.frozenScores
+end
+local function frozenFor(runId)
+    local fz = runId and frozenStore(false)
+    local e = fz and fz[runId]
+    return (type(e) == "table" and type(e.by) == "table") and e.by or nil
+end
+
+-- Freeze a run's CURRENT score as its permanent one. Call BEFORE stripping the run. Returns the frozen
+-- summary, or nil if the run could not be scored (in which case the caller must not strip it).
+function Store.Freeze(run)
+    if not (run and run.id and DB.root) then return nil end
+    local by = Store.Summary(run)
+    if not (by and next(by)) then return nil end
+    local fz = frozenStore(true)
+    fz[run.id] = { v = Cfg.version, at = time and time() or 0, by = by }
+    return by
+end
+function Store.IsFrozen(runId) return frozenFor(runId) ~= nil end
+function Store.Unfreeze(runId)
+    local fz = frozenStore(false)
+    if fz and runId then fz[runId] = nil end
+end
+
 -- Full, explainable score set for a run (memoised this session; recomputed on version change).
+-- A compacted run returns nil: its inputs are gone, so there is no honest per-category explanation to
+-- give. Callers render the frozen overall/grade and say the detail was not retained.
 function Store.Full(run)
     if not run then return nil end
+    if run._c and frozenFor(run.id) then return nil end
     local id = run.id or tostring(run)
     local cached = memoGet(id)
     if cached then return cached end
@@ -82,8 +122,11 @@ function Store.Full(run)
 end
 
 -- Compact per-run summary { guid -> {overall,grade,role,specID} }; persisted, self-heals if stale.
+-- A frozen score wins over everything: it is the answer that was true when the detail still existed.
 function Store.Summary(run)
     if not run then return {} end
+    local frz = frozenFor(run.id)
+    if frz then return frz end
     if run.id then
         local sc = scoreCache()
         if sc and sc.runs[run.id] then return sc.runs[run.id] end
@@ -97,11 +140,20 @@ function Store.RescoreAll()
     memoWipe()
     local sc = scoreCache()
     if sc then sc.runs = {} end
-    local n = 0
+    local n, frozen = 0, 0
     for _, run in ipairs(DB.Runs()) do
-        local result = Score.ScoreRun(run)
-        if result and run.id and sc then sc.runs[run.id] = compact(result); n = n + 1 end
+        local frz = frozenFor(run.id)
+        if frz then
+            -- Compacted run: its scoring inputs were stripped, so rescoring it would quietly invent a
+            -- different number. Carry the frozen answer into the rebuilt cache instead.
+            if sc and run.id then sc.runs[run.id] = frz end
+            frozen = frozen + 1
+        else
+            local result = Score.ScoreRun(run)
+            if result and run.id and sc then sc.runs[run.id] = compact(result); n = n + 1 end
+        end
     end
+    if frozen > 0 and ML.Log then ML.Log("Scoring: kept %d frozen score(s) (compacted runs)", frozen) end
     -- Scores just changed, so the crown may move: re-flag the best-scoring run per dungeon+key+spec.
     if DB.MarkBestRuns then DB.MarkBestRuns() end
     if ML.Log then ML.Log("Scoring: rescored %d run(s) at v%d", n, Cfg.version) end
@@ -139,9 +191,18 @@ Scoring.InvalidateScores = Store.InvalidateAll
 -- otherwise leave its summary orphaned until the next Config.version bump. Call after any run removal;
 -- one cheap pass, no recompute.
 function Store.PruneOrphans()
-    local sc = DB.root and DB.root.summaryCache and DB.root.summaryCache.scores
-    if type(sc) ~= "table" or type(sc.runs) ~= "table" then return end
+    if not DB.root then return end
     local live = {}
     for _, run in ipairs(DB.Runs()) do if run.id then live[run.id] = true end end
-    for id in pairs(sc.runs) do if not live[id] then sc.runs[id] = nil end end
+    local sc = DB.root.summaryCache and DB.root.summaryCache.scores
+    if type(sc) == "table" and type(sc.runs) == "table" then
+        for id in pairs(sc.runs) do if not live[id] then sc.runs[id] = nil end end
+    end
+    -- Frozen scores follow the same rule. A COMPACTED run is still in DB.Runs(), so its freeze is kept;
+    -- only a genuinely deleted (or archived-away) run drops its frozen entry, which is correct - there is
+    -- nothing left for it to describe.
+    local fz = DB.root.frozenScores
+    if type(fz) == "table" then
+        for id in pairs(fz) do if not live[id] then fz[id] = nil end end
+    end
 end

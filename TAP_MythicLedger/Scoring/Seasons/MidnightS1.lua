@@ -29,8 +29,9 @@ local function KD(f, debuffs) return { interruptFrequency = f or 0, partyDebuffF
 
 S.SeasonData["MidnightS1"] = {
     label = "Midnight - Season 1",
-    -- C_MythicPlus season id(s) this profile covers. Empty/nil = use as the default (only season loaded).
-    seasons = {},
+    -- C_MythicPlus season id(s) this profile covers (17 = Midnight Season 1). With S2 live, profile
+    -- selection matches the CURRENT season id, so this one is historical reference now.
+    seasons = { [17] = true },
     dungeons = {
         ----------------------------------------------------------------
         ["magistersterrace"] = {

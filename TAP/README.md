@@ -150,8 +150,8 @@ Everything below is a `theme:` method. Rich components take an `opts` table; the
 |-----------|-------|
 | **Button** | kinds `primary` · `danger` · `default` · `ghost`; **square or rounded corners** (`radius`/`corner`, incl. `pill`); optional left icon; full style overrides |
 | **Toggle** | on/off switch; custom on/off colors + size |
-| **Dropdown** | `:SetChoices` · `:SetIconChoices` (icon per row) · `:SetMenu` (custom/dynamic, **submenus**) |
-| **Menu** | the themed popup behind dropdowns (`theme:OpenMenu`); **section headers, per-row icons, per-row fonts, nested submenus** |
+| **Dropdown** | `:SetChoices` · `:SetIconChoices` (icon per row) · `:SetMenu` (custom/dynamic, **submenus**) · `:SetMulti` (**multi-select with checkboxes**) |
+| **Menu** | the themed popup behind every select (`theme:OpenMenu`); **type-to-filter search, single or multi select, section headers, dividers, per-row icons / notes / fonts, disabled rows that say why, hover submenus, arrow-key navigation, smooth-scrolling thin scrollbar** |
 | **Slider** | **editable value readout** (click to type an exact number); custom track/thumb colors |
 | **RangeSlider** | **single or dual-thumb range** selector; `onChange(lo, hi)` (or one value) |
 | **EditBox** | single-line input; commit on Enter + focus loss |
@@ -159,6 +159,38 @@ Everything below is a `theme:` method. Rich components take an `opts` table; the
 | **Swatch** | color well that opens the color picker |
 | **Checkbox** | labeled check (custom check color) |
 | **NavRow** | sidebar row (icon + label + optional toggle) with a `:Select` state |
+
+#### Selects
+
+Every select control shares one popup engine (`Menu.lua`). A short list opens as a plain list; a
+long one grows a filter box on its own (10+ rows, or set `search = true` / `false` / a threshold).
+Rows can be section headers, dividers, icons, notes, submenu parents, or disabled with a reason
+that shows on hover. Arrow keys walk the list, Enter picks, Escape backs out - all of which stands
+down in combat so a menu never sits between you and your keybinds.
+
+```lua
+-- single select
+theme:Dropdown(parent):SetChoices(160, { { "a", "Alpha" }, { "b", "Beta" } },
+    function() return db.pick end, function(v) db.pick = v end)
+
+-- multi select: ticking rows keeps the menu open, and the closed control
+-- summarizes the selection ("None" / "All" / "Red, Blue" / "5 selected")
+theme:Dropdown(parent):SetMulti(180, {
+        { label = "DUNGEONS", header = true },
+        { label = "Ara-Kara", value = 503, icon = "map" },
+        { label = "City of Threads", value = 505, note = "8 runs" },
+        { label = "Grim Batol", value = 507, disabled = "No runs recorded yet" },
+    },
+    function(v) return db.dungeons[v] end,
+    function(v, on) db.dungeons[v] = on or nil; redraw() end,
+    { search = true, placeholder = "Find a dungeon..." })
+
+-- the popup on its own, anchored to anything
+theme:OpenMenu(someButton, {
+    items = buildItems, actions = { { label = "Reset", onClick = reset } },
+    selected = function() return db.pick end, onPick = function(v) db.pick = v end,
+})
+```
 
 ### Form controls
 | component | notes |
@@ -423,7 +455,7 @@ swatch and the toasts.
 | `Skins.lua` | `SKINS` presets (color + shape) + `ApplySkin` |
 | `IconManifest.lua` | generated list of bundled icons (from `convert_icons.py`) |
 | `Icons.lua` | icon registry (`GetIcon`/`IconPath`/`HasIcon`) + colorable `Glyph` |
-| `Menu.lua` | themed dropdown popup (headers, icons, per-row fonts, submenus) |
+| `Menu.lua` | the select popup engine: single + multi select, search filter, headers, dividers, icons, notes, disabled rows, submenus, keyboard nav, smooth scrolling |
 | `Widgets.lua` | Button (corner radius), Toggle, Dropdown, EditBox, Slider, Icon, Swatch, Logo, Checkbox, Preview, NavRow |
 | `Headings.lua` | Heading roles / type scale |
 | `Progress.lua` | ProgressBar, Spinner |

@@ -648,7 +648,7 @@ function Providers.ClassifyMemberDeaths(run, member)
     if type(member.deathRecaps) == "table" and #member.deathRecaps > 0 then
         local kickSet
         local Cfg = ML.Scoring and ML.Scoring.Config
-        local cat = run and Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(run.dungeonName)
+        local cat = run and Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(run.dungeonName, run.seasonId)
         if cat and type(cat.kicks) == "table" then
             kickSet = {}
             for _, e in ipairs(cat.kicks) do if e.id then kickSet[e.id] = true end end

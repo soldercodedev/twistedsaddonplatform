@@ -1,4 +1,4 @@
-## Interface: 120007
+## Interface: 120100
 ## Title: |cffa06cf0TAP:|r Rotation Assistant
 ## Notes: Draws the keybind of Blizzard's next suggested rotation ability on screen. A sidecar plugin for Twisteds Addon Platform.
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga

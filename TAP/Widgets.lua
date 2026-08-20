@@ -155,51 +155,168 @@ function Mixin:Button(parent)
 end
 
 ----------------------------------------------------------------------
--- Dropdown (button that opens a themed Menu). Two flavors:
---   :SetChoices(w, { {value,label}, ... }, getVal, setVal)
---   :SetMenu(w, buildItems, getVal, onPick, labelFor)  -- fully custom item list
+-- Dropdown: the closed control that opens a themed Menu. Four flavors:
+--   :SetChoices(w, { {value,label,icon,coords}, ... }, getVal, setVal, opts)
+--   :SetIconChoices(w, { {value=,label=,icon=,coords=}, ... }, getVal, setVal, opts)
+--   :SetMenu(w, buildItems, getVal, onPick, labelFor, opts)   -- fully custom item list
+--   :SetMulti(w, items, isChecked, onToggle, opts)            -- checkbox multi-select
+--
+-- The trailing `opts` is forwarded to the menu, so any control can ask for a search box,
+-- section headers, a taller list, extra action rows and so on (see Menu.lua). Dropdown reads
+-- a few of its own keys: height · fontSize · menuWidth (default: the control's width) ·
+-- placeholder (label when nothing matches) and, for multi, emptyText / allText / maxNames /
+-- countText (how the closed label summarizes the selection).
 ----------------------------------------------------------------------
+-- Menu opts for one open: the caller's table plus the bits the control owns. Copied rather
+-- than mutated, so a page can hand the same opts table to a widget on every redraw.
+local function menuArgs(opts, own)
+    local t = {}
+    for k, v in pairs(opts or {}) do t[k] = v end
+    for k, v in pairs(own) do t[k] = v end
+    return t
+end
+
 function Mixin:Dropdown(parent)
     local theme, C = self, self.C
     local b = CreateFrame("Button", nil, parent); theme:StylePanel(b, C.card)
     b.fs = b:CreateFontString(nil, "OVERLAY"); b.fs:SetFont(theme.FONT, 12)
-    b.fs:SetPoint("LEFT", 8, 0); b.fs:SetPoint("RIGHT", -20, 0); b.fs:SetJustifyH("LEFT"); b.fs:SetTextColor(unpack(C.text))
-    b.caret = b:CreateFontString(nil, "OVERLAY"); b.caret:SetFont(theme.FONT, 10); b.caret:SetPoint("RIGHT", -7, -1)
-    b.caret:SetText("v"); b.caret:SetTextColor(unpack(C.accent))
-    b:SetScript("OnEnter", function(self) theme:FillPaint(self, theme.C.hover); theme:_showTip(self) end)
-    b:SetScript("OnLeave", function(self) theme:FillPaint(self, theme.C.card); GameTooltip_Hide() end)
+    b.fs:SetPoint("LEFT", 8, 0); b.fs:SetPoint("RIGHT", -22, 0); b.fs:SetJustifyH("LEFT")
+    b.fs:SetWordWrap(false); b.fs:SetMaxLines(1); b.fs:SetTextColor(unpack(C.text))
+    b.caret = b:CreateTexture(nil, "OVERLAY"); b.caret:SetSize(10, 10); b.caret:SetPoint("RIGHT", -7, 0)
+    -- Fallback caret for a theme with no bundled icons (iconDir cleared). The font goes on
+    -- before the text: SetText on a fontstring with no font is an error.
+    b.caretFS = b:CreateFontString(nil, "OVERLAY"); b.caretFS:SetFont(theme.FONT, 10)
+    b.caretFS:SetPoint("RIGHT", -7, -1); b.caretFS:SetText("v"); b.caretFS:Hide()
 
-    function b:SetChoices(w, choices, getVal, setVal)
-        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/color so a live skin swap sticks
-        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text color too (light themes)
-        self:SetSize(w, 26)
-        self.fs:SetFont(theme.FONT, 12)
-        self.fs:SetPoint("LEFT", 8, 0)
-        self.caret:SetTextColor(theme.C.accent[1], theme.C.accent[2], theme.C.accent[3])
-        local function label() for _, c in ipairs(choices) do if c[1] == getVal() then return c[2] end end return "?" end
-        self.fs:SetText(label())
-        self:SetScript("OnClick", function(self)
+    -- Paint the chrome for the current state. An open control keeps the hover fill, takes an
+    -- accent border and flips its chevron, so it reads as "this is the list you are looking at".
+    function b:_chrome()
+        local col = theme.C
+        theme:FillPaint(self, (self._open or self._hovered) and col.hover or col.card)
+        theme:EdgePaint(self, self._open and col.accent or col.border)
+        self.fs:SetTextColor(col.text[1], col.text[2], col.text[3])
+        local art = theme:GetIcon("chevron-down")
+        if art then
+            self.caretFS:Hide()
+            self.caret:SetTexture(art); self.caret:SetVertexColor(col.accent[1], col.accent[2], col.accent[3])
+            self.caret:SetRotation(self._open and math.pi or 0); self.caret:Show()
+        else
+            self.caret:Hide()
+            self.caretFS:SetFont(theme.FONT, 10)
+            self.caretFS:SetTextColor(col.accent[1], col.accent[2], col.accent[3]); self.caretFS:Show()
+        end
+    end
+    b:SetScript("OnEnter", function(self) self._hovered = true; self:_chrome(); theme:_showTip(self) end)
+    b:SetScript("OnLeave", function(self) self._hovered = false; self:_chrome(); GameTooltip_Hide() end)
+    b:SetScript("OnClick", function(self) if self._popup then self._popup() end end)
+
+    -- Shared per-Configure setup. Pooled widgets are reused across page redraws (and across a
+    -- live skin swap), so the shape, colors and font are re-applied every time.
+    function b:_prep(w, opts)
+        theme:StylePanel(self, theme.C.card)
+        self:SetSize(w, (opts and opts.height) or 26)
+        self.fs:SetFont(theme.FONT, (opts and opts.fontSize) or 12)
+        self._open = false
+        self:_chrome()
+    end
+    function b:SetLabel(text) self.fs:SetText(text or ""); return self end
+    -- Recompute the closed label from live data (after a value changed elsewhere).
+    function b:Refresh() if self._relabel then self:SetLabel(self._relabel()) end return self end
+
+    -- Open this control's menu and track the open state for the chrome.
+    function b:_openWith(opts)
+        self._open = true; self:_chrome()
+        theme:OpenMenu(self, menuArgs(opts, { onClose = function()
+            self._open = false; self:_chrome()
+        end }))
+    end
+
+    function b:SetChoices(w, choices, getVal, setVal, opts)
+        opts = opts or {}
+        self:_prep(w, opts)
+        local function label()
+            for _, c in ipairs(choices) do if c[1] == getVal() then return c[2] end end
+            return opts.placeholder or "?"
+        end
+        self._relabel = label
+        self:SetLabel(label())
+        self._popup = function()
             local items = {}
-            for _, c in ipairs(choices) do items[#items + 1] = { label = c[2], value = c[1] } end
-            theme:OpenMenu(self, items, getVal, function(v) setVal(v); self.fs:SetText(label()) end)
-        end)
+            for _, c in ipairs(choices) do
+                items[#items + 1] = { label = c[2], value = c[1], icon = c[3], coords = c[4],
+                                      note = c.note, tip = c.tip, disabled = c.disabled }
+            end
+            self:_openWith(menuArgs(opts, {
+                items = items, width = opts.menuWidth or w, selected = getVal,
+                onPick = function(v) setVal(v); self:SetLabel(label()) end,
+            }))
+        end
         return self
     end
 
-    -- Fully custom: buildItems() returns a fresh item array each open (for headers /
-    -- dynamic lists), labelFor(value) renders the closed-state label.
-    function b:SetMenu(w, buildItems, getVal, onPick, labelFor)
-        theme:StylePanel(self, C.card)   -- pooled: re-apply shape/color so a live skin swap sticks
-        self.fs:SetTextColor(C.text[1], C.text[2], C.text[3])   -- re-apply text color too (light themes)
-        self:SetSize(w, 26)
-        self.fs:SetPoint("LEFT", 8, 0)
-        self.caret:SetTextColor(theme.C.accent[1], theme.C.accent[2], theme.C.accent[3])
-        self.fs:SetText(labelFor and labelFor(getVal()) or "")
-        self:SetScript("OnClick", function(self)
-            theme:OpenMenu(self, buildItems(), getVal, function(v)
-                onPick(v); if labelFor then self.fs:SetText(labelFor(v)) end
-            end)
-        end)
+    -- Same contract as SetChoices, but each entry is a table with named fields so rows can
+    -- carry an icon (class / spec / spell art) next to the label.
+    function b:SetIconChoices(w, items, getVal, setVal, opts)
+        opts = opts or {}
+        self:_prep(w, opts)
+        local function find(v) for _, it in ipairs(items) do if it.value == v then return it end end end
+        local function label() local it = find(getVal()); return it and it.label or (opts.placeholder or "?") end
+        self._relabel = label
+        self:SetLabel(label())
+        self._popup = function()
+            self:_openWith(menuArgs(opts, {
+                items = items, width = opts.menuWidth or w, selected = getVal,
+                onPick = function(v) setVal(v); self:SetLabel(label()) end,
+            }))
+        end
+        return self
+    end
+
+    -- Fully custom: buildItems() returns a fresh item array on every open (headers, dynamic
+    -- lists, submenus), labelFor(value) renders the closed-state label.
+    function b:SetMenu(w, buildItems, getVal, onPick, labelFor, opts)
+        opts = opts or {}
+        self:_prep(w, opts)
+        self._relabel = function() return labelFor and labelFor(getVal()) or "" end
+        self:SetLabel(self._relabel())
+        self._popup = function()
+            self:_openWith(menuArgs(opts, {
+                items = buildItems(), width = opts.menuWidth or w, selected = getVal,
+                onPick = function(v) onPick(v); if labelFor then self:SetLabel(labelFor(v)) end end,
+            }))
+        end
+        return self
+    end
+
+    -- Multi-select. `items` is an array (or a function returning one) of the same item tables
+    -- the menu takes; isChecked(value) reads the state and onToggle(value, checked) writes it.
+    -- The menu stays open while you tick rows, and the closed label summarizes the selection:
+    -- "None", "All", the names themselves, or "3 selected" once naming them gets too long.
+    function b:SetMulti(w, items, isChecked, onToggle, opts)
+        opts = opts or {}
+        self:_prep(w, opts)
+        local function list() return (type(items) == "function" and (items() or {})) or items end
+        local function summary()
+            local names, total = {}, 0
+            for _, it in ipairs(list()) do
+                if it.value ~= nil and not it.header and not it.divider then
+                    total = total + 1
+                    if isChecked(it.value) then names[#names + 1] = it.label end
+                end
+            end
+            if #names == 0 then return opts.emptyText or "None" end
+            if total > 0 and #names == total then return opts.allText or "All" end
+            if #names > (opts.maxNames or 3) then return string.format(opts.countText or "%d selected", #names) end
+            return table.concat(names, ", ")
+        end
+        self._relabel = summary
+        self:SetLabel(summary())
+        self._popup = function()
+            self:_openWith(menuArgs(opts, {
+                items = list(), multi = true, width = opts.menuWidth or w, checked = isChecked,
+                onToggle = function(v, on) onToggle(v, on); self:SetLabel(summary()) end,
+            }))
+        end
         return self
     end
     return b
@@ -404,21 +521,43 @@ function Mixin:Checkbox(parent)
     b.box = b:CreateTexture(nil, "ARTWORK"); b.box:SetPoint("TOPLEFT", b.brd, "TOPLEFT", 1, -1); b.box:SetPoint("BOTTOMRIGHT", b.brd, "BOTTOMRIGHT", -1, 1); TAP.paint(b.box, C.bg)
     b.check = b:CreateTexture(nil, "OVERLAY"); b.check:SetPoint("TOPLEFT", b.box, "TOPLEFT", 2, -2); b.check:SetPoint("BOTTOMRIGHT", b.box, "BOTTOMRIGHT", -2, 2); b.check:Hide()
     b.fs = b:CreateFontString(nil, "OVERLAY"); b.fs:SetFont(theme.FONT, 12); b.fs:SetPoint("LEFT", b.brd, "RIGHT", 8, 0); b.fs:SetPoint("RIGHT", 0, 0); b.fs:SetJustifyH("LEFT")
-    b:SetScript("OnEnter", function(self) TAP.paint(self.box, theme.C.hover) end)
-    b:SetScript("OnLeave", function(self) TAP.paint(self.box, theme.C.bg) end)
+    -- Ticked: the whole box fills with the check color and a dark glyph sits on top, so a
+    -- checked row reads at a glance instead of as a slightly different shade. This is the
+    -- same treatment the multi-select menu gives its rows.
+    function b:_render()
+        local col = theme.C
+        local on = self._checked and true or false
+        local cc = self._checkColor or col.accent
+        TAP.paint(self.brd, on and cc or col.border)
+        TAP.paint(self.box, on and cc or (self._hovered and col.hover or col.bg))
+        if on then
+            local art = theme:GetIcon("check")
+            if art then
+                self.check:SetTexture(art); self.check:SetTexCoord(0, 1, 0, 1)
+                self.check:SetVertexColor(0.05, 0.06, 0.08)
+            else
+                self.check:SetColorTexture(cc[1], cc[2], cc[3], 1)
+            end
+        end
+        self.check:SetShown(on)
+    end
+    b:SetScript("OnEnter", function(self) self._hovered = true; self:_render(); theme:_showTip(self) end)
+    b:SetScript("OnLeave", function(self) self._hovered = false; self:_render(); GameTooltip_Hide() end)
     -- label, checked, cb(newChecked); optional checkColor { r,g,b } (defaults to accent).
     function b:Configure(label, checked, cb, checkColor)
-        local C = theme.C
         self.fs:SetText(label)
-        local cc = checkColor or C.accent
-        self.check:SetColorTexture(cc[1], cc[2], cc[3], 1)
-        self.check:SetShown(checked and true or false)
+        self.fs:SetFont(theme.FONT, 12)   -- pooled: re-apply the live theme font
+        self._checked, self._checkColor = checked and true or false, checkColor
+        self:_render()
         self:SetScript("OnClick", function(self)
-            local nv = not self.check:IsShown()
-            self.check:SetShown(nv)
-            if cb then cb(nv) end
+            self._checked = not self._checked
+            self:_render()
+            if cb then cb(self._checked) end
         end)
     end
+    -- Set the state from outside (no callback), e.g. after a "select all" elsewhere.
+    function b:SetChecked(v) self._checked = v and true or false; self:_render() end
+    function b:IsChecked() return self._checked and true or false end
     return b
 end
 

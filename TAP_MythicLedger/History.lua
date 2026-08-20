@@ -125,6 +125,7 @@ local function playerSummaryFor(identityKey, member)
             highestTimed = nil, levelSum = 0, levelN = 0,
             stats = {},   -- role-agnostic accumulation (for quick counts like avg deaths)
             notes = meta.notes or "", tags = meta.tags or {}, favorite = meta.favorite and true or false,
+            protected = meta.protected and true or false,   -- exempts this player AND their runs from retention
         }
         index[identityKey] = rec
     end
@@ -279,6 +280,7 @@ function History.RebuildAll()
     end
     if DB.MarkKeepers then DB.MarkKeepers() end   -- best-per-dungeon + top-10 (retention keepers)
     if DB.MarkBestRuns then DB.MarkBestRuns() end -- crown: best score per dungeon+key+spec
+    if DB.MarkProtected then DB.MarkProtected() end -- user locks: player-level protection -> run._protectedBy
     ML.Log("Rebuilt caches: %d character(s), %d player(s)", Util.count(root.characters), Util.count(root.playerIndex))
 end
 
@@ -302,6 +304,14 @@ end
 function History.SetPlayerTags(identityKey, tags)
     metaFor(identityKey).tags = tags or {}
     local rec = DB.PlayerIndex()[identityKey]; if rec then rec.tags = tags or {} end
+end
+-- PROTECTED: this player's record is never pruned, AND every run they appear in is exempt from every
+-- retention/compaction policy. Lives in playerMeta (like notes/tags/favorite) because that is the one
+-- table History.RebuildAll does not wipe, so the flag survives every cache rebuild.
+function History.SetPlayerProtected(identityKey, on)
+    metaFor(identityKey).protected = on and true or false
+    local rec = DB.PlayerIndex()[identityKey]; if rec then rec.protected = on and true or false end
+    if DB.MarkProtected then DB.MarkProtected() end   -- re-resolve which runs this now covers
 end
 
 ----------------------------------------------------------------------

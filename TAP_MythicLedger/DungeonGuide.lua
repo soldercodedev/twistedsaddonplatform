@@ -131,6 +131,31 @@ end
 ----------------------------------------------------------------------
 -- Rendering.
 ----------------------------------------------------------------------
+-- Tooltip inline styling. WoW tooltips can't switch fonts per line, so the "flair" vocabulary is
+-- inline color escapes + texture glyphs; the catalog notes are plain ASCII, so these gsubs can't
+-- collide with pre-existing escape codes.
+--   * colorType: each school segment of a compound dtype ("Curse/Magic") in its SCHOOL_COLOR.
+--   * styleNote: stat tokens (116k, 2.5s, -60%, 87k/3s...) pop bright white; deliberate ALL-CAPS
+--     emphasis (STUNS, KILLS, FEARS...) goes warning orange; death-evidence notes get the raid
+--     skull glyph. Base line color stays subtext so the highlights carry the hierarchy.
+local NOTE_STAT = "|cfff2f4f8"    -- near-white: numbers are the evidence, make them pop
+local NOTE_WARN = "|cffff7a45"    -- Must-kick orange: hand-written ALL-CAPS emphasis
+local SKULL     = "|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_8:0|t"   -- death evidence
+local CHECK     = "|TInterface\\RaidFrame\\ReadyCheck-Ready:0|t"              -- counted-in-score
+local CAPS_SKIP = { RLP = true }  -- 3+ caps runs that are acronyms, not emphasis
+local function colorType(dtype)
+    return (dtype:gsub("[^/]+", function(seg)
+        local sc = SCHOOL_COLOR[seg]
+        return sc and ("|cff" .. sc .. seg .. "|r") or seg
+    end))
+end
+local function styleNote(s)
+    s = s:gsub("%f[%w%+%-][%+%-]?%d[%w%./%%]*", NOTE_STAT .. "%0|r")
+    s = s:gsub("%f[%u]%u%u%u+%f[%A]", function(w) return CAPS_SKIP[w] and w or (NOTE_WARN .. w .. "|r") end)
+    if s:find("killing") or s:find("death") then s = SKULL .. " " .. s end
+    return s
+end
+
 -- One spell row: icon + name + caster/type subline + tier badge; whole row hover-tips + click-selects.
 -- Returns the next y.
 local function spellRow(b, C, x, y, w, e, kind, win)
@@ -142,16 +167,28 @@ local function spellRow(b, C, x, y, w, e, kind, win)
 
     if selected then b:Box(x, y, w, rowH, 0.16, 0, C.accent) end
 
-    -- Hover tooltip.
+    -- Hover tooltip. Caster in NPC-nameplate gold; tier in its tier color; dtype per-school.
     local lines = {
-        { left = "Caster", right = (e.npc and e.npc ~= "") and e.npc or "?" },
+        { left = "Caster", right = (e.npc and e.npc ~= "") and e.npc or "?", rcolor = "e6c15c" },
         { left = (kind == "kick") and "Priority" or "Dispel priority", right = tier, rcolor = ti.color },
     }
-    if e.dtype and e.dtype ~= "" and e.dtype ~= "?" then lines[#lines + 1] = { left = "Type", right = e.dtype } end
-    if e.id then lines[#lines + 1] = { left = "Spell ID", right = tostring(e.id) } end
+    if e.dtype and e.dtype ~= "" and e.dtype ~= "?" then lines[#lines + 1] = { left = "Type", right = colorType(e.dtype) } end
+    if e.id then
+        -- A merged row (see drawList) covers several spell ids behind one name; list them all.
+        local idText = tostring(e.id)
+        for _, aid in ipairs(e.altIds or {}) do idText = idText .. ", " .. tostring(aid) end
+        lines[#lines + 1] = { left = e.altIds and "Spell IDs" or "Spell ID", right = idText }
+    end
+    -- WHY this tier: the catalog's per-spell justification (mechanic + observed evidence), curated
+    -- alongside the priorities. Divider + accent "Why:" label (the |cffffffff placeholder is swapped
+    -- for the live theme accent by HL() at render); wrapped body; absent on uncurated ("Spare") entries.
+    if e.note and e.note ~= "" then
+        lines[#lines + 1] = { sep = true }
+        lines[#lines + 1] = { text = "|cffffffffWhy:|r " .. styleNote(e.note), color = "subtext" }
+    end
     if kind == "dispel" and e.counts then
         lines[#lines + 1] = { blank = true }
-        lines[#lines + 1] = { text = "Counted toward the dispel score.", color = "subtext" }
+        lines[#lines + 1] = { text = CHECK .. " Counted toward the dispel score.", color = "8fbf6b" }
     end
     lines[#lines + 1] = { blank = true }
     lines[#lines + 1] = { text = e.npcId and "Click to view the caster's model." or "No model available for this caster.", color = "subtext" }
@@ -169,9 +206,8 @@ local function spellRow(b, C, x, y, w, e, kind, win)
 
     local sub = (e.npc and e.npc ~= "") and e.npc or ""
     if kind == "dispel" and e.dtype and e.dtype ~= "" and e.dtype ~= "?" then
-        local first = e.dtype:match("^(%a+)")
-        local sc = (first and SCHOOL_COLOR[first]) or "8b8b8b"
-        sub = (sub ~= "" and (sub .. "  ·  ") or "") .. "|cff" .. sc .. e.dtype .. "|r"
+        -- Per-segment school colors (a compound "Curse/Magic" shows both), matching the tooltip.
+        sub = (sub ~= "" and (sub .. "  ·  ") or "") .. colorType(e.dtype)
     end
     if sub ~= "" then b:Label(sub, x + 35, y - 21, C.subtext, 10) end
 
@@ -181,18 +217,13 @@ local function spellRow(b, C, x, y, w, e, kind, win)
     return y - rowH
 end
 
--- One titled, tier-sorted column of kicks or dispels. Returns the next y.
-local function drawList(b, C, x, y, w, title, entries, kind, win)
-    b:Label(title, x, y, C.accent, 12)
-    b:Label((entries and #entries or 0) .. " cataloged", x + w - 96, y, C.subtext, 10)
-    y = y - 8
-    b:Box(x, y, w, 1, 0.5, 0, C.border or C.subtext)
-    y = y - 12
-    if not entries or #entries == 0 then
-        b:Label("None cataloged for this dungeon.", x, y - 4, C.subtext, 11)
-        return y - 24
-    end
-    local tiers = (kind == "kick") and KICK_TIERS or DISPEL_TIERS
+-- Tier-sort a catalog list, then collapse visual duplicates: the catalog keeps one entry per spell
+-- ID (a re-skinned mob or renamed cast reuses a name with a new id), but two identical rows read as
+-- a mistake. Rows sharing name + tier + caster (+ dispel type) merge into one; the extras' ids land
+-- in `altIds` for the tooltip. Rows with DIFFERENT casters stay apart on purpose - "Corroding
+-- Spittle from Nibbles" vs "from Massive Felwyrm" is real information. Merged rows are shallow
+-- COPIES so the shared season-data tables are never mutated across renders.
+local function sortedMerged(entries, tiers)
     local sorted = {}
     for _, e in ipairs(entries) do sorted[#sorted + 1] = e end
     table.sort(sorted, function(a, c)
@@ -200,7 +231,40 @@ local function drawList(b, C, x, y, w, title, entries, kind, win)
         if oa ~= oc then return oa < oc end
         return (a.name or "") < (c.name or "")
     end)
-    for _, e in ipairs(sorted) do y = spellRow(b, C, x, y, w, e, kind, win) end
+    local merged = {}
+    for _, e in ipairs(sorted) do
+        local prev = merged[#merged]
+        if prev and (prev.name or "") == (e.name or "") and normTier(prev.tier) == normTier(e.tier)
+            and (prev.npc or "") == (e.npc or "") and (prev.dtype or "") == (e.dtype or "") then
+            if not prev._merged then
+                local copy = {}
+                for k, v in pairs(prev) do copy[k] = v end
+                copy._merged, copy.altIds = true, {}
+                merged[#merged], prev = copy, copy
+            end
+            prev.altIds[#prev.altIds + 1] = e.id
+            prev.npcId = prev.npcId or e.npcId   -- keep a model if only the duplicate had one
+        else
+            merged[#merged + 1] = e
+        end
+    end
+    return merged
+end
+
+-- One titled, tier-sorted column of kicks or dispels. Returns the next y.
+local function drawList(b, C, x, y, w, title, entries, kind, win)
+    local tiers = (kind == "kick") and KICK_TIERS or DISPEL_TIERS
+    local rows = sortedMerged(entries or {}, tiers)
+    b:Label(title, x, y, C.accent, 12)
+    b:Label(#rows .. " cataloged", x + w - 96, y, C.subtext, 10)
+    y = y - 8
+    b:Box(x, y, w, 1, 0.5, 0, C.border or C.subtext)
+    y = y - 12
+    if #rows == 0 then
+        b:Label("None cataloged for this dungeon.", x, y - 4, C.subtext, 11)
+        return y - 24
+    end
+    for _, e in ipairs(rows) do y = spellRow(b, C, x, y, w, e, kind, win) end
     return y
 end
 

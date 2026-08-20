@@ -1,4 +1,4 @@
-## Interface: 120007
+## Interface: 120100
 ## Title: |cffa06cf0TAP:|r Combat Alerts
 ## Notes: Combat-safe, rule-based audible & visual alerts, as a module of the Twisteds Addon Platform. Configure with /tap.
 ## Author: Twistedfury-Zul'jin

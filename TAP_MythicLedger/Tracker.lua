@@ -112,10 +112,11 @@ local function mergePartyStats(roster, stats, capture, attrib, recaps)
             -- Live talent-inspection verdict for this member's dispel: true = has it, false = confirmed
             -- NOT talented, nil = unknown. Gates the dispel scorer (see Scoring/Categories.Dispel).
             dispelTalent = capture and m.guid and capture[m.guid] and capture[m.guid].hasTool,
-            -- Talent METADATA (not read by scoring yet) - captured for future class+spec+ilvl+hero-tree
-            -- expectation modelling. heroTree = {id,name}; talents = purchased spell ids; talentCount.
+            -- Talent METADATA. heroTree = {id,name} (shown in the run review); talentCount = how many
+            -- talents were purchased. The raw purchased-id ARRAY is deliberately NOT stored: nothing reads
+            -- it, and keeping it cost 4.1 MB of a 11.6 MB saved-variables file (see migration v5). If
+            -- talent-level expectation modelling ever lands, re-capture it then rather than hoarding it now.
             heroTree = m.heroTree or (capture and m.guid and capture[m.guid] and capture[m.guid].heroTree),
-            talents = m.talents or (capture and m.guid and capture[m.guid] and capture[m.guid].talents),
             talentCount = m.talentCount or (capture and m.guid and capture[m.guid] and capture[m.guid].talentCount),
             stats = statBlock(src),
             -- Per-spell breakdown for the run log (what they dealt/healed/took/avoided/kicked/dispelled).
@@ -596,7 +597,7 @@ local function finalizeRun(stats)
     if Providers.ClassifyDeaths then
         local kickSet
         local Cfg = ML.Scoring and ML.Scoring.Config
-        local cat = Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(run.dungeonName)
+        local cat = Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(run.dungeonName, run.seasonId)
         if cat and type(cat.kicks) == "table" then
             kickSet = {}
             for _, e in ipairs(cat.kicks) do if e.id then kickSet[e.id] = true end end
@@ -654,6 +655,10 @@ local function finalizeRun(stats)
         tostring(ps and ps.interrupts), tostring(ps and ps.dispels), tostring(run.deaths))
 
     setState(STATE.COMPLETED)
+    -- The inspect capture has done its job: mergePartyStats folded spec, item level, hero tree, talent
+    -- count and the dispel verdict onto each member above, and the Store has scored the run. Everything
+    -- left in it is a duplicate of the party rows, so don't persist it (see migration v5).
+    run.dispelCapture = nil
     local inserted = DB.AddRun(run)   -- de-duplicates + runs History.OnRunSaved internally
     -- Saving flips this party to "returning"; mark them seen so a post-run roster update can't re-toast
     -- the whole group as if you'd just met them (see Recap.MarkGroupSeen).
@@ -749,6 +754,7 @@ function Tracker.AbandonRun(reason)
     run.deaths      = sumDeaths(run.party)
     run.bosses      = finalizeBosses()
     setState(STATE.ABANDONED)
+    run.dispelCapture = nil   -- folded onto the party rows by mergePartyStats above; see migration v5
     DB.AddRun(run)   -- de-duplicates + runs History.OnRunSaved internally
     if ML.Recap and ML.Recap.MarkGroupSeen then pcall(ML.Recap.MarkGroupSeen, run.party) end
     DB.ClearActiveRun(); cleanup(); setState(STATE.IDLE)

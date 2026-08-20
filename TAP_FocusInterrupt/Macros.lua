@@ -18,6 +18,9 @@ local addonName, FTI = ...
 --   ground = ground-targeted (cast @focus, no ,harm)  -- e.g. Solar Beam
 --   pet    = cast by your pet (may need the right pet out)
 --   note   = short caveat shown in the UI
+-- `abbr` is a short (<=12 char) tag used only to name the SECOND+ macro when a spec has more than one
+-- of a kind; the first detected ability always keeps the classic "TAP Interrupt" / "TAP Stun" name so
+-- existing macros keep updating. WoW caps macro names at 16 chars, hence "TAP " + a short abbr.
 FTI.INTERRUPTS = {
     WARRIOR     = { { id = 6552 } },       -- Pummel
     ROGUE       = { { id = 1766 } },       -- Kick
@@ -27,15 +30,15 @@ FTI.INTERRUPTS = {
     MONK        = { { id = 116705 } },     -- Spear Hand Strike
     DEMONHUNTER = { { id = 183752 } },     -- Disrupt
     EVOKER      = { { id = 351338 } },     -- Quell
-    HUNTER      = { { id = 147362 }, { id = 187707 } },  -- Counter Shot / Muzzle (Survival)
+    HUNTER      = { { id = 147362, abbr = "CtrShot" }, { id = 187707, abbr = "Muzzle" } },  -- Counter Shot / Muzzle (Survival)
     PRIEST      = { { id = 15487 } },      -- Silence (Shadow baseline; a talent for Disc/Holy)
-    PALADIN     = { { id = 96231 },                                   -- Rebuke (all specs)
-                    { id = 31935, note = "silences on hit" },         -- Avenger's Shield (Prot)
-                    { id = 375576, note = "talent" } },               -- Divine Toll (talent)
-    DRUID       = { { id = 106839 },                                  -- Skull Bash (Feral/Guardian)
-                    { id = 78675, ground = true, note = "talent" } }, -- Solar Beam (Balance talent)
-    WARLOCK     = { { id = 19647, pet = true, note = "needs your Felhunter" },   -- Spell Lock
-                    { id = 89766, pet = true, note = "needs your Felguard" } },  -- Axe Toss
+    PALADIN     = { { id = 96231, abbr = "Rebuke" },                                 -- Rebuke (all specs)
+                    { id = 31935, abbr = "AvShield", note = "silences on hit" },     -- Avenger's Shield (Prot)
+                    { id = 375576, abbr = "DivToll", note = "talent" } },            -- Divine Toll (talent)
+    DRUID       = { { id = 106839, abbr = "SkullBash" },                                          -- Skull Bash (Feral/Guardian)
+                    { id = 78675, abbr = "SolarBeam", ground = true, note = "talent" } },         -- Solar Beam (Balance talent)
+    WARLOCK     = { { id = 19647, abbr = "SpellLock", pet = true, note = "needs your Felhunter" },  -- Spell Lock
+                    { id = 89766, abbr = "AxeToss", pet = true, note = "needs your Felguard" } },   -- Axe Toss
 }
 
 -- Class-specific "nothing found" explanations.
@@ -55,19 +58,28 @@ local function knowsSpell(id)
     return false
 end
 
--- Resolve the current character's best available interrupt (first one KNOWN).
--- Returns { id, name, icon, ground, pet, note } on success, or nil, reasonString.
-function FTI.GetPlayerInterrupt()
+-- Every interrupt the character actually KNOWS, in candidate order. Returns a list of
+-- { id, name, icon, ground, pet, note, abbr }; empty list + reasonString when none.
+function FTI.GetPlayerInterrupts()
     local _, class = UnitClass("player")
     local list = class and FTI.INTERRUPTS[class]
-    if not list then return nil, "No interrupt data for your class." end
+    if not list then return {}, "No interrupt data for your class." end
+    local out = {}
     for _, c in ipairs(list) do
         if knowsSpell(c.id) then
             local rid, name, icon = FTI.ResolveSpell(c.id)
-            return { id = rid or c.id, name = name, icon = icon, ground = c.ground, pet = c.pet, note = c.note }
+            out[#out + 1] = { id = rid or c.id, name = name, icon = icon, ground = c.ground, pet = c.pet, note = c.note, abbr = c.abbr }
         end
     end
-    return nil, INTERRUPT_NONE[class] or "No interrupt detected for your current spec / talents."
+    if #out == 0 then return {}, INTERRUPT_NONE[class] or "No interrupt detected for your current spec / talents." end
+    return out
+end
+
+-- The character's best available interrupt (first one KNOWN). Returns the info table, or nil, reason.
+function FTI.GetPlayerInterrupt()
+    local list, reason = FTI.GetPlayerInterrupts()
+    if list[1] then return list[1] end
+    return nil, reason
 end
 
 ----------------------------------------------------------------------
@@ -107,22 +119,39 @@ local KICK_UNITS = {
     mouseover_focus = { "mouseover", "focus" },
 }
 
--- Returns macroText, interruptInfo  OR  nil, reasonString.
--- opts.kickTarget picks the aim (a KICK_UNITS key; default focus-only). Ground-targeted
--- interrupts (Solar Beam) drop at the unit's feet, so their conditions check
--- exists/nodead instead of harm.
+-- Build a "cast <ability> at <unit chain>" macro for ONE detected ability (interrupt or stun).
+-- `castTarget` is a KICK_UNITS key (focus / focus_target / target / mouseover / mouseover_focus).
+-- Ground-targeted abilities (Solar Beam) drop at the unit's feet, so their conditions check
+-- exists/nodead instead of harm. Returns the macro text, or nil if no ability was passed.
+function FTI.BuildAbilityMacro(ability, castTarget)
+    if not ability then return nil end
+    local name = ability.name or ("spell:" .. tostring(ability.id))
+    local units = KICK_UNITS[castTarget] or KICK_UNITS.focus
+    local conds = {}
+    for _, u in ipairs(units) do
+        conds[#conds + 1] = ability.ground and ("[@" .. u .. ",exists,nodead]") or ("[@" .. u .. ",harm]")
+    end
+    return "#showtooltip " .. name .. "\n/cast " .. table.concat(conds) .. " " .. name
+end
+
+-- The macro-book name for a detected ability. The FIRST of a kind keeps the classic
+-- "TAP Interrupt" / "TAP Stun" (so pre-existing macros keep being updated); the 2nd+ get
+-- "TAP <abbr>", kept within WoW's 16-char macro-name limit.
+function FTI.AbilityMacroName(kind, ability, index)
+    if (index or 1) <= 1 then return kind == "stun" and "TAP Stun" or "TAP Interrupt" end
+    local abbr = ability.abbr or (tostring(ability.name or ""):gsub("[^%w]", ""))
+    local nm = "TAP " .. abbr
+    if #nm > 16 then nm = nm:sub(1, 16) end
+    return nm
+end
+
+-- Returns macroText, interruptInfo  OR  nil, reasonString. opts.kickTarget picks the aim
+-- (a KICK_UNITS key; default focus-only). Kept for the first/primary interrupt + any callers.
 function FTI.BuildKickMacro(opts)
     opts = opts or {}
     local intr, reason = FTI.GetPlayerInterrupt()
     if not intr then return nil, reason end
-    local name = intr.name or ("spell:" .. tostring(intr.id))
-    local units = KICK_UNITS[opts.kickTarget] or KICK_UNITS.focus
-    local conds = {}
-    for _, u in ipairs(units) do
-        conds[#conds + 1] = intr.ground and ("[@" .. u .. ",exists,nodead]") or ("[@" .. u .. ",harm]")
-    end
-    local body = "#showtooltip " .. name .. "\n/cast " .. table.concat(conds) .. " " .. name
-    return body, intr
+    return FTI.BuildAbilityMacro(intr, opts.kickTarget or "focus"), intr
 end
 
 ----------------------------------------------------------------------
@@ -130,39 +159,48 @@ end
 -- per class and pick the first one the character actually KNOWS.
 ----------------------------------------------------------------------
 FTI.STUNS = {
-    WARRIOR     = { 107570 },        -- Storm Bolt (talent)
-    PALADIN     = { 853 },           -- Hammer of Justice
-    ROGUE       = { 408 },           -- Kidney Shot (needs combo points)
-    HUNTER      = { 19577 },         -- Intimidation (pet stuns your target)
-    DRUID       = { 5211, 22570 },   -- Mighty Bash (talent) / Maim (Feral, combo points)
-    DEATHKNIGHT = { 108194 },        -- Asphyxiate (talent)
-    DEMONHUNTER = { 211881 },        -- Fel Eruption (talent)
+    WARRIOR     = { { id = 107570 } },        -- Storm Bolt (talent)
+    PALADIN     = { { id = 853 } },           -- Hammer of Justice
+    ROGUE       = { { id = 408 } },           -- Kidney Shot (needs combo points)
+    HUNTER      = { { id = 19577 } },         -- Intimidation (pet stuns your target)
+    DRUID       = { { id = 5211, abbr = "MightyBash" }, { id = 22570, abbr = "Maim" } },  -- Mighty Bash (talent) / Maim (Feral)
+    DEATHKNIGHT = { { id = 108194 } },        -- Asphyxiate (talent)
+    DEMONHUNTER = { { id = 211881 } },        -- Fel Eruption (talent)
     -- No reliable single-target targeted stun: Monk (Leg Sweep is AoE), Warlock
     -- (Shadowfury AoE), Shaman (Cap Totem AoE), Mage, Priest, Evoker.
 }
 
--- Returns { id, name, icon } for the first KNOWN targeted stun, or nil, reason.
-function FTI.GetPlayerStun()
+-- Every targeted stun the character KNOWS, in candidate order. Returns a list of
+-- { id, name, icon, abbr }; empty list + reasonString when none.
+function FTI.GetPlayerStuns()
     local _, class = UnitClass("player")
     local list = class and FTI.STUNS[class]
-    if not list then return nil, "Your class has no single-target targeted stun." end
-    local knownFn = IsPlayerSpell or IsSpellKnown
-    for _, id in ipairs(list) do
-        local rid, name, icon = FTI.ResolveSpell(id)
-        if (not knownFn) or knownFn(id) then
-            return { id = rid or id, name = name, icon = icon, known = true }
+    if not list then return {}, "Your class has no single-target targeted stun." end
+    local out = {}
+    for _, c in ipairs(list) do
+        if knowsSpell(c.id) then
+            local rid, name, icon = FTI.ResolveSpell(c.id)
+            out[#out + 1] = { id = rid or c.id, name = name, icon = icon, abbr = c.abbr }
         end
     end
-    return nil, "No targeted stun with your current talents (most class stuns are talent-gated)."
+    if #out == 0 then return {}, "No targeted stun with your current talents (most class stuns are talent-gated)." end
+    return out
 end
 
--- Returns macroText, stunInfo  OR  nil, reasonString.  (@focus, else @target)
-function FTI.BuildStunMacro()
+-- The first KNOWN targeted stun. Returns the info table, or nil, reason.
+function FTI.GetPlayerStun()
+    local list, reason = FTI.GetPlayerStuns()
+    if list[1] then return list[1] end
+    return nil, reason
+end
+
+-- Returns macroText, stunInfo  OR  nil, reasonString. opts.stunTarget picks the aim
+-- (a KICK_UNITS key; default focus, else target). Kept for the first/primary stun + any callers.
+function FTI.BuildStunMacro(opts)
+    opts = opts or {}
     local s, reason = FTI.GetPlayerStun()
     if not s then return nil, reason end
-    local name = s.name or ("spell:" .. tostring(s.id))
-    local body = "#showtooltip " .. name .. "\n/cast [@focus,harm][@target,harm] " .. name
-    return body, s
+    return FTI.BuildAbilityMacro(s, opts.stunTarget or "focus_target"), s
 end
 
 ----------------------------------------------------------------------

@@ -70,7 +70,7 @@ local function gatherDeaths(onlyNew, runOverride)
     -- The dungeon's interruptible casts, so a death to an un-kicked cast reads as "missed kick".
     local kickSet
     local Cfg = ML.Scoring and ML.Scoring.Config
-    local cat = Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(run.dungeonName)
+    local cat = Cfg and Cfg.SeasonDungeon and Cfg.SeasonDungeon(run.dungeonName, run.seasonId)
     if cat and type(cat.kicks) == "table" then
         kickSet = {}
         for _, e in ipairs(cat.kicks) do if e.id then kickSet[e.id] = true end end
