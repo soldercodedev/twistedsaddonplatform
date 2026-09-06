@@ -1,5 +1,19 @@
 # Mythic Ledger - Changelog
 
+## 1.4.0
+
+Season 2 utility expectations re-measured, and settings are now per profile.
+
+- **[CHANGE]** Season 2 utility expectations were re-measured against logged runs. Every dungeon's trash interrupt rate came down, by 10% to 40%: a median group was landing only 61-85% of the modelled kick supply, so a completely ordinary run was being marked down for it.
+- **[BUG FIX]** That over-statement was being hidden, unevenly. Interrupt supply is capped at your group's own kick capacity, and at the old rates that cap was doing the work in 85% of runs - so how harshly you were graded depended on your group's composition rather than on the dungeon. A group with plenty of kickers was measured against a number no group reaches; a group with few was quietly capped back to something fair. Kings' Rest, Voidscar Arena and Temple of Sethraliss are where it bit hardest, and their interrupt scores rise 11 to 13 points.
+- **[CHANGE]** Dispel rates moved both ways and by less, since they were already close: Voidscar Arena +36%, Murder Row +32% and Altar of Fangs +22%, everything else in single digits.
+- **[BUG FIX]** Voidscar Arena's biggest cleanse, Corrosive Essence, was missing from the dungeon data altogether, so the dungeon looked as though it had almost no poison to remove: healers were graded against a nearly empty requirement and dispel-capable damage dealers were not graded on dispels there at all. It counts now, and Voidscar Arena is the only dungeon this moves.
+- **[BUG FIX]** Four dispels that groups clear constantly were graded as optional, and now count: Cold Claws and Rolling Thunder (Ruby Life Pools), Serpent Strike (Kings' Rest) and Insatiable Hunger (Den of Nalorakk). Den of Nalorakk carried no curse requirement at all, so anyone whose only dispel was a decurse went ungraded on dispels there.
+- **[NEW]** Three more dispels are named in the Dungeon Guide without counting toward your score, because groups clear them too rarely to be expected to: Mind-Numbing Poison and Mother's Wrath, plus Murder Row's Fel Crazed.
+- **[NEW]** Five casts that groups routinely kick were missing from the Dungeon Guide and are now listed: Shadowbolt Volley (Voidscar Arena), Storm Bolt (Ruby Life Pools), Shadow Bolt (Kings' Rest), Doom Bolt (Murder Row), and the Uncoiled Writhe's copy of Toxic Atrophy in Altar of Fangs. Listing them does not change any score.
+- **[CHANGE]** Death Report and Live Coach settings are per profile now, and both overlays are placed through the platform's Movers page. Your run history, player notes and personal bests are account-wide and are never part of a profile.
+- **[NOTE]** Existing runs re-score on login. The average overall score moves by well under a point, and about one player in ten shifts by a single letter grade, almost always upward.
+
 ## 1.3.0
 
 Midnight Season 2 is fully supported - the Dungeon Guide, kick/dispel expectations, and the review's dispel coaching all know the new pool, and every guide entry now explains why it matters. Saved data is much smaller, with one control for how long runs keep their full detail and Keep flags for the ones you want left alone. Plus a Live Coach that nudges you between fights, week-over-week stats, a Great Vault tracker, and a new Progression page. Scoring picks up one fix too: a run is graded against its own season's data again. Your existing runs re-score on login.

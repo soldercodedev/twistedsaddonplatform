@@ -7,11 +7,34 @@
 -- High/Must share of actioned dispels (Distribute.lua). Values are ACTIONED rates (kicks/dispels
 -- the group actually lands), consistent with the S1 file and Config.supplyScale.
 --
--- CALIBRATION (2026-08-20): 18 observed S2 runs (+2 to +10), 15 of them with combat logs. Trash kick
--- weights = observed boss-subtracted trash kicks/MINUTE, held slightly under on small samples; boss
--- weights = observed landed kicks/dispels per kill normalized to the 90s reference fight (x1.5
--- bossKick scale backed out). Voidscar Arena is the one dungeon still with NO logged run (meter
--- attribution only, n=1 at +2) - its numbers stay PROVISIONAL until a logged run lands.
+-- CALIBRATION (2026-09-06): 281 logged S2 runs with full detail, 23-49 per dungeon. Trash weights are
+-- back-solved from what groups ACTUALLY LAND: take the 75th percentile of the group's landed kicks (or
+-- dispels), subtract the modelled boss contribution for that run, and divide by run minutes. Boss
+-- weights are unchanged from the 2026-08-28 pass.
+-- Only dispels at a counted (High/Must) tier feed the per-school weights and dispelDemandScale, which
+-- matches how Distribute filters them.
+--
+-- WHY THE TRASH KICK RATES ALL CAME DOWN. The contribution curve caps at ratio 1.0 (Config.
+-- contributionCurve), so the expectation is the level that earns FULL MARKS, not an average. Measured
+-- against 281 runs the previous rates were 10-40% above what groups land, in EVERY dungeon: the median
+-- group landed only 61-85% of the modelled dungeonSupply.
+--
+-- That mostly did not show up in scores, and the reason matters. Distribute caps supply at the group's
+-- own kick capacity (supply = min(dungeonSupply, groupCapacity)), and at the old rates that cap was
+-- binding in 85% of runs - so for five runs in six the season data was not being used at all and the
+-- cap was silently doing the calibration's job. The unfairness was therefore COMPOSITION-DEPENDENT: a
+-- group with plenty of kickers had a high enough capacity for the inflated dungeonSupply to bind, and
+-- got graded against a number no group reaches, while a group with few kickers was quietly capped back
+-- to something fair. Kings' Rest (capacity never bound), Voidscar Arena and Temple of Sethraliss were
+-- where it bit, and those are the three dungeons whose scores move most here (+11 to +13).
+--
+-- At the new rates the cap binds in 64% of runs, so the season data is what grades a third of them
+-- rather than a sixth.
+--
+-- The dispel rates moved both ways and by less, because those were already close - the corrections
+-- here are mostly single-digit, with Voidscar Arena (+36%), Murder Row (+32%) and Altar of Fangs
+-- (+22%) the real outliers.
+--
 -- All are TUNABLE knobs (/mldev tune) - refine as more runs accumulate.
 
 local ADDON, ML = ...
@@ -64,15 +87,15 @@ S.SeasonData["MidnightS2"] = {
             },
             -- <<< CATALOG <<<
             name = "Temple of Sethraliss",
-            dispelDemandScale = 0.85,  -- 28 of 34 actioned dispels were High/Must
-            trash = { interruptFrequency = 2.8,      -- per-min (obs 2.71 trash kicks/min, n=2 at +5)
-                partyDebuffFrequencies = { poison = 0.50, magic = 0.24 },   -- Cytotoxin, Imbued Conduction
-                targetBuffFrequencies  = { purge = 0.35 } },                -- Accumulate Charge (Agitated Nimbus)
+            dispelDemandScale = 0.90,   -- observed share of actioned dispels at a counted tier
+            trash = { interruptFrequency = 1.68,      -- per-min, boss-subtracted (n=23 logged runs)
+                partyDebuffFrequencies = { magic = 0.23, poison = 0.37 },
+                targetBuffFrequencies  = { purge = 0.24 } },
             bosses = {
-                [2124] = K(0),                       -- Adderis and Aspix
-                [2125] = KD(1.0, { poison = 1.0 }),  -- Merektha (snake adds + Cytotoxin; obs 1 cleanse/kill)
-                [2126] = K(0),                       -- Galvazzt
-                [2127] = K(1.0),                     -- Avatar of Sethraliss (Faithless Subjugator adds' Addle Mind)
+                [2124] = K(0.3),                   -- Adderis and Aspix
+                [2125] = KD(2.4, { poison = 0.06 }),   -- Merektha
+                [2126] = K(0.0),                   -- Galvazzt
+                [2127] = K(1.9),                   -- Avatar of Sethraliss
             },
         },
         ----------------------------------------------------------------
@@ -98,14 +121,16 @@ S.SeasonData["MidnightS2"] = {
                   note = "4s cast: 97k party Frost hit + 10% Frost vulnerability for 20s" },
             },
             dispels = {
+                { id = 1238053, name = "Mother's Wrath", tier = "Conditional", dtype = "Enrage", npc = "Curious Yearling", npcId = 241809,
+                  note = "the Yearling enrages the Territorial Matriarch - soothe it, though groups remove only 12% today" },
                 { id = 1239860, name = "Cryo Surge", tier = "High", dtype = "Magic", npc = "Glacial Revenant", npcId = 241876, counts = true,
                   note = "Magic: 48k splash to everyone within 4yd of the victim - removed 50%; dispel before the pack clumps" },
                 { id = 1235549, name = "Glacial Torment", tier = "High", dtype = "Magic", npc = "Sentinel of Winter", npcId = 244100, counts = true,
                   note = "boss Magic DoT 68k/2s for 16s - removed 67% on the observed Sentinel kill" },
                 { id = 1234846, name = "Toxic Spores", tier = "High", dtype = "Poison", npc = "The Hoardmonger", npcId = 241812, counts = true,
                   note = "stacking Poison 19k/2s from the rotten mushrooms - cleanse at stacks during Hoardmonger" },
-                { id = 1238801, name = "Insatiable Hunger", tier = "Medium", dtype = "Curse", npc = "Starvation Effigy", npcId = 245567,
-                  note = "stacking Curse: -15% max HP per stack for 25s - decurse when it stacks (removed 20%)" },
+                { id = 1238801, name = "Insatiable Hunger", tier = "High", dtype = "Curse", npc = "Starvation Effigy", npcId = 245567, counts = true,
+                  note = "stacking Curse: -15% max HP per stack for 25s, seen to 3 stacks - decurse it (removed on 45% of applications)" },
                 { id = 1241464, name = "Glacial Tomb", tier = "Conditional", dtype = "Movement", npc = "Avatar of Determination", npcId = 241869,
                   note = "encases the player until destroyed - a freedom/root-break helps, damage breaks it too" },
                 { id = 1297696, name = "Healing Breeze", tier = "When needed", dtype = "Magic", npc = "Earthwhisper Tender", npcId = 241814,
@@ -113,14 +138,13 @@ S.SeasonData["MidnightS2"] = {
             },
             -- <<< CATALOG <<<
             name = "Den of Nalorakk",
-            dispelDemandScale = 0.6,   -- 11 of 19 actioned dispels were High/Must
-            trash = { interruptFrequency = 3.0,      -- per-min (obs 3.00 trash kicks/min, n=2 at +2/+8)
-                partyDebuffFrequencies = { magic = 0.30, curse = 0.09 },    -- Cryo Surge, Insatiable Hunger
-                targetBuffFrequencies  = { purge = 0.05 } },                -- Healing Breeze (kick preempts)
+            dispelDemandScale = 0.82,   -- observed share of actioned dispels at a counted tier
+            trash = { interruptFrequency = 2.35,      -- per-min, boss-subtracted (n=28 logged runs)
+                partyDebuffFrequencies = { magic = 0.34, curse = 0.27 } },
             bosses = {
-                [3207] = KD(0, { poison = 1.0 }),    -- The Hoardmonger (Toxic Spores)
-                [3208] = KD(2.0, { magic = 2.5 }),   -- Sentinel of Winter (adds + Glacial Torment; obs 3 kicks + 3 cleanses/kill)
-                [3209] = K(0),                       -- Nalorakk
+                [3207] = KD(0.0, { poison = 3.06 }),   -- The Hoardmonger
+                [3208] = KD(3.8, { magic = 2.60 }),   -- Sentinel of Winter
+                [3209] = K(0.0),                   -- Nalorakk
             },
         },
         ----------------------------------------------------------------
@@ -142,6 +166,8 @@ S.SeasonData["MidnightS2"] = {
                   note = "4s cast: party-wide Poison burst 116k/2s for 12s" },
                 { id = 267763, name = "Wretched Discharge", tier = "Must kick", npc = "Half-Finished Mummy", npcId = 270502,
                   note = "4s cast: party-wide Disease DoT 116k/2s for 12s - the mummies during Mchimba cast it too" },
+                { id = 1258431, name = "Shadow Bolt", tier = "Should kick", npc = "Risen Hexer", npcId = 134174,
+                  note = "2.5s ~76k bolt - the Hexer's filler between Hex Volleys, kicked on 17 of 56 casts" },
                 { id = 1294815, name = "Shadowfrost Bolt", tier = "Should kick", npc = "Risen Hexer", npcId = 134174,
                   note = "2.5s ~116k bolt that leaves a light Magic residue" },
                 { id = 1294972, name = "Soul Bolt", tier = "Should kick", npc = "Queen Wasi", npcId = 137478,
@@ -162,22 +188,22 @@ S.SeasonData["MidnightS2"] = {
                   note = "Poison 39k/sec + slow - the single biggest avoidable-damage source in the dungeon (5.7M over 2 runs)" },
                 { id = 267763, name = "Wretched Discharge", tier = "High", dtype = "Disease", npc = "Half-Finished Mummy", npcId = 270502, counts = true,
                   note = "the landed party Disease of the kickable cast - cleanse what slips through" },
-                { id = 1306763, name = "Serpent Strike", tier = "Medium", dtype = "Poison", npc = "Queen Patlaa", npcId = 137486,
-                  note = "Poison 53k/sec + 50% slow for 8s" },
+                { id = 1306763, name = "Serpent Strike", tier = "High", dtype = "Poison", npc = "Queen Patlaa", npcId = 137486, counts = true,
+                  note = "Poison 53k/sec + 50% slow for 8s - the group cleanses 2 of every 3" },
                 { id = 1294815, name = "Shadowfrost Bolt", tier = "Medium", dtype = "Magic", npc = "Risen Hexer", npcId = 134174,
                   note = "light Magic residue from the bolt - cleanse when free" },
             },
             -- <<< CATALOG <<<
             name = "Kings' Rest",
-            dispelDemandScale = 0.9,   -- 43 of 47 actioned dispels were High/Must
-            trash = { interruptFrequency = 1.55,     -- per-min (obs 1.57 trash kicks/min, n=2: +2/+10 - calmest kick dungeon)
-                partyDebuffFrequencies = { magic = 0.70, poison = 0.10, curse = 0.03, disease = 0.03 },   -- Frost Shock/Pit of Despair; Putrid Seekers; Hex Volley; Wretched Discharge
-                targetBuffFrequencies  = { purge = 0.70 } },   -- Bound by Shadow (Minion of Zul) - removed 20x/2 runs
+            dispelDemandScale = 0.86,   -- observed share of actioned dispels at a counted tier
+            trash = { interruptFrequency = 0.97,      -- per-min, boss-subtracted (n=26 logged runs)
+                partyDebuffFrequencies = { magic = 0.31, poison = 0.15, disease = 0.09 },
+                targetBuffFrequencies  = { purge = 0.48 } },
             bosses = {
-                [2139] = K(0),                       -- The Golden Serpent
-                [2142] = KD(1.5, { poison = 0.5 }),  -- Mchimba the Embalmer (mummy adds: Wretched Discharge kick + Putrid Seekers)
-                [2140] = K(1.0),                     -- The Council of Tribes
-                [2143] = K(0.5),                     -- King Dazar
+                [2139] = K(0.0),                   -- The Golden Serpent
+                [2140] = K(1.6),                   -- The Council of Tribes
+                [2142] = KD(2.2, { poison = 0.32, disease = 0.32 }),   -- Mchimba the Embalmer
+                [2143] = K(1.3),                   -- King Dazar
             },
         },
         ----------------------------------------------------------------
@@ -197,12 +223,16 @@ S.SeasonData["MidnightS2"] = {
                   note = "interrupting it backfires the review and the Reviewer LEAVES the fight" },
                 { id = 1201554, name = "Seduction", tier = "Must kick", npc = "Seductive Sayaad", npcId = 255604,
                   note = "3s cast - disorients a player for 6s" },
+                { id = 1258420, name = "Doom Bolt", tier = "Should kick", npc = "Doomguard", npcId = 253278,
+                  note = "2.5s ~83k bolt - the Doomguard's only cast, so a kick is pure damage denied" },
                 { id = 1216571, name = "Fel Missiles", tier = "Should kick", npc = "Felonious Mage", npcId = 236084,
                   note = "5s missile channel - the filler kick (19 landed in one +4)" },
                 { id = 1223204, name = "Felfire Burst", tier = "Should kick", npc = "Unleashed Imp", npcId = 234849,
                   note = "1.5s imp bolt - cheap filler kick" },
             },
             dispels = {
+                { id = 1229433, name = "Fel Crazed", tier = "Conditional", dtype = "Magic", npc = "Felonious Mage", npcId = 236084,
+                  note = "the Mage's own damage buff - purgeable, but removed on fewer than 1 in 10 applications" },
                 { id = 1217633, name = "Corroding Spittle", tier = "High", dtype = "Magic", npc = "Massive Felwyrm", npcId = 236902, counts = true,
                   note = "stacking Magic Fire DoT 87k/3s (wyrms; Nibbles reapplies it all Kystia fight) - removed 75-100%" },
                 { id = 1228198, name = "Corroding Spittle", tier = "High", dtype = "Magic", npc = "Nibbles", npcId = 234660, counts = true,
@@ -222,14 +252,14 @@ S.SeasonData["MidnightS2"] = {
             },
             -- <<< CATALOG <<<
             name = "Murder Row",
-            dispelDemandScale = 0.85,  -- 11 of 13 actioned dispels were High/Must
-            trash = { interruptFrequency = 2.5,      -- per-min (obs 2.61 trash kicks/min, n=2 at +2/+4)
-                partyDebuffFrequencies = { magic = 0.23, curse = 0.08, poison = 0.11 } },   -- Corroding Spittle, Curse of Doom, Heartstop Poison
+            dispelDemandScale = 0.80,   -- observed share of actioned dispels at a counted tier
+            trash = { interruptFrequency = 1.63,      -- per-min, boss-subtracted (n=35 logged runs)
+                partyDebuffFrequencies = { magic = 0.25, curse = 0.19, poison = 0.15 } },
             bosses = {
-                [3101] = { interruptFrequency = 1.0, partyDebuffFrequencies = { magic = 2.5 } },   -- Kystia Manaheart (Felstorm kick; Nibbles' Corroding Spittle - obs 3 cleanses/kill)
-                [3102] = KD(0, { poison = 1.0 }),    -- Zaen Bladesorrow (Heartstop Poison)
-                [3103] = K(0),                       -- Xathuux the Annihilator
-                [3105] = K(3.0),                     -- Lithiel Cinderfury (Chaos Bolt; obs 6.5 kicks/kill)
+                [3101] = KD(3.5, { magic = 3.94, poison = 0.17 }),   -- Kystia Manaheart
+                [3102] = KD(0.0, { poison = 0.51 }),   -- Zaen Bladesorrow
+                [3103] = K(0.0),                   -- Xathuux the Annihilator
+                [3105] = K(7.4),                   -- Lithiel Cinderfury
             },
         },
         ----------------------------------------------------------------
@@ -245,6 +275,8 @@ S.SeasonData["MidnightS2"] = {
                   note = "4s cast: 136k armor-ignoring hit + party -30% Haste for 6s" },
                 { id = 1310358, name = "Toxic Atrophy", tier = "Must kick", npc = "The Writhing Coil", npcId = 259446,
                   note = "boss cast: stacking -20% damage done and -20% movement on the group - kick every one" },
+                { id = 1310666, name = "Toxic Atrophy", tier = "Must kick", npc = "Uncoiled Writhe", npcId = 262398,
+                  note = "the same toxin from the adds during the fight - only 9 of 77 casts ever landed" },
             },
             dispels = {
                 { id = 1307571, name = "Envenom", tier = "High", dtype = "Poison", npc = "High Evolutionist", npcId = 261557, counts = true,
@@ -256,13 +288,13 @@ S.SeasonData["MidnightS2"] = {
             },
             -- <<< CATALOG <<<
             name = "Altar of Fangs",
-            dispelDemandScale = 1.0,   -- every actioned dispel was High/Must
-            trash = { interruptFrequency = 3.0,      -- per-min (obs +5: 3.08 trash kicks/min, n=2)
-                partyDebuffFrequencies = { poison = 0.60, magic = 0.40 } },   -- Envenom, Paralyzing Shots
+            dispelDemandScale = 0.89,   -- observed share of actioned dispels at a counted tier
+            trash = { interruptFrequency = 2.20,      -- per-min, boss-subtracted (n=49 logged runs)
+                partyDebuffFrequencies = { magic = 0.61, poison = 0.56 } },
             bosses = {
-                [3456] = KD(0, { disease = 1.0 }),   -- Rav'i (Regurgitate)
-                [3457] = K(2.0),                     -- The Writhing Coil (Toxic Atrophy; obs 4 kicks/kill)
-                [3458] = K(0),                       -- Zul'jan
+                [3456] = KD(0.0, { disease = 0.41 }),   -- Rav'i
+                [3457] = K(4.3),                   -- The Writhing Coil
+                [3458] = K(0.0),                   -- Zul'jan
             },
         },
         ----------------------------------------------------------------
@@ -284,6 +316,8 @@ S.SeasonData["MidnightS2"] = {
                   note = "15s channel stacking an absorb + CC immunity onto an ally - kick or purge it" },
                 { id = 371984, name = "Frostbolt", tier = "Should kick", npc = "Flashfrost Chillweaver", npcId = 188067,
                   note = "2.5s ~116k Frost bolt - filler kick" },
+                { id = 385310, name = "Storm Bolt", tier = "Should kick", npc = "Ruinous Stormbringer", npcId = 195119,
+                  note = "2.5s ~116k bolt - the group already kicks 12 of every 15" },
                 { id = 392576, name = "Thunder Blast", tier = "Should kick", npc = "Tempest Channeler", npcId = 198047,
                   note = "4s cast: 388k Nature on its target - kick when nothing hotter is up" },
             },
@@ -294,23 +328,21 @@ S.SeasonData["MidnightS2"] = {
                   note = "dying whirlwind shield - purge to cut the 15s ember volley short (removed 56%)" },
                 { id = 391031, name = "Stormcloud Barrier", tier = "High (remove)", dtype = "Magic", npc = "Primal Thundercloud", npcId = 197509, counts = true,
                   note = "85% max-HP absorb - purge it (removed 74%), but removal triggers a Stormcloud Detonation" },
-                { id = 1305234, name = "Cold Claws", tier = "Medium", dtype = "Magic", npc = "Infused Whelp", npcId = 187894,
-                  note = "stacking Magic from whelp melee - Frozen Solid at 20 stacks, cleanse at high stacks" },
-                { id = 392641, name = "Rolling Thunder", tier = "Conditional", dtype = "Magic", npc = "Thunderhead", npcId = 197698,
-                  note = "45s Magic DoT whose REMOVAL triggers Electrical Discharge - time the dispel, don't reflex it" },
+                { id = 1305234, name = "Cold Claws", tier = "High", dtype = "Magic", npc = "Infused Whelp", npcId = 187894, counts = true,
+                  note = "stacking Magic from whelp melee, Frozen Solid at 20 stacks - the dungeon's volume cleanse (152 removals across 22 runs)" },
+                { id = 392641, name = "Rolling Thunder", tier = "High", dtype = "Magic", npc = "Thunderhead", npcId = 197698, counts = true,
+                  note = "45s Magic DoT, ~32k a tick - removal triggers Electrical Discharge, so time it rather than reflexing it, but do remove it (groups clear 83%)" },
             },
             -- <<< CATALOG <<<
             name = "Ruby Life Pools",
-            dispelDemandScale = 0.8,   -- 71 of 92 actioned dispels were High/Must (mostly purges)
-            trash = { interruptFrequency = 4.0,      -- per-min (obs 4.18 trash kicks/min, n=3 at +2/+8/+9 - hottest kick dungeon)
-                partyDebuffFrequencies = { magic = 0.25 },     -- Cold Claws, Rolling Thunder (both timed/at-stack)
-                targetBuffFrequencies  = { purge = 1.5 } },    -- Stormcloud Barrier + Blaze of Glory (obs 1.63 counted purges/min)
+            dispelDemandScale = 1.00,   -- observed share of actioned dispels at a counted tier
+            trash = { interruptFrequency = 2.93,      -- per-min, boss-subtracted (n=45 logged runs)
+                partyDebuffFrequencies = { magic = 0.56 },
+                targetBuffFrequencies  = { purge = 1.32 } },
             bosses = {
-                [2609] = K(5.0),                     -- Melidrussa Chillworn (Frigid Shard + whelp adds; obs 10 kicks/kill over 3 kills)
-                [2606] = K(2.5),                     -- Kokia Blazehoof (Blazebound adds; obs 5.3 kicks/kill)
-                [2623] = { interruptFrequency = 0,   -- Kyrakka and Erkhart Stormvein
-                    partyDebuffFrequencies = { magic = 2.5 },     -- Stormslam (+100% Nature taken; obs 3.3 cleanses/kill)
-                    targetBuffFrequencies  = { purge = 2.0 } },   -- Stormcloud Barrier during the fight
+                [2606] = K(4.0),                   -- Kokia Blazehoof
+                [2609] = K(7.6),                   -- Melidrussa Chillworn
+                [2623] = { interruptFrequency = 0.0, partyDebuffFrequencies = { magic = 2.41 }, targetBuffFrequencies = { purge = 1.04 } },   -- Kyrakka and Erkhart Stormvein
             },
         },
         ----------------------------------------------------------------
@@ -345,28 +377,28 @@ S.SeasonData["MidnightS2"] = {
             },
             -- <<< CATALOG <<<
             name = "The Blinding Vale",
-            dispelDemandScale = 0.9,   -- 41 of 46 actioned dispels were High/Must
-            trash = { interruptFrequency = 2.5,      -- per-min (obs 2.56 trash kicks/min, n=2 logged at +7/+8; the first +2 meter-only read of 1.6 was low)
-                partyDebuffFrequencies = { magic = 1.1, poison = 0.15 },   -- Spore Spines (the volume cleanse - obs 1.1/min), Toxic Spew
-                targetBuffFrequencies  = { purge = 0.1 } },                -- Spiny Shield (rarely up)
+            dispelDemandScale = 0.86,   -- observed share of actioned dispels at a counted tier
+            trash = { interruptFrequency = 1.80,      -- per-min, boss-subtracted (n=43 logged runs)
+                partyDebuffFrequencies = { magic = 0.87 } },
             bosses = {
-                [3199] = K(5.0),                     -- Lightblossom Trinity (Kezkitt's Light Bolt; obs 9.5 kicks/kill)
-                [3200] = KD(0, { magic = 3.0 }),     -- Ikuzz the Light Hunter (Bloodthorn Roots frees; obs 4.5/kill)
-                [3201] = K(1.5),                     -- Lightwarden Ruia (Warden's Wrath; obs 3 kicks/kill)
-                [3202] = K(0.5),                     -- Ziekett (obs 1 kick/kill)
+                [3199] = KD(9.2, { magic = 0.08 }),   -- Lightblossom Trinity
+                [3200] = KD(0.0, { magic = 5.91 }),   -- Ikuzz the Light Hunter
+                [3201] = K(3.3),                   -- Lightwarden Ruia
+                [3202] = K(1.7),                   -- Ziekett
             },
         },
         ----------------------------------------------------------------
         ["voidscararena"] = {
             -- >>> CATALOG (auto: tools/logparse/season_catalog.py) - reference only, not read by scoring >>>
-            -- HAND-BUILT from meter attribution + per-id spell lookups (no combat log for this dungeon
-            -- yet - a future season_catalog.py run with logged VA runs will replace this block).
-            -- Kicks (5) and dispels (2) observed in this dungeon.
+            -- Started hand-built from meter attribution; confirmed against 13 logged runs, which added
+            -- Shadowbolt Volley and two poison dispels. Kicks (6) and dispels (4) observed here.
             kicks = {
                 { id = 1310324, name = "Mending Void", tier = "Critical", npc = "Voidminder", npcId = 244708,
                   note = "20s channel healing its target 3% max HP every 2s - kick immediately, every miss is a healed pack" },
                 { id = 1233398, name = "Mad Shriek", tier = "Must kick", npc = "Kilivore Screamer", npcId = 243766,
                   note = "3.5s cast: FEARS everyone within 60yd for 6s" },
+                { id = 1299938, name = "Shadowbolt Volley", tier = "Must kick", npc = "Voidtouched Magi", npcId = 252072,
+                  note = "4s cast hitting the whole party for ~254k each - the kick that decides this pull" },
                 { id = 1298899, name = "Demoralizing Shout", tier = "Should kick", npc = "Dominated Brawler", npcId = 238883,
                   note = "4s shout - kickable filler cast" },
                 { id = 1228176, name = "Lava Bolt", tier = "Should kick", npc = "Enthralled Shaman", npcId = 241496,
@@ -377,21 +409,22 @@ S.SeasonData["MidnightS2"] = {
             dispels = {
                 { id = 1250043, name = "Melt Armor", tier = "High", dtype = "Magic", npc = "Sycophantic Tarasek", npcId = 243983, counts = true,
                   note = "Magic +10% Fire taken - removed every application in the observed run" },
+                { id = 1289258, name = "Corrosive Essence", tier = "High", dtype = "Poison", npc = "Agitated Voidscythe", npcId = 263228, counts = true,
+                  note = "~87k/tick Poison DoT - the volume cleanse in this dungeon, removed on 45% of applications" },
+                { id = 1263971, name = "Mind-Numbing Poison", tier = "Medium", dtype = "Poison", npc = "Atroxus", npcId = 239008,
+                  note = "non-damaging Poison from Atroxus - cleared on only 1 application in 5, so it does not count toward your score" },
                 { id = 1310319, name = "Bolster", tier = "High (remove)", dtype = "Enrage", npc = "Longtooth Tuskarr", npcId = 243985, counts = true,
                   note = "Enrage: +50% damage done and +20% Physical taken - soothe it" },
             },
             -- <<< CATALOG <<<
             name = "Voidscar Arena",
-            -- PROVISIONAL: no combat log for this dungeon yet - meter attribution only (n=1 usable,
-            -- +2; a later +5 run recorded no attribution at all, so it adds nothing).
-            dispelDemandScale = 1.0,   -- every actioned dispel was High/Must
-            trash = { interruptFrequency = 2.6,      -- per-min (obs +2: ~2.9 trash kicks/min, meter-only n=1; held under) PROVISIONAL
-                partyDebuffFrequencies = { magic = 0.7 },      -- Melt Armor (Sycophantic Tarasek)
-                targetBuffFrequencies  = { enrage = 0.2 } },   -- Bolster (Longtooth Tuskarr) soothe
+            dispelDemandScale = 0.86,   -- observed share of actioned dispels at a counted tier
+            trash = { interruptFrequency = 1.98,      -- per-min, boss-subtracted (n=32 logged runs)
+                partyDebuffFrequencies = { magic = 0.41, poison = 0.35 } },
             bosses = {
-                [3285] = K(0),                       -- Taz'Rah
-                [3286] = K(0),                       -- Atroxus
-                [3287] = K(0),                       -- Charonus (Unstable Singularity/Void Cascade are avoidance, not utility)
+                [3285] = K(0.0),                   -- Taz'Rah
+                [3286] = K(0.0),                   -- Atroxus
+                [3287] = K(0.0),                   -- Charonus
             },
         },
     },

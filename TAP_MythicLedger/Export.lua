@@ -206,7 +206,7 @@ function Export.ExportAll()
         schemaVersion = DB.root.schemaVersion,
         runs = DB.root.runs,
         playerMeta = DB.root.playerMeta,
-        settings = DB.root.settings,
+        settings = DB.Settings(),   -- the ACTIVE profile's settings, not a vanished root table
     })
 end
 

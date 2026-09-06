@@ -214,6 +214,9 @@ end
 -- Resolve a font key against this theme's font registry -> a usable font path. A value that
 -- already looks like a path (contains a backslash or a font extension) passes straight through.
 function Mixin:ResolveFont(key)
+    -- "Follow the platform's font". "" means the same thing and predates the explicit key, so both
+    -- land here rather than falling through to the "unknown key" branch below.
+    if TAP.IsGlobalFont(key) then return TAP.GlobalFontPath() end
     if type(key) == "string" and (key:find("\\") or key:lower():find("%.[to]t[fc]$") or key:lower():find("%.otf$")) then
         return key
     end

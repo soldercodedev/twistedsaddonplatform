@@ -10,6 +10,13 @@ if not Suite then return end
 local CHANGELOG = [==[
 # Focus Target Interrupt - What's New
 
+## 1.4.0
+
+The marker palette is placed through the platform, and settings are per profile.
+
+- **[CHANGE]** The raid-marker palette is positioned through the platform's Movers page. The inline drag panel that used to sit above the bar is gone - the size slider it carried was already on the settings page.
+- **[CHANGE]** Its settings are per profile, so alts can keep different marker setups.
+
 ## 1.3.0
 
 - **[NEW]** **Cast at now covers every detected interrupt and stun.** The Macros page lists every interrupt and targeted stun your spec and talents actually give you (not just the first) - so a Prot Paladin sees Rebuke, Avenger's Shield and Divine Toll, a Feral sees Skull Bash plus Mighty Bash and Maim, and so on. Each ability gets its own **Cast at** dropdown (focus, target, mouseover, or a fallback combo) and its own macro. Stuns had no Cast at before; now they do (default: focus, else target).
@@ -235,10 +242,11 @@ local function RenderPage(pageId, mod, b, x, y, w, win)
             .. "target with it - live, even in combat - and make it your focus marker.")
         b:Label("Show marker palette on screen", x + 46, y - 2, C.text)
         if mac.paletteShown then
-            local moverOn = FTI._paletteMoverOn and true or false
-            tip(b:Button(x + 300, y - 3, 130, moverOn and "Done moving" or "Move on screen", moverOn and "primary" or "default",
-                function() FTI.SetMarkerPaletteMover(not FTI._paletteMoverOn) end),
-                "Move on screen", "Drag the bar to reposition it (or set the position with the size slider below).")
+            tip(b:Button(x + 300, y - 3, 130, "Move on screen", "default",
+                function() if FTI.PlaceMarkerPalette then FTI.PlaceMarkerPalette(win) end end,
+                { icon = "anchor", iconSize = 13 }),
+                "Move on screen", "Opens the platform's placement mode, where this bar and every other "
+                .. "suite frame can be dragged in one go. Also on the /tap Movers page.")
             y = y - 34
             -- Layout + visibility row.
             b:Label("Layout", x + 46, y - 2, C.subtext)
@@ -402,11 +410,22 @@ Suite:RegisterModule({
         FTI.focusEnabled = true
         if FTI.EnsureMarkerPaletteWatcher then FTI.EnsureMarkerPaletteWatcher() end
         if FTI.RefreshMarkerPaletteVisibility then FTI.RefreshMarkerPaletteVisibility() end
+        if FTI.RegisterPaletteMover then FTI.RegisterPaletteMover() end
+    end,
+    -- FTI.db is a CACHED reference to the module settings table, and a profile switch replaces
+    -- that table wholesale - so without re-pointing it here every read would go on hitting the
+    -- previous profile's settings.
+    OnProfileChanged = function()
+        if FTI.SyncDB then FTI.SyncDB() end
+        if FTI.RegisterPaletteMover then FTI.RegisterPaletteMover() end
+        if FTI.ApplyMarkerPaletteScale then FTI.ApplyMarkerPaletteScale() end
+        if FTI.RefreshMarkerPaletteVisibility then FTI.RefreshMarkerPaletteVisibility() end
+        if FTI.RefreshManager then FTI.RefreshManager() end
     end,
     OnDisable = function()
         FTI.focusEnabled = false
-        if FTI._paletteMoverOn and FTI.SetMarkerPaletteMover then FTI.SetMarkerPaletteMover(false) end
         if FTI.RefreshMarkerPaletteVisibility then FTI.RefreshMarkerPaletteVisibility() end   -- hides the bar
+        if Suite.UnregisterMoversFor then Suite:UnregisterMoversFor("focusInterrupt") end
     end,
     pages = ftiPages(),
 })

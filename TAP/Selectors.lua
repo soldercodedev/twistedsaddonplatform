@@ -14,13 +14,18 @@ local Mixin = TAP.ThemeMixin
 function Mixin:FontSelect(parent, opts)
     opts = opts or {}
     local theme = self
-    local fonts = opts.fonts or theme:FontList()
+    -- Every per-element picker offers "TAP Global Font" so the element can follow Platform >
+    -- Settings. opts.noGlobal is for the platform's own picker, which IS the global.
+    local fonts = opts.fonts or theme:FontList(not opts.noGlobal)
     local function fdFor(key)
+        if not opts.noGlobal and TAP.IsGlobalFont(key) then key = TAP.GLOBAL_FONT_KEY end
         for _, fd in ipairs(fonts) do if fd.key == key then return fd end end
         return fonts[1]
     end
     local dd = theme:Dropdown(parent)
     dd._value = opts.value or (fonts[1] and fonts[1].key)
+    -- A stored "" (the old way of saying "use the UI font") selects the global row.
+    if not opts.noGlobal and TAP.IsGlobalFont(opts.value) then dd._value = TAP.GLOBAL_FONT_KEY end
     return dd:SetMenu(opts.width or 200,
         function()   -- each option's row rendered in its own font
             local items = {}

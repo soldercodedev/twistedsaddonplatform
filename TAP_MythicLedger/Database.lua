@@ -283,8 +283,15 @@ function DB.Init()
     DB.root = root
     -- Guard against a corrupt top level: only the fields we expect are re-seeded; unknowns kept.
     if type(root.runs) ~= "table" then root.runs = {} end
+    -- Seeded and defaulted FIRST so MigrateProfiles below has a fully-populated table to
+    -- adopt as the Default profile; it clears root.settings once it has taken it.
     if type(root.settings) ~= "table" then root.settings = {} end
     CopyDefaults(DEFAULTS, root)
+    -- Settings move into named profiles that follow the platform's binding for this character.
+    -- History (runs, characters, playerIndex, playerMeta, personalBests) deliberately does NOT:
+    -- it is account-wide data, and letting a profile own it would mean deleting a profile could
+    -- delete a season of runs.
+    DB.MigrateProfiles(root)
     -- runMigrations stamps schemaVersion itself, and ONLY on success - a failed step halts with the
     -- version left behind so the next login retries it. Do not re-stamp here: doing so marked failed
     -- migrations as done and they were never retried, silently stranding whatever the step was meant
@@ -320,7 +327,7 @@ function DB.Init()
         end
         C_Timer.After(5, attempt)
     end
-    ML._debugEcho = root.settings.debug and true or false
+    ML._debugEcho = DB.Settings().debug and true or false
     ML.Log("DB ready: %d run(s), schema v%d", #root.runs, root.schemaVersion)
 end
 
@@ -328,7 +335,90 @@ end
 -- Accessors.
 ----------------------------------------------------------------------
 function DB.Ready() return ML._initialized and DB.root ~= nil end
-function DB.Settings() return DB.root and DB.root.settings or DEFAULTS.settings end
+
+----------------------------------------------------------------------
+-- Settings profiles.
+--
+-- Keyed by the PLATFORM's profile name, so one switch in /tap moves every add-on at once rather
+-- than leaving this module on a different setup from the rest. Unknown/missing profile falls
+-- back to the one named Default, seeded from the pre-profile `root.settings`.
+----------------------------------------------------------------------
+local DEFAULT_PROFILE = "Default"
+
+function DB.MigrateProfiles(root)
+    root = root or DB.root
+    if not root then return end
+    if type(root.profiles) ~= "table" then
+        root.profiles = {}
+        -- The old single settings table becomes Default, contents intact.
+        root.profiles[DEFAULT_PROFILE] = root.settings or {}
+    end
+    root.settings = nil
+    if type(root.profiles[DEFAULT_PROFILE]) ~= "table" then
+        root.profiles[DEFAULT_PROFILE] = {}
+    end
+    CopyDefaults(DEFAULTS.settings, root.profiles[DEFAULT_PROFILE])
+end
+
+function DB.ProfileName()
+    local S = _G.TAP
+    local name = S and S.ActiveProfileName and S:ActiveProfileName() or DEFAULT_PROFILE
+    return name or DEFAULT_PROFILE
+end
+
+----------------------------------------------------------------------
+-- Profile lifecycle. Settings live in THIS add-on's saved variables keyed by the platform's
+-- profile name, so a copy/rename/delete on the platform has to be mirrored here. Run HISTORY is
+-- at the root and is deliberately never touched by any of this.
+----------------------------------------------------------------------
+local function deepcopy(v)
+    if type(v) ~= "table" then return v end
+    local t = {}
+    for k, val in pairs(v) do t[k] = deepcopy(val) end
+    return t
+end
+
+function DB.ProfileCopied(fromName, toName)
+    local root = DB.root
+    if not (root and root.profiles) then return end
+    local src = root.profiles[fromName]
+    root.profiles[toName] = src and deepcopy(src) or nil
+end
+
+function DB.ProfileRenamed(oldName, newName)
+    local root = DB.root
+    if not (root and root.profiles) then return end
+    root.profiles[newName], root.profiles[oldName] = root.profiles[oldName], nil
+end
+
+function DB.ProfileDeleted(name)
+    local root = DB.root
+    if not (root and root.profiles) then return end
+    root.profiles[name] = nil
+end
+
+-- Reset drops the row; DB.Settings re-seeds it from DEFAULTS on the next read.
+function DB.ProfileReset(name)
+    local root = DB.root
+    if not (root and root.profiles) then return end
+    root.profiles[name] = nil
+end
+
+function DB.Settings()
+    local root = DB.root
+    if not root then return DEFAULTS.settings end
+    if type(root.profiles) ~= "table" then DB.MigrateProfiles(root) end
+    local name = DB.ProfileName()
+    local p = root.profiles[name]
+    if type(p) ~= "table" then
+        -- A profile this module has not seen before starts from the defaults, not from whatever
+        -- the last character happened to be using.
+        p = {}
+        CopyDefaults(DEFAULTS.settings, p)
+        root.profiles[name] = p
+    end
+    return p
+end
 function DB.Recap() return DB.Settings().recap end
 function DB.DeathReport() return DB.Settings().deathReport end
 function DB.LiveCoach() return DB.Settings().liveCoach end

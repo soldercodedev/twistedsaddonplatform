@@ -606,7 +606,8 @@ local function pageSettings(b, win)
 
     local function secDisplay()
         y = b:Section("FONT", x, y); y = y - 30
-        b:FontSelect(x, y, { width = math.min(220, COLW - 20), value = a.font or "UBUNTU",
+        -- noGlobal: this IS the global font, so it must not offer "follow the global font".
+        b:FontSelect(x, y, { noGlobal = true, width = math.min(220, COLW - 20), value = a.font or "UBUNTU",
             onChange = function(key) a.font = key; applyFont(); win:Refresh() end })
         y = y - 42
         y = b:Section("MENU SCALE", x, y); y = y - 36
@@ -1051,11 +1052,197 @@ local function pageSetupTour(b, win)
     return y - (h + 40)
 end
 
+----------------------------------------------------------------------
+-- Profiles page.
+--
+-- A profile is a named bundle of every module's settings, and each character is bound to one.
+-- Per-SPEC behaviour is deliberately not here: the modules that need it carry their own spec
+-- filters, which are finer-grained and better targeted. Profiles answer "this character is set
+-- up differently", not "this spec behaves differently".
+----------------------------------------------------------------------
+local newProfileName = ""
+
+-- Raise controls above the pooled row they sit on: b:Row and b:Button hand out pooled frames at
+-- the same frame level under the same parent, so a row can otherwise swallow every click on its
+-- own buttons depending on session-wide creation order.
+local function aboveRow(row, ...)
+    if row and row.GetFrameLevel then
+        local lvl = (row:GetFrameLevel() or 1) + 5
+        for i = 1, select("#", ...) do
+            local f = select(i, ...)
+            if f and f.SetFrameLevel then f:SetFrameLevel(lvl) end
+        end
+    end
+    return ...
+end
+
+local function pageProfiles(b, win)
+    local C = theme.C
+    local x, y = 24, -18
+    local w = (b.contentWidth or 700) - 48
+    local function repage() if win then win:Refresh() end end
+
+    y = b:PageHeading(x, y, "Profiles",
+        "A profile is every add-on's settings in one named bundle - frame positions, sizes, colours "
+     .. "and behaviour toggles. Each character is bound to one, so alts can share a setup or keep "
+     .. "their own. Which add-ons are switched on, and how the platform itself looks, stay shared "
+     .. "across every character.")
+
+    local active = Suite:ActiveProfileName()
+    local charKey = Suite:CharKey()
+
+    y = b:Section("THIS CHARACTER", x, y); y = y - 30
+    b:Label(charKey, x + 4, y, C.text, 14)
+    y = y - 24
+    b:Label("Using profile", x + 4, y - 2, C.subtext, 12)
+    local choices = {}
+    for _, name in ipairs(Suite:ListProfiles()) do choices[#choices + 1] = { name, name } end
+    b:Dropdown(x + 96, y):SetChoices(200, choices,
+        function() return active end,
+        function(v) Suite:SetActiveProfile(v); repage() end)
+    y = y - 38
+
+    -- Create / copy.
+    y = b:Section("NEW PROFILE", x, y); y = y - 30
+    -- The name is read LIVE off the box at click time. b:EditBox's callback is onCommit (Enter or
+    -- focus loss), and clicking a Button does not pull focus off an EditBox - so typing a name and
+    -- clicking straight through left the captured name empty and the create silently refused.
+    local nameBox = b:EditBox(x + 4, y, 180, newProfileName, function(v) newProfileName = v or "" end)
+    local function typedName()
+        local t = (nameBox and nameBox:GetText()) or newProfileName or ""
+        return (t:gsub("^%s+", ""):gsub("%s+$", ""))
+    end
+    local function afterCreate(name, ok, err)
+        if not ok then
+            print("|cffa06cf0TAP|r  " .. tostring(err))
+        else
+            newProfileName = ""
+            if nameBox then nameBox:SetText("") end
+            Suite:SetActiveProfile(name)
+        end
+        repage()
+    end
+    b:Button(x + 192, y - 1, 110, "Create empty", "default", function()
+        local nm = typedName()
+        local ok, err = Suite:CreateProfile(nm)
+        afterCreate(nm, ok, err)
+    end, { icon = "plus", iconSize = 12 })
+    b:Button(x + 308, y - 1, 150, "Copy current into it", "primary", function()
+        local nm = typedName()
+        local ok, err = Suite:CreateProfile(nm, active)
+        afterCreate(nm, ok, err)
+    end, { icon = "copy", iconSize = 12 })
+    y = y - 34
+    b:Label("Creating a profile switches this character to it.", x + 4, y, C.subtext, 11)
+    y = y - 26
+
+    -- All profiles.
+    y = b:Section("ALL PROFILES", x, y); y = y - 30
+    local rowW = w
+    for i, name in ipairs(Suite:ListProfiles()) do
+        local isActive = (name == active)
+        local users = Suite:ProfileUsers(name)
+        local userTxt
+        if name == Suite.DEFAULT_PROFILE then
+            userTxt = "every character not bound elsewhere"
+        elseif #users == 0 then
+            userTxt = "not in use"
+        else
+            userTxt = table.concat(users, ", ")
+        end
+
+        local row = b:Row(x + 4, y, rowW, 32, {
+            index = i,
+            color = isActive and C.accent or C.card,
+            tipTitle = name,
+            tipBody = "Used by: " .. userTxt,
+        })
+        -- Measured, not guessed: a character-name profile ("Twistedfury-Zul'jin") is nearly three
+        -- times the width of "Default", and a character-count estimate put the badge through it.
+        local nameFS = b:Label(name, x + 12, y - 10, isActive and C.accent or C.text, 13)
+        local nameEnd = x + 12 + (nameFS:GetStringWidth() or 60) + 10
+        if isActive then
+            b:Badge(nameEnd, y - 9, { text = "ACTIVE", color = "5fc9c0", height = 15, padding = 5 })
+            nameEnd = nameEnd + 58
+        end
+        b:Label(userTxt, math.max(x + 220, nameEnd + 12), y - 10, C.subtext, 11)
+
+        local btns = {}
+        if not isActive then
+            btns[#btns + 1] = b:Button(x + rowW - 232, y - 5, 58, "Use", "default", function()
+                Suite:SetActiveProfile(name); repage()
+            end)
+            btns[#btns + 1] = b:Button(x + rowW - 170, y - 5, 58, "Copy in", "default", function()
+                Suite:CopyProfileInto(name); repage()
+            end)
+        end
+        if name ~= Suite.DEFAULT_PROFILE then
+            btns[#btns + 1] = b:Button(x + rowW - 108, y - 5, 48, "Rename", "default", function()
+                theme:ShowInputDialog("Rename " .. name,
+                    "Type the new name, then Rename.", "Rename",
+                    function(v)
+                        local ok, err = Suite:RenameProfile(name, v)
+                        if not ok then return tostring(err) end   -- string = keep the dialog open
+                        repage()
+                    end)
+            end)
+            btns[#btns + 1] = b:Button(x + rowW - 56, y - 5, 52, "Delete", "danger", function()
+                -- Deleting a shared profile drops several characters back to Default, so say so
+                -- before doing it rather than after.
+                local lines = (#users > 0)
+                    and { "Used by: " .. table.concat(users, ", "),
+                          "Those characters fall back to Default." }
+                    or { "No character is using this profile." }
+                theme:Confirm({
+                    title = "Delete " .. name .. "?", lines = lines,
+                    variant = "danger", confirmLabel = "Delete",
+                    onConfirm = function() Suite:DeleteProfile(name); repage() end,
+                })
+            end)
+        end
+        aboveRow(row, unpack(btns))
+        y = y - 34
+    end
+
+    -- Destructive actions on the active profile.
+    y = b:Section("RESET", x, y); y = y - 30
+    -- Static label: the profile name goes beside the button, not inside it. Interpolating a name
+    -- of unknown length into a fixed-width button is how the text ran off the end of it.
+    b:Button(x + 4, y, 170, "Reset this profile", "danger", function()
+        theme:Confirm({
+            title = "Reset " .. active .. "?",
+            lines = { "Every add-on's settings in this profile go back to their defaults.",
+                      "Run history, token history and your enabled add-ons are not touched." },
+            variant = "danger", confirmLabel = "Reset",
+            onConfirm = function() Suite:ResetProfile(); repage() end,
+        })
+    end, { icon = "refresh", iconSize = 13 })
+    b:Label(active, x + 184, y - 4, C.accent, 13)
+    b:Label("goes back to defaults. Data and enabled add-ons are untouched.",
+        x + 184, y - 20, C.subtext, 11)
+    y = y - 44
+
+    local _, hh = b:Wrap("What a profile holds: every module's settings, which means all frame "
+        .. "positions from the Movers page, sizes, colours, fonts and behaviour toggles, plus "
+        .. "Combat Alerts' rule set and Mythic Ledger's display settings.\n\n"
+        .. "What it does NOT hold, because these are shared by every character: which add-ons are "
+        .. "switched on, the platform's theme and font, minimap icons, the manager window, and all "
+        .. "recorded data - Mythic Ledger's run history, player notes and personal bests, and the "
+        .. "WoW Token price history.",
+        x + 4, y, w, C.subtext, 11)
+    return y - (hh + 20)
+end
+
 local function buildPages()
     local pages = {
         { header = "Platform" },
         { view = "overview",  label = "Overview",  icon = theme:GetIcon("layout-grid"),            render = pageOverview },
         { view = "settings",  label = "Settings",  icon = theme:GetIcon("adjustments-horizontal"), render = pageSettings },
+        -- Every add-on's movable frames, registered through TAP:RegisterMover, laid out from one
+        -- page (Movers.lua). Platform-level rather than per-module: positioning the whole UI is
+        -- one job, not five.
+        { view = "profiles",  label = "Profiles",  icon = theme:GetIcon("users"),                  render = pageProfiles },
+        { view = "movers",    label = "Movers",    icon = theme:GetIcon("anchor"),                 render = TAP.MoversPage },
     }
     if #Suite.modules > 0 then buildModuleCategories(pages) end
     pages[#pages + 1] = { header = "Help" }

@@ -189,7 +189,25 @@ Scoring.Config = Config
 --      dispel supply and their expectations collapsed. Season 1 runs use Season 1 data again, Season 2
 --      uses Season 2, and a run whose season has no profile falls back to the one profile that actually
 --      lists its dungeon rather than to nothing. Retroactive rescore.
-Config.version = 48
+-- v49: Midnight Season 2 supply recalibrated on 137 logged runs (11-26 per dungeon, keys +2 to +11).
+--      The first pass came from one to three runs per dungeon and was wrong in two consistent ways: it
+--      over-stated TRASH kick supply in six of eight dungeons (so players were expected to kick more
+--      than the pull offers) and under-stated BOSS supply almost everywhere, several bosses by half.
+--      Voidscar Arena had no logged run at all and was a guess. It also had a real data hole: Corrosive
+--      Essence (~87k/tick Poison, cleared 45% of the time) was never curated, so the dungeon carried no
+--      poison demand whatsoever - healers were graded against an almost empty dispel requirement, and
+--      dispel-capable damage was not graded on dispels there at all. Curating it gives VA 0.26 poison/min
+--      and moves its demand scale 0.46 -> 0.86; no other dungeon's dispel numbers move. Three further
+--      dispels (Mind-Numbing Poison, Mother's Wrath, Fel Crazed) are catalogued for the guide but left
+--      UNCOUNTED: all three sit under the removal-rate bar, so counting them would grade players against
+--      dispels nobody makes.
+--      Four further curated dispels sat at Medium/Conditional (so uncounted) while groups removed them
+--      constantly: Cold Claws (RLP, 152 removals, Frozen Solid at 20 stacks), Rolling Thunder (RLP, 83%
+--      removed), Serpent Strike (KR, 53k/sec Poison, 65%) and Insatiable Hunger (DoN, -15% max HP per
+--      stack, 45%). All four are now High. Den of Nalorakk carried NO curse demand before this, so a
+--      curse-only dispeller was never graded on dispels there at all; RLP gains 0.55 magic/min and KR's
+--      poison doubles. Scales: DoN 0.45 -> 0.82, KR 0.80 -> 0.86, RLP 0.70 -> 1.00. Retroactive rescore.
+Config.version = 50
 
 Config.roles = { "TANK", "HEALER", "DAMAGER" }
 
@@ -512,6 +530,7 @@ Config.dungeonDispelDebuffs = {
     },
     ["voidscararena"] = {
         magic  = { dbf("Melt Armor", 1250043) },
+        poison = { dbf("Corrosive Essence", 1289258) },
         enrage = { dbf("Bolster", 1310319, true) },
     },
 }

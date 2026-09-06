@@ -3,7 +3,7 @@
 ## Notes: Draws the keybind of Blizzard's next suggested rotation ability on screen. A sidecar plugin for Twisteds Addon Platform.
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
 ## Author: Twistedfury-Zul'jin
-## Version: 1.0.1
+## Version: 1.1.0
 ## Category: Combat
 ## Dependencies: TAP
 ## X-Suite-Module: rotationCue

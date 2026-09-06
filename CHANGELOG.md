@@ -3,6 +3,72 @@
 Platform-level release notes. Each module also keeps its own in-game **What's New** (open `/tap` →
 any module → *What's New*), and a `README.md` in its folder.
 
+## 1.9.0
+
+A platform release: **profiles**, one **frame-placement system** for every add-on, a long-standing **font bug** fixed, and Season 2 scoring re-measured.
+
+### Platform (1.9.0)
+
+**Profiles**
+
+- **[NOTE]** **Give your settings a once-over after updating.** Nothing is deleted - everything you had is carried into the profile named **Default** - but a character can end up pointed at a different profile, and then its add-ons read from there instead. That happens if you had a per-character Combat Alerts profile: the character is now bound to a platform profile of that same name, which starts out holding only those alerts, so your other add-ons will look reset on it while the real settings sit safely in Default.
+- **[NOTE]** If something looks missing it is on another profile, not gone. `/tap` > Platform > Profiles shows which profile this character is using - switch it to **Default**, or use **Copy current into it** to pull Default's settings across. Combat Alerts also keeps its own **Copy alerts** tool for moving individual alerts between profiles.
+- **[NEW]** **Profiles** (`/tap` > Platform > Profiles, or `/tap profile`). A profile is every add-on's settings in one named bundle - frame positions, sizes, colours, fonts and behaviour toggles - and each character is bound to one, so alts can share a setup or keep their own. Create, copy, rename, delete, and reset from one page.
+- **[CHANGE]** What stays shared across every character: which add-ons are switched on, the platform's theme and font, minimap icons, the manager window, and every bit of recorded data - Mythic Ledger's run history, player notes and personal bests, and the WoW Token price history. A profile can never take those with it.
+- **[NOTE]** Per-spec behaviour is unchanged and stays where it was: Rotation Assistant's spec filter and Focus Interrupt's trigger specs. Profiles are for "this character is set up differently", not "this spec behaves differently".
+- **[BUG FIX]** Copying a profile did not bring Combat Alerts' rules or Mythic Ledger's settings with it - the copy came up with a default rule set instead. Both add-ons keep those in their own saved variables keyed by the profile name, and the platform was only duplicating its own table. Renaming had the same hole (the old rows were orphaned and the renamed profile silently started from defaults), as did deleting (the rows leaked) and resetting (they survived a reset that claimed to wipe everything). Profile copy, rename, delete and reset are now broadcast to every add-on that keeps its own store.
+- **[BUG FIX]** On the Profiles page, typing a name and clicking **Create empty** or **Copy current into it** straight away did nothing. The name was only read when the text box lost focus, and clicking a button does not take focus off a text box - so the name was still empty and the create was silently refused. The name is now read live at the moment you click.
+
+**Frame placement**
+
+- **[NEW]** **Movers page** (`/tap` > Platform > Movers, or `/tap move`). Every movable element on the platform is listed in one place, grouped by add-on, with its anchor point and exact X / Y offsets, a Place button, and a Reset. Add-ons register their frames with the platform, so anything added later shows up here automatically.
+- **[NEW]** **Placement mode.** Hides the config window, drops a labelled coloured box over every element, and shows one Done / Cancel / Reset bar. The real element follows the box live as you drag, so you position the thing itself rather than a stand-in. Done or Escape keeps the new positions; Cancel restores every one of them. You can place a single frame, one add-on's frames, or the whole platform at once.
+- **[CHANGE]** Every add-on's own mover has been retired into this system. Rotation Assistant's placement mode, Combat Alerts' per-rule drag ghosts, Mythic Ledger's Death Report and Live Coach move modes, and Focus Interrupt's marker-bar panel were five implementations of the same idea, each with its own Save/Cancel bar and its own bugs. The buttons are all still where they were - they now open the shared placement mode. Your saved positions are untouched: each add-on still stores its own.
+- **[CHANGE]** On-screen elements are no longer draggable in place, so there is no lock state to forget and nothing to accidentally shove out of position mid-fight. Dragging happens on the placement box.
+- **[NEW]** Elements that only appear in combat (the rotation cue, an alert, the Death Report, the Live Coach) show a preview of themselves for the duration of a placement session, so you are never dragging an invisible box.
+- **[NEW]** Placement mode draws a translucent box per element, sized to that element's real bounds, and the **live preview is a separate toggle** - per element from the eye button above its box (or a right-click on it), and for everything at once from Preview all / Boxes only on the bar. Previews start on; dropping to plain boxes makes a crowded screen readable. Boxes keep the element's real size either way, and re-measure as elements resize.
+- **[NEW]** An optional alignment grid while placing: 8 / 16 / 32 / 64 / 128px, drawn outward from screen centre so an element parked at 0,0 sits on the highlighted centre cross. Snapping follows whichever grid you can see.
+- **[CHANGE]** The placement controls moved from a panel in the middle of the screen to a slim single-line bar across the top, out of the way of the layout you are working on.
+- **[NEW]** Click a box in placement mode to select it, then nudge it with the arrow keys: by the grid pitch when a grid is on, shift for single pixels, ctrl for bigger strides, tab to cycle between boxes. Dragging is fine for roughing a layout out and hopeless for the last few pixels.
+- **[NEW]** An optional dim layer while placing, so the world behind your UI drops away and the boxes read clearly. Toggled from the bar.
+- **[BUG FIX]** Snapping now happens continuously as you drag rather than only on release, and boxes land exactly on the grid lines. It was snapping the element's stored offset, which is measured in that element's own scaled space and from its own anchor point - so a scaled element, or one anchored anywhere but centre, settled a few pixels off the line. Snapping now happens in screen space, measured from the same centre the grid is drawn from.
+- **[CHANGE]** The Movers page is now a hero and a button rather than a per-element table of anchor dropdowns and X / Y boxes. Placement mode does that job better by showing you the real screen, and every add-on still has its own Place button.
+- **[BUG FIX]** The first time placement mode was opened after a reload it errored and bounced you straight back to the config window. The control bar is created shown, as every WoW frame is, so hiding it during setup fired its own OnHide handler - which tore down the placement session that was still being built. The bar is hidden before that handler is wired now, and ending a session is guarded so nothing can unwind one mid-build.
+
+**Fonts**
+
+- **[BUG FIX]** **Selected fonts were ignored.** Every font in the platform, and every per-element font picker in every add-on, silently fell back to Friz Quadrata - which is why the setting looked like it reset itself. Before using a font the platform probes whether the client will accept it, and that probe called `SetFont` without the flags argument and trusted its return value. With the argument missing the call never reports success, so *every* font failed the probe and every caller got the fallback. The probe now passes flags and confirms by reading the font back, which is true whatever the API returns. This has been wrong for the life of the add-on.
+- **[NEW]** Every per-element font picker now offers **TAP Global Font** as its first option: pick it and that element follows Platform > Settings instead of pinning a font of its own. Anything previously set to "use the UI font" already behaves this way and now says so. The platform's own font picker does not offer it, since that one *is* the global.
+
+### Mythic Ledger (1.4.0)
+
+- **[CHANGE]** Season 2 utility expectations were re-measured against logged runs. Every dungeon's trash interrupt rate came down, by 10% to 40%: a median group was landing only 61-85% of the modelled kick supply, so a completely ordinary run was being marked down for it.
+- **[BUG FIX]** That over-statement was being hidden, unevenly. Interrupt supply is capped at your group's own kick capacity, and at the old rates that cap was doing the work in 85% of runs - so how harshly you were graded depended on your group's composition rather than on the dungeon. A group with plenty of kickers was measured against a number no group reaches; a group with few was quietly capped back to something fair. Kings' Rest, Voidscar Arena and Temple of Sethraliss are where it bit hardest, and their interrupt scores rise 11 to 13 points.
+- **[CHANGE]** Dispel rates moved both ways and by less, since they were already close: Voidscar Arena +36%, Murder Row +32% and Altar of Fangs +22%, everything else in single digits.
+- **[BUG FIX]** Voidscar Arena's biggest cleanse, Corrosive Essence, was missing from the dungeon data altogether, so the dungeon looked as though it had almost no poison to remove: healers were graded against a nearly empty requirement and dispel-capable damage dealers were not graded on dispels there at all. It counts now, and Voidscar Arena is the only dungeon this moves.
+- **[BUG FIX]** Four dispels that groups clear constantly were graded as optional, and now count: Cold Claws and Rolling Thunder (Ruby Life Pools), Serpent Strike (Kings' Rest) and Insatiable Hunger (Den of Nalorakk). Den of Nalorakk carried no curse requirement at all, so anyone whose only dispel was a decurse went ungraded on dispels there.
+- **[NEW]** Three more dispels are named in the Dungeon Guide without counting toward your score, because groups clear them too rarely to be expected to: Mind-Numbing Poison and Mother's Wrath, plus Murder Row's Fel Crazed.
+- **[NEW]** Five casts that groups routinely kick were missing from the Dungeon Guide and are now listed: Shadowbolt Volley (Voidscar Arena), Storm Bolt (Ruby Life Pools), Shadow Bolt (Kings' Rest), Doom Bolt (Murder Row), and the Uncoiled Writhe's copy of Toxic Atrophy in Altar of Fangs. Listing them does not change any score.
+- **[CHANGE]** Death Report and Live Coach settings are per profile now, and both overlays are placed through the platform's Movers page. Your run history, player notes and personal bests are account-wide and are never part of a profile.
+- **[NOTE]** Existing runs re-score on login. The average overall score moves by well under a point, and about one player in ten shifts by a single letter grade, almost always upward.
+
+### Combat Alerts (1.2.0)
+
+- **[CHANGE]** It had its own profiles; they are now the platform's, so one switch moves every add-on together instead of leaving one on a different setup. Your existing alert profiles and per-character choices are carried over.
+- **[BUG FIX]** Its own **Rename** and **Delete** profile buttons only touched its own saved variables and never told the platform. A rename left the platform pointing at the old name, a fresh empty rule set was created under it, and your alerts looked like they had been wiped; a delete left the profile listed everywhere else. Both now go through the platform, which moves every add-on together.
+- **[BUG FIX]** The **Copy alerts** tool defaulted its destination to your character key rather than the profile you are actually on - a leftover from when profiles were per-character. On an account where a profile happens to share a character's name, the copy then went silently into the wrong profile, reported success, and left the profile you were looking at empty. The destination now defaults to the active profile, it is spelled out next to the Copy button, and switching profile no longer leaves a stale source and destination behind.
+- **[CHANGE]** Each alert's on-screen position is placed through the platform's Movers page; the add-on's own drag ghosts and Save/Cancel bar are gone.
+
+### Focus Target Interrupt (1.4.0)
+
+- **[CHANGE]** The raid-marker palette is positioned through the platform's Movers page. The inline drag panel that used to sit above the bar is gone - the size slider it carried was already on the settings page.
+- **[CHANGE]** Its settings are per profile, so alts can keep different marker setups.
+
+### Rotation Assistant (1.1.0)
+
+- **[CHANGE]** The cue is positioned through the platform's Movers page; the add-on's own placement mode is gone and the cue is no longer draggable in place.
+- **[CHANGE]** Its settings are per profile.
+
 ## 1.8.0
 
 Updated for patch 12.1. A first-launch **Setup Tour** for the platform; Mythic Ledger adds **Midnight Season 2** support, a new **Live Coach**, week-over-week stats, a Weekly Vault panel and a **Progression** page; Focus Target Interrupt now builds a macro for every interrupt and stun you know. Mythic Ledger also stores much less, with one control for how long run history is kept in full.

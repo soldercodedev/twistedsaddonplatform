@@ -24,6 +24,11 @@ local function OnEnable(m)
     if ML.Tooltip and ML.Tooltip.Start then ML.Tooltip.Start() end
     if ML.DeathReport and ML.DeathReport.Start then ML.DeathReport.Start() end
     if ML.LiveCoach and ML.LiveCoach.Start then ML.LiveCoach.Start() end
+    -- Register the two on-screen overlays with the platform's mover system, so they show up on
+    -- the /tap Movers page alongside every other add-on's frames rather than only being reachable
+    -- from a button buried in this module's settings.
+    if ML.DeathReport and ML.DeathReport.RegisterMover then ML.DeathReport.RegisterMover() end
+    if ML.LiveCoach and ML.LiveCoach.RegisterMover then ML.LiveCoach.RegisterMover() end
     ML.Log("Module enabled")
 end
 
@@ -33,7 +38,19 @@ local function OnDisable(m)
     if ML.Tooltip and ML.Tooltip.Stop then ML.Tooltip.Stop() end
     if ML.DeathReport and ML.DeathReport.Stop then ML.DeathReport.Stop() end
     if ML.LiveCoach and ML.LiveCoach.Stop then ML.LiveCoach.Stop() end
+    if Suite.UnregisterMoversFor then Suite:UnregisterMoversFor(ML.MODULE_ID) end
     ML.Log("Module disabled")
+end
+
+-- Settings are profile-scoped (Database.lua); RUN HISTORY is not, and must not be. A switch only
+-- needs the overlays re-anchored against the new settings table.
+local function OnProfileChanged(m)
+    mod = m
+    if ML.DeathReport and ML.DeathReport.Reposition then pcall(ML.DeathReport.Reposition) end
+    if ML.LiveCoach   and ML.LiveCoach.Reposition   then pcall(ML.LiveCoach.Reposition) end
+    if ML.DeathReport and ML.DeathReport.RegisterMover then ML.DeathReport.RegisterMover() end
+    if ML.LiveCoach   and ML.LiveCoach.RegisterMover   then ML.LiveCoach.RegisterMover() end
+    ML.Log("Profile changed")
 end
 
 ----------------------------------------------------------------------
@@ -57,6 +74,13 @@ mod = Suite:RegisterModule({
     changelog = ML.CHANGELOG,
     OnEnable  = OnEnable,
     OnDisable = OnDisable,
+    OnProfileChanged = OnProfileChanged,
+    -- Settings are in this add-on's own saved variables, keyed by profile name; run history is
+    -- not, and none of these touch it.
+    OnProfileCopy   = function(_, from, to) if ML.DB.ProfileCopied  then ML.DB.ProfileCopied(from, to) end end,
+    OnProfileRename = function(_, old, new) if ML.DB.ProfileRenamed then ML.DB.ProfileRenamed(old, new) end end,
+    OnProfileDelete = function(_, name)     if ML.DB.ProfileDeleted then ML.DB.ProfileDeleted(name) end end,
+    OnProfileReset  = function(_, name)     if ML.DB.ProfileReset   then ML.DB.ProfileReset(name) end end,
     OnSelect  = function() ML.UI.ResetView() end,
     OnDeselect = function() ML.UI.OnHide() end,
     pages     = ML.UI.SpecPages(),

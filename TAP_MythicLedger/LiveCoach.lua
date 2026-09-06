@@ -17,7 +17,6 @@ local frame, eventFrame
 local previewFrame
 local hideTimer
 local moving = false
-local moveBackup
 local combatStart, bossPending   -- combat-length + boss-just-ended tracking for the cadence gate
 local evalTimer
 
@@ -170,19 +169,8 @@ local function ensureFrame()
     f:SetFrameStrata("HIGH")
     f:SetClampedToScreen(true)
     f:EnableMouse(false)
-    f:SetMovable(true)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", function(self) if moving then self:StartMoving() end end)
-    f:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        local cx, cy = self:GetCenter()
-        local ux, uy = UIParent:GetCenter()
-        local cfg = DB.LiveCoach()
-        cfg.posPoint = "CENTER"
-        cfg.posX = math.floor((cx or ux) - ux + 0.5)
-        cfg.posY = math.floor((cy or uy) - uy + 0.5)
-        LC.Reposition()
-    end)
+    -- No drag scripts: positioning goes through the platform's mover ghost, which writes back
+    -- through the registered Set. The overlay itself only ever captures a click-to-dismiss.
     f:SetScript("OnMouseUp", function(self) if not moving and self._clickDismiss then LC.Dismiss() end end)
     frame = f
     return f
@@ -285,53 +273,65 @@ function LC.RefreshPreview()
     end
 end
 
-local function showMoverBar()
-    local th = theme()
-    if not (th and th.Button) then return end
-    local bar = LC._moverBar
-    if not bar then
-        bar = CreateFrame("Frame", "TAPMythicLedgerLiveCoachMover", UIParent)
-        bar:SetSize(300, 74)
-        bar:SetFrameStrata("FULLSCREEN_DIALOG"); bar:SetToplevel(true); bar:SetClampedToScreen(true)
-        if th.StylePanel then th:StylePanel(bar, th.C.panel, th.C.border) end
-        bar.label = bar:CreateFontString(nil, "OVERLAY")
-        bar.label:SetFont(th.FONT or _G.STANDARD_TEXT_FONT, 12)
-        bar.label:SetPoint("TOP", 0, -12); bar.label:SetPoint("LEFT", 12, 0); bar.label:SetPoint("RIGHT", -12, 0)
-        bar.label:SetJustifyH("CENTER"); bar.label:SetText("Drag the Live Coach into place, then Save.")
-        if th.C then bar.label:SetTextColor(unpack(th.C.text)) end
-        bar.save = th:Button(bar); bar.save:Configure("Save", 120, 26, "primary", function() LC.StopMove(true) end)
-        bar.save:SetPoint("BOTTOMLEFT", 14, 12)
-        bar.cancel = th:Button(bar); bar.cancel:Configure("Cancel", 120, 26, "default", function() LC.StopMove(false) end)
-        bar.cancel:SetPoint("BOTTOMRIGHT", -14, 12)
-        LC._moverBar = bar
-    end
-    bar:ClearAllPoints(); bar:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 200)
-    bar:Show()
+----------------------------------------------------------------------
+-- Placement.
+--
+-- This used to be a whole bespoke mover: a Save/Cancel bar, a position backup, a moving flag,
+-- and its own hide/restore of the manager window. All of that now lives in the platform
+-- (TAP/Movers.lua), so this overlay is positioned alongside every other add-on's frames in one
+-- session from one page. What is left is the registration and the preview hook.
+----------------------------------------------------------------------
+local MOVER_ID = "mythicLedger:livecoach"
+
+function LC.RegisterMover()
+    local S = _G.TAP
+    if not (S and S.RegisterMover) then return end
+    S:RegisterMover({
+        id      = MOVER_ID,
+        owner   = "Mythic Ledger",
+        ownerId = ML.MODULE_ID,
+        label   = "Live Coach",
+        icon    = "message-2",
+        Get = function()
+            local cfg = DB.LiveCoach()
+            return "CENTER", cfg.posX or 0, cfg.posY or -160
+        end,
+        Set = function(_, x, y)
+            local cfg = DB.LiveCoach()
+            cfg.posX, cfg.posY = x, y
+        end,
+        frame = function() return frame end,
+        -- The overlay only appears after a real pull, so placing it dry would mean dragging an
+        -- invisible box. The preview puts sample content up for the duration of the session.
+        Preview = function(on)
+            moving = on and true or false
+            if on then
+                local header, lines = sampleContent(DB.LiveCoach())
+                show(header .. "   |cff8b91a0- placing|r", lines, DB.LiveCoach(), false, false)
+                if frame then frame:EnableMouse(false) end
+            else
+                if hideTimer then hideTimer:Cancel(); hideTimer = nil end
+                if frame then frame:Hide() end
+            end
+        end,
+        OnChange = function() LC.Reposition() end,
+        defaults = { point = "CENTER", x = 0, y = -160 },
+    })
 end
 
-function LC.StartMove()
-    local cfg = DB.LiveCoach()
-    moveBackup = { cfg.posX or 0, cfg.posY or -160 }
-    moving = true
-    local header, lines = sampleContent(cfg)
-    show(header .. "   |cff8b91a0- drag to move|r", lines, cfg, false, false)
-    if frame then frame:EnableMouse(true) end
-    showMoverBar()
+-- Kept under the old names: the settings page and the slash commands both call these, and the
+-- platform session is what actually does the work now.
+function LC.StartMove(win)
+    LC.RegisterMover()
+    local S = _G.TAP
+    if S and S.StartPlacement then S:StartPlacement({ id = MOVER_ID, win = win }) end
 end
 
 function LC.StopMove(save)
-    if save == false and moveBackup then
-        local cfg = DB.LiveCoach()
-        cfg.posX, cfg.posY = moveBackup[1], moveBackup[2]
-        LC.Reposition()
-    end
-    moveBackup = nil
-    moving = false
-    if frame then frame:EnableMouse(false); frame:Hide() end
-    if LC._moverBar then LC._moverBar:Hide() end
-    if hideTimer then hideTimer:Cancel(); hideTimer = nil end
-    if _G.TAP and _G.TAP.OpenWindow then _G.TAP:OpenWindow("mod:" .. ML.MODULE_ID) end
+    local S = _G.TAP
+    if S and S.StopPlacement then S:StopPlacement(save ~= false) end
 end
+
 function LC.IsMoving() return moving end
 
 ----------------------------------------------------------------------

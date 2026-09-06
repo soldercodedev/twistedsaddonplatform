@@ -113,21 +113,48 @@ end
 ----------------------------------------------------------------------
 -- Font resolution
 ----------------------------------------------------------------------
--- WoW only indexes font files that existed at launch, so a freshly-added bundled TTF may
--- not be loadable on the very first run. Probe it; fall back to the default font when
--- SetFont returns false.
+-- WoW only indexes font files that existed at launch, so a freshly-added bundled TTF may not be
+-- loadable on the very first run. Probe it, and fall back to the default font when it will not
+-- take.
+--
+-- THE PROBE HAS TO READ THE FONT BACK. The original version trusted SetFont's return value and
+-- called it with only two arguments - `probe:SetFont(path, 12)`. FontString:SetFont's third
+-- argument (flags) is not optional in practice, and with it missing the call does not report
+-- success, so EVERY font failed the probe and every caller silently got Friz Quadrata. That is
+-- the "my chosen font is ignored" bug, and because the fallback was then cached as theme.FONT it
+-- looked like the setting reset itself. Setting the font and comparing GetFont() back is true
+-- regardless of what SetFont chooses to return.
+--
+-- Results are memoised: this runs for every theme on every appearance change, and creating a
+-- throwaway FontString per call (as it used to) leaked one each time.
+local _fontProbe
+local _fontOK = {}
+
 function TAP.ResolveFontFile(path)
     local fallback = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
-    if not path or path == "" then return fallback end
-    local probe = UIParent and UIParent:CreateFontString(nil, "OVERLAY")
-    if probe then
-        local ok = probe:SetFont(path, 12)
-        probe:Hide()
-        if ok then return path end
-        return fallback
+    if type(path) ~= "string" or path == "" then return fallback end
+
+    local cached = _fontOK[path]
+    if cached ~= nil then return cached and path or fallback end
+    if not UIParent then return path end          -- too early to judge; do not poison the cache
+
+    if not _fontProbe then
+        _fontProbe = UIParent:CreateFontString(nil, "OVERLAY")
+        _fontProbe:Hide()
     end
-    return path
+    -- Flags MUST be passed. Then verify by reading it back rather than trusting the return.
+    _fontProbe:SetFont(path, 12, "")
+    local got = _fontProbe:GetFont()
+    local ok = (type(got) == "string") and (got:lower() == path:lower())
+    -- Only remember a SUCCESS. A failure this early may just be an unindexed TTF that will load
+    -- after login, and caching that would make the fallback permanent - which is what made the
+    -- old bug survive every re-resolve.
+    if ok then _fontOK[path] = true end
+    return ok and path or fallback
 end
+
+-- Drop the memo so a post-login re-resolve can pick up fonts the client had not indexed yet.
+function TAP.FlushFontCache() _fontOK = {} end
 
 -- Default full-bleed icon crop (bundled Tabler-style TGAs are edge-to-edge; Blizzard
 -- ICONS want the classic 0.07..0.93 inset to trim their built-in border).

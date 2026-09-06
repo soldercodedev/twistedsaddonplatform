@@ -2548,8 +2548,8 @@ local function renderSettings(b, C, x, y, w, win)
     -- The tab is full-width, so the controls get generous widths (no wrapped dropdown menus).
     local ddW = math.max(220, math.min(340, COLW - 220))
     b:Label("Font", x, y - 2, C.subtext)
-    b:FontSelect(x + 90, y, { width = ddW, value = (s.scoreboardFont ~= "" and s.scoreboardFont) or "UBUNTU",
-        onChange = function(key) s.scoreboardFont = key end })
+    b:FontSelect(x + 90, y, { width = ddW, value = s.scoreboardFont,
+        onChange = function(key) s.scoreboardFont = TAP.IsGlobalFont(key) and "" or key end })
     T(b, b:Button(x + 90 + ddW + 12, y, 130, "Use UI font", "default", function() s.scoreboardFont = ""; win:Refresh() end),
         "Use UI font", "Reset the scoreboard to use the same font as the rest of the UI.")
     y = y - 38
@@ -2640,8 +2640,8 @@ local function renderSettings(b, C, x, y, w, win)
             x, y, COLW = baseX + halfW + 28, rowTop, halfW
             b:Sub("APPEARANCE", x, y, halfW); y = y - 30
             b:Label("Font", x, y - 2, C.subtext)
-            b:FontSelect(x + 90, y, { width = 200, value = (dr.font ~= "" and dr.font) or "UBUNTU",
-                onChange = function(key) dr.font = key; win:Refresh() end })
+            b:FontSelect(x + 90, y, { width = 200, value = dr.font,
+                onChange = function(key) dr.font = TAP.IsGlobalFont(key) and "" or key; win:Refresh() end })
             y = y - 30
             T(b, b:Button(x, y, 120, "Use UI font", "default", function() dr.font = ""; win:Refresh() end),
                 "Use UI font", "Use the same font as the rest of the UI.")
@@ -2675,10 +2675,11 @@ local function renderSettings(b, C, x, y, w, win)
             T(b, b:Button(x, y, 90, "Test", "default", function() if ML.DeathReport then ML.DeathReport.Test() end end,
                 { icon = "eye", iconSize = 13 }), "Test", "Flash a sample death report (one of every cause) with your settings.")
             T(b, b:Button(x + 100, y, 140, "Move on screen", "default", function()
-                if _G.TAP and _G.TAP.CloseWindow then _G.TAP:CloseWindow() end
-                if ML.DeathReport then ML.DeathReport.StartMove() end
-            end, { icon = "arrows-sort", iconSize = 13 }), "Move on screen",
-                "Drag a sample where you want it, then click Save (or Cancel) on the bar that appears.")
+                -- The placement session hides and restores the manager itself, and `win` tells it
+                -- which page to come back to.
+                if ML.DeathReport then ML.DeathReport.StartMove(win) end
+            end, { icon = "anchor", iconSize = 13 }), "Move on screen",
+                "Opens placement mode: drag the sample where you want it, then Done (or Cancel).")
             y = y - 40
         end
     end
@@ -2747,8 +2748,8 @@ local function renderSettings(b, C, x, y, w, win)
             x, y, COLW = baseX + halfW + 28, rowTop, halfW
             b:Sub("APPEARANCE", x, y, halfW); y = y - 30
             b:Label("Font", x, y - 2, C.subtext)
-            b:FontSelect(x + 90, y, { width = 200, value = (lc.font ~= "" and lc.font) or "UBUNTU",
-                onChange = function(key) lc.font = key; win:Refresh() end })
+            b:FontSelect(x + 90, y, { width = 200, value = lc.font,
+                onChange = function(key) lc.font = TAP.IsGlobalFont(key) and "" or key; win:Refresh() end })
             y = y - 30
             T(b, b:Button(x, y, 120, "Use UI font", "default", function() lc.font = ""; win:Refresh() end),
                 "Use UI font", "Use the same font as the rest of the UI.")
@@ -2785,10 +2786,11 @@ local function renderSettings(b, C, x, y, w, win)
             T(b, b:Button(x, y, 90, "Test", "default", function() if ML.LiveCoach then ML.LiveCoach.Test() end end,
                 { icon = "eye", iconSize = 13 }), "Test", "Flash a sample coach with your current settings.")
             T(b, b:Button(x + 100, y, 140, "Move on screen", "default", function()
-                if _G.TAP and _G.TAP.CloseWindow then _G.TAP:CloseWindow() end
-                if ML.LiveCoach then ML.LiveCoach.StartMove() end
-            end, { icon = "arrows-sort", iconSize = 13 }), "Move on screen",
-                "Drag a sample where you want it, then click Save (or Cancel) on the bar that appears.")
+                -- The placement session hides and restores the manager itself, and `win` tells it
+                -- which page to come back to.
+                if ML.LiveCoach then ML.LiveCoach.StartMove(win) end
+            end, { icon = "anchor", iconSize = 13 }), "Move on screen",
+                "Opens placement mode: drag the sample where you want it, then Done (or Cancel).")
             y = y - 40
         end
     end

@@ -19,7 +19,6 @@ local RT_COORDS = {   -- 4x4 atlas; 1..8 = Star,Circle,Diamond,Triangle,Moon,Squ
     { 0, 0.25, 0.25, 0.5 }, { 0.25, 0.5, 0.25, 0.5 }, { 0.5, 0.75, 0.25, 0.5 }, { 0.75, 1, 0.25, 0.5 },
 }
 local markerPalette
-local paletteMover
 
 function FTI.UpdateMarkerPalette()
     if not markerPalette then return end
@@ -90,20 +89,9 @@ local function ensureMarkerPalette()
     local C = theme.C
     local p = CreateFrame("Frame", "TAP_FocusInterruptMarkerPalette", UIParent)
     p:SetSize(EDGE * 2 + 8 * CELL + 7 * GAP, CELL + EDGE * 2)
-    p:SetFrameStrata("MEDIUM"); p:SetClampedToScreen(true); p:SetMovable(true); p:EnableMouse(true)
-    p:RegisterForDrag("LeftButton")
-    p:SetScript("OnDragStart", function(self)
-        if FTI._paletteMoverOn and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving() end
-    end)
-    p:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        local pt, _, _, xo, yo = self:GetPoint()
-        if FTI.db.macro then FTI.db.macro.palettePos = { pt, xo, yo } end
-    end)
-    p:SetScript("OnHide", function()
-        if paletteMover then paletteMover:Hide() end
-        FTI._paletteMoverOn = false
-    end)
+    p:SetFrameStrata("MEDIUM"); p:SetClampedToScreen(true); p:EnableMouse(true)
+    -- No drag scripts: positioning goes through the platform's mover ghost, which writes the new
+    -- offset back through the registered Set. The bar itself only ever handles marker clicks.
     ensurePaletteChrome(p); colorPalette(p)
     p.btns = {}
     for i = 1, 8 do
@@ -222,51 +210,67 @@ function FTI.SetMarkerPaletteEnabled(on)
     end
 end
 
--- On-screen mover: a small panel above the bar (drag to move + a resize slider).
-local function ensurePaletteMover()
-    if paletteMover then return paletteMover end
-    local C = theme.C
-    local m = CreateFrame("Frame", nil, UIParent)
-    m:SetSize(280, 62); m:SetFrameStrata("DIALOG"); m:SetClampedToScreen(true)
-    m:EnableMouse(true); m:RegisterForDrag("LeftButton")
-    theme:StylePanel(m, C.panel, C.accent)
-    m:SetScript("OnDragStart", function()
-        if markerPalette and not (InCombatLockdown and InCombatLockdown()) then markerPalette:StartMoving() end
-    end)
-    m:SetScript("OnDragStop", function()
-        if not markerPalette then return end
-        markerPalette:StopMovingOrSizing()
-        local pt, _, _, xo, yo = markerPalette:GetPoint()
-        if FTI.db.macro then FTI.db.macro.palettePos = { pt, xo, yo } end
-    end)
-    local hint = m:CreateFontString(nil, "OVERLAY"); hint:SetFont(theme.FONT, 11)
-    hint:SetPoint("TOPLEFT", 12, -9); hint:SetTextColor(unpack(C.subtext))
-    hint:SetText("|cffffffffDrag this panel|r to move the bar")
-    local done = theme:Button(m); done:Configure("Done", 56, 18, "primary", function() FTI.SetMarkerPaletteMover(false) end)
-    done:SetPoint("TOPRIGHT", -8, -7)
-    local sizeLbl = m:CreateFontString(nil, "OVERLAY"); sizeLbl:SetFont(theme.FONT, 11)
-    sizeLbl:SetPoint("BOTTOMLEFT", 12, 11); sizeLbl:SetTextColor(unpack(C.subtext)); sizeLbl:SetText("Size")
-    m.slider = theme:Slider(m); m.slider:SetPoint("BOTTOMLEFT", 46, 11)
-    m.slider:Configure(198, 0.6, 2.0, 0.05,
-        function() return tonumber(FTI.db.macro and FTI.db.macro.paletteScale) or 1 end,
-        function(v) if FTI.db.macro then FTI.db.macro.paletteScale = v end; FTI.ApplyMarkerPaletteScale() end, "%.2f")
-    paletteMover = m
-    return m
+----------------------------------------------------------------------
+-- Platform mover registration.
+--
+-- The palette parents SECURE buttons, so repositioning it is combat-restricted. Set only writes
+-- the saved offset (always safe); the actual SetPoint happens in OnChange, which no-ops in
+-- combat and is caught up by the next RefreshMarkerPaletteVisibility. The palette keeps its own
+-- inline mover panel too, because that one also carries the size slider.
+----------------------------------------------------------------------
+local PALETTE_MOVER_ID = "focusInterrupt:palette"
+
+function FTI.RegisterPaletteMover()
+    local S = _G.TAP
+    if not (S and S.RegisterMover) then return end
+    S:RegisterMover({
+        id      = PALETTE_MOVER_ID,
+        owner   = "Focus Target Interrupt",
+        ownerId = "focusInterrupt",
+        label   = "Raid-marker palette",
+        icon    = "flag",
+        Get = function()
+            local pos = FTI.db and FTI.db.macro and FTI.db.macro.palettePos
+            if pos and pos[1] then return pos[1], pos[2] or 0, pos[3] or 0 end
+            return "CENTER", 0, -220
+        end,
+        Set = function(p, x, y)
+            if FTI.db and FTI.db.macro then FTI.db.macro.palettePos = { p, x, y } end
+        end,
+        frame = function() return markerPalette end,
+        scale = function()
+            return tonumber(FTI.db and FTI.db.macro and FTI.db.macro.paletteScale) or 1
+        end,
+        Preview = function(on)
+            if on then
+                FTI._placingPalette = true
+                if FTI.SetMarkerPaletteShown then FTI.SetMarkerPaletteShown(true) end
+            else
+                FTI._placingPalette = nil
+                if FTI.RefreshMarkerPaletteVisibility then FTI.RefreshMarkerPaletteVisibility() end
+            end
+        end,
+        OnChange = function()
+            if InCombatLockdown and InCombatLockdown() then return end
+            local p = markerPalette
+            if not p then return end
+            local pos = FTI.db and FTI.db.macro and FTI.db.macro.palettePos
+            if not (pos and pos[1]) then return end
+            p:ClearAllPoints()
+            p:SetPoint(pos[1], UIParent, pos[1], pos[2] or 0, pos[3] or 0)
+        end,
+        defaults = { point = "CENTER", x = 0, y = -220 },
+    })
 end
 
-function FTI.SetMarkerPaletteMover(on)
-    if on then
-        if not markerPalette or not markerPalette:IsShown() then return end
-        if InCombatLockdown and InCombatLockdown() then
-            print(FTI.PREFIX .. "Can't reposition the marker bar during combat.")
-        else
-            local m = ensurePaletteMover()
-            m:ClearAllPoints(); m:SetPoint("BOTTOM", markerPalette, "TOP", 0, 12)
-            m:Show(); FTI._paletteMoverOn = true
-        end
-    else
-        if paletteMover then paletteMover:Hide() end
-        FTI._paletteMoverOn = false
+-- Placement goes through the platform now. The old inline panel is gone: the settings page
+-- already carries the size slider, so all it added was a second way to drag the same bar.
+function FTI.PlaceMarkerPalette(win)
+    if InCombatLockdown and InCombatLockdown() then
+        print(FTI.PREFIX .. "Can't reposition the marker bar during combat - it drives secure buttons.")
+        return
     end
-    FTI.RefreshManager()
+    FTI.RegisterPaletteMover()
+    local S = _G.TAP
+    if S and S.StartPlacement then S:StartPlacement({ id = PALETTE_MOVER_ID, win = win }) end
 end

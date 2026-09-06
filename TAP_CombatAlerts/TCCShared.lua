@@ -42,53 +42,9 @@ function TCC.HideManager()
 end
 
 ----------------------------------------------------------------------
--- On-screen position mover Save/Cancel bar. The old themed UI drew this; rebuild it on the suite
--- theme. startMover() calls ShowMoverControls(anchor, onSave, onCancel); StopMover() calls
--- HideMoverControls(). Without these there is no way to leave the mover, so positions can't be
--- saved.
+-- The position-mover Save/Cancel bar used to live here. Placement is now the platform's job
+-- (TAP/Movers.lua): one bar, one session, every add-on's frames at once. Nothing to draw.
 ----------------------------------------------------------------------
-function TCC.ShowMoverControls(anchorFrame, onSave, onCancel)
-    local bar = TCC._moverBar
-    if not bar then
-        bar = CreateFrame("Frame", "TAP_CombatAlertsMoverBar", UIParent)
-        bar:SetSize(300, 74)
-        bar:SetFrameStrata("FULLSCREEN_DIALOG"); bar:SetToplevel(true); bar:SetClampedToScreen(true)
-        bar:EnableMouse(true); bar:SetMovable(true)
-        bar:RegisterForDrag("LeftButton")
-        bar:SetScript("OnDragStart", function(self) self:StartMoving() end)
-        bar:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-        if theme and theme.StylePanel then theme:StylePanel(bar, theme.C.panel, theme.C.border) end
-
-        bar.label = bar:CreateFontString(nil, "OVERLAY")
-        bar.label:SetFont((theme and theme.FONT) or STANDARD_TEXT_FONT, 12)
-        bar.label:SetPoint("TOP", 0, -10); bar.label:SetPoint("LEFT", 12, 0); bar.label:SetPoint("RIGHT", -12, 0)
-        bar.label:SetJustifyH("CENTER")
-        bar.label:SetText("Drag the alert into place, then Save.")
-        if theme then bar.label:SetTextColor(unpack(theme.C.text)) end
-
-        bar.save = theme:Button(bar); bar.save:Configure("Save", 120, 26, "primary", function()
-            if bar._onSave then bar._onSave() end
-        end)
-        bar.save:SetPoint("BOTTOMLEFT", 14, 12)
-        bar.cancel = theme:Button(bar); bar.cancel:Configure("Cancel", 120, 26, "default", function()
-            if bar._onCancel then bar._onCancel() end
-        end)
-        bar.cancel:SetPoint("BOTTOMRIGHT", -14, 12)
-        TCC._moverBar = bar
-    end
-    bar._onSave, bar._onCancel = onSave, onCancel
-    bar:ClearAllPoints()
-    if anchorFrame then
-        bar:SetPoint("TOP", anchorFrame, "BOTTOM", 0, -48)
-    else
-        bar:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 220)
-    end
-    bar:Show()
-end
-
-function TCC.HideMoverControls()
-    if TCC._moverBar then TCC._moverBar:Hide() end
-end
 
 -- On-screen "Stop Test" bar, shown while a test cue plays (TCC.StartTest -> ShowTestControls). The
 -- old themed UI drew this; rebuild it on the suite theme. Without it StopTest is unreachable, so a

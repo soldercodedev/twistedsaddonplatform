@@ -110,13 +110,22 @@ function Mixin:Button(parent)
                 self.iconTex:Show()
                 self.iconTex:ClearAllPoints()
                 local txt = self.fs:GetText()
+                local gap = st.iconGap or 6
                 if txt == nil or txt == "" then
                     -- Icon-only button: center the glyph (used for compact action buttons).
                     self.iconTex:SetPoint("CENTER")
                     self.fs:ClearAllPoints(); self.fs:SetPoint("CENTER")
+                elseif st.iconAlign == "center" then
+                    -- Center the icon+label PAIR rather than the label alone. The text is nudged
+                    -- right by half the glyph block and the icon hangs off its left edge, so the
+                    -- whole group reads centered - what a wide hero button wants, where a
+                    -- left-pinned icon looks like a mistake.
+                    local shift = ((st.iconSize or 14) + gap) / 2
+                    self.fs:ClearAllPoints(); self.fs:SetPoint("CENTER", shift, 0)
+                    self.iconTex:SetPoint("RIGHT", self.fs, "LEFT", -gap, 0)
                 else
                     self.iconTex:SetPoint("LEFT", 8, 0)
-                    self.fs:ClearAllPoints(); self.fs:SetPoint("LEFT", self.iconTex, "RIGHT", 6, 0)
+                    self.fs:ClearAllPoints(); self.fs:SetPoint("LEFT", self.iconTex, "RIGHT", gap, 0)
                 end
             else
                 self.iconTex:Hide(); self.fs:ClearAllPoints(); self.fs:SetPoint("CENTER")

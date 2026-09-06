@@ -154,10 +154,43 @@ end
 -- The special "Account" profile is the shared one. A character profile is
 -- keyed by "Name-Realm".
 ----------------------------------------------------------------------
-local ACCOUNT_KEY = "Account"
+-- "Account" was this module's name for the shared profile before the platform grew profiles of
+-- its own. It is now an alias for the platform's "Default", kept only so an existing save can be
+-- adopted without the user losing their rules.
+local ACCOUNT_KEY = "Default"
+local LEGACY_ACCOUNT_KEY = "Account"
 
 local function charKey()
+    local S = _G.TAP
+    if S and S.CharKey then return S:CharKey() end
     return (UnitName("player") or "?") .. "-" .. (GetRealmName() or "?")
+end
+
+-- Adopt the platform's profile names and bindings, once. This module had profiles first, so the
+-- migration runs in this direction: its stored names become platform profiles, and its per
+-- character choices become platform bindings.
+local function adoptPlatformProfiles(root)
+    local S = _G.TAP
+    if not (S and S.CreateProfile) or root._platformProfiles then return end
+    if type(root.profiles) == "table" then
+        if root.profiles[LEGACY_ACCOUNT_KEY] and not root.profiles[ACCOUNT_KEY] then
+            root.profiles[ACCOUNT_KEY] = root.profiles[LEGACY_ACCOUNT_KEY]
+            root.profiles[LEGACY_ACCOUNT_KEY] = nil
+        end
+        for name in pairs(root.profiles) do
+            if name ~= ACCOUNT_KEY then S:CreateProfile(name) end   -- no-op if it exists
+        end
+    end
+    if type(root.charChoice) == "table" then
+        local db = S:DB()
+        for ck, prof in pairs(root.charChoice) do
+            if prof == LEGACY_ACCOUNT_KEY then prof = ACCOUNT_KEY end
+            if prof ~= ACCOUNT_KEY and db.profiles[prof] and db.bindings[ck] == nil then
+                db.bindings[ck] = prof
+            end
+        end
+    end
+    root._platformProfiles = true
 end
 
 local function EnsureProfile(name)
@@ -174,7 +207,12 @@ local function EnsureProfile(name)
     return p
 end
 
+-- Follows the PLATFORM. One profile switch in /tap has to move every add-on at once - leaving
+-- this module on its own binding is how you end up with a character whose alerts belong to a
+-- different setup from the rest of its UI.
 local function ActiveProfileName()
+    local S = _G.TAP
+    if S and S.ActiveProfileName then return S:ActiveProfileName() end
     local root = TAP_CombatAlertsDB
     root.charChoice = root.charChoice or {}
     return root.charChoice[charKey()] or ACCOUNT_KEY
@@ -194,13 +232,15 @@ function TCC.AccountKey() return ACCOUNT_KEY end
 
 -- Friendly label for a profile name.
 function TCC.ProfileLabel(name)
-    if name == ACCOUNT_KEY then return "Account-wide (shared)" end
+    if name == ACCOUNT_KEY then return "Default (shared)" end
     if name == charKey() then return name .. " (this character)" end
     return name
 end
 
 -- Existing profile names: Account first, then characters alphabetically.
 function TCC.ListProfiles()
+    local S = _G.TAP
+    if S and S.ListProfiles then return S:ListProfiles() end
     local root = TAP_CombatAlertsDB
     root.profiles = root.profiles or {}
     local names = {}
@@ -212,20 +252,68 @@ function TCC.ListProfiles()
     return names
 end
 
--- Point this character at any existing (or newly created) profile and make it live.
-function TCC.SetActiveProfile(name)
-    if not name or name == "" then return end
+-- Profile LIFECYCLE. Rules live in THIS add-on's saved variables keyed by the platform's profile
+-- name, so the platform copying/renaming/deleting a profile has to be mirrored here or the rules
+-- are left behind - which is exactly what "copy a profile and the alerts came back as defaults"
+-- was.
+function TCC.ProfileCopied(fromName, toName)
+    local root = TAP_CombatAlertsDB
+    if not (root and root.profiles) then return end
+    local src = root.profiles[fromName]
+    root.profiles[toName] = src and deepcopy(src) or nil
+end
+
+function TCC.ProfileRenamed(oldName, newName)
+    local root = TAP_CombatAlertsDB
+    if not (root and root.profiles) then return end
+    root.profiles[newName], root.profiles[oldName] = root.profiles[oldName], nil
+end
+
+function TCC.ProfileDeleted(name)
+    local root = TAP_CombatAlertsDB
+    if not (root and root.profiles) then return end
+    root.profiles[name] = nil
+end
+
+-- Reset drops the row entirely; EnsureProfile re-seeds it with the default rule set on next read.
+function TCC.ProfileReset(name)
+    local root = TAP_CombatAlertsDB
+    if not (root and root.profiles) then return end
+    root.profiles[name] = nil
+end
+
+-- Re-point at the active profile's rules. Called by the platform after a switch.
+function TCC.ReloadProfile()
     for _, st in pairs(ruleState) do
         if st.loop then st.loop:Cancel(); st.loop = nil end
     end
     wipe(ruleState)
-    local root = TAP_CombatAlertsDB
-    root.charChoice = root.charChoice or {}
-    EnsureProfile(name)
-    root.charChoice[charKey()] = name
+    -- The copy tool's source/destination are sticky across renders; clear them so they re-default
+    -- against the profile we are switching TO rather than pointing at the previous one.
+    TCC._copyFrom, TCC._copyTo, TCC._copyRule = nil, nil, nil
     SelectActive()
     TCC.ApplySettings()
     if TCC.RefreshOptions then TCC.RefreshOptions() end
+end
+
+-- Point this character at any existing (or newly created) profile and make it live.
+function TCC.SetActiveProfile(name)
+    if not name or name == "" then return end
+    EnsureProfile(name)
+    local S = _G.TAP
+    if S and S.SetActiveProfile then
+        -- Drives the platform, which switches every add-on and calls us back through
+        -- OnProfileChanged. Switching only this module would be the bug this consolidation exists
+        -- to remove.
+        S:CreateProfile(name)      -- no-op when it already exists
+        S:SetActiveProfile(name)
+        print(PREFIX .. "Profile: |cff33ff33" .. TCC.ProfileLabel(TCC.activeProfile) .. "|r")
+        return
+    end
+    local root = TAP_CombatAlertsDB
+    root.charChoice = root.charChoice or {}
+    root.charChoice[charKey()] = name
+    TCC.ReloadProfile()
     print(PREFIX .. "Alerts profile: |cff33ff33" .. TCC.ProfileLabel(TCC.activeProfile) .. "|r")
 end
 
@@ -238,6 +326,9 @@ function TCC.CreateProfile(name, activate)
     local root = TAP_CombatAlertsDB
     root.profiles = root.profiles or {}
     if root.profiles[name] then return nil, "exists" end
+    -- Register it with the platform too, so the profile exists everywhere and not just here.
+    local S = _G.TAP
+    if S and S.CreateProfile then S:CreateProfile(name) end
     EnsureProfile(name)
     if activate then TCC.SetActiveProfile(name)
     elseif TCC.RefreshOptions then TCC.RefreshOptions() end
@@ -253,6 +344,18 @@ function TCC.RenameProfile(oldName, newName)
     local root = TAP_CombatAlertsDB
     if not (root.profiles and root.profiles[oldName]) then return nil, "missing" end
     if root.profiles[newName] then return nil, "exists" end
+
+    -- Profiles are the PLATFORM's now. Renaming only our own row left the platform pointing at the
+    -- old name, EnsureProfile created a fresh empty row under it, and the alerts looked wiped.
+    local S = _G.TAP
+    if S and S.RenameProfile then
+        local ok, why = S:RenameProfile(oldName, newName)   -- broadcasts back into TCC.ProfileRenamed
+        if not ok then return nil, why or "failed" end
+        TCC.ApplySettings()
+        if TCC.RefreshOptions then TCC.RefreshOptions() end
+        return newName
+    end
+
     root.profiles[newName], root.profiles[oldName] = root.profiles[oldName], nil
     root.charChoice = root.charChoice or {}
     for ck, pn in pairs(root.charChoice) do if pn == oldName then root.charChoice[ck] = newName end end
@@ -268,6 +371,18 @@ function TCC.DeleteProfile(name)
     if not name or name == ACCOUNT_KEY then return nil, "reserved" end
     local root = TAP_CombatAlertsDB
     if not (root.profiles and root.profiles[name]) then return nil, "missing" end
+
+    -- Same reason as the rename: the platform owns the profile, so deleting only our row would
+    -- leave it listed everywhere else and re-created empty on the next read.
+    local S = _G.TAP
+    if S and S.DeleteProfile then
+        local ok, why = S:DeleteProfile(name)               -- broadcasts back into TCC.ProfileDeleted
+        if not ok then return nil, why or "failed" end
+        TCC.ApplySettings()
+        if TCC.RefreshOptions then TCC.RefreshOptions() end
+        return true
+    end
+
     root.profiles[name] = nil
     root.charChoice = root.charChoice or {}
     for ck, pn in pairs(root.charChoice) do if pn == name then root.charChoice[ck] = ACCOUNT_KEY end end
@@ -668,84 +783,140 @@ function TCC.StopTest()
 end
 
 ----------------------------------------------------------------------
--- Position mover: drag one alert's text/icon, or ALL of them at once.
--- Positions save live on drag-stop; Cancel restores the backups.
--- The Save/Cancel bar is drawn by the UI (themed) via TCC.ShowMoverControls.
+-- Position mover.
+--
+-- This add-on used to own the whole thing: drag ghosts, a Save/Cancel bar, a position backup per
+-- rule, and its own hide/restore of the manager. All of that now lives in the platform
+-- (TAP/Movers.lua), so an alert is positioned alongside every other add-on's frames in one
+-- session from one page - and `TCC.moverActive` is now just "is a platform session running".
+--
+-- One mover per rule that actually draws something on screen. The set is dynamic (rules come and
+-- go), so SyncMovers diffs rather than re-registering wholesale: unregistering hides a ghost, and
+-- doing that mid-drag would yank the box out from under the cursor.
 ----------------------------------------------------------------------
-local function startMover(rules, msg)
-    if not rules or #rules == 0 then
+local function moverIDFor(rule) return "combatAlerts:rule:" .. tostring(rule.id) end
+
+local function ruleShowsOnScreen(rule)
+    return rule and rule.action and (rule.action.visual or rule.action.showIcon) and true or false
+end
+
+function TCC.SyncMovers()
+    local S = _G.TAP
+    if not (S and S.RegisterMover) or not db then return end
+
+    local want = {}
+    for _, rule in ipairs(db.rules) do
+        if ruleShowsOnScreen(rule) then want[moverIDFor(rule)] = rule.id end
+    end
+
+    for _, spec in ipairs(S:GetMovers()) do
+        if spec.ownerId == "combatAlerts" and not want[spec.id] then S:UnregisterMover(spec.id) end
+    end
+
+    local function ruleByID(id)
+        for _, r in ipairs(db.rules) do if r.id == id then return r end end
+        return nil
+    end
+
+    for moverID, ruleID in pairs(want) do
+        local rule = ruleByID(ruleID)
+        local existing = S:GetMover(moverID)
+        if existing then
+            existing.label = rule.name or "Alert"      -- in place: a rename must not churn the registration
+        else
+            S:RegisterMover({
+                id      = moverID,
+                owner   = "Combat Alerts",
+                ownerId = "combatAlerts",
+                label   = rule.name or "Alert",
+                icon    = "bell-ringing",
+                -- Looked up by id, never captured: a captured rule table goes stale the moment
+                -- the rule is deleted and another takes its slot.
+                Get = function()
+                    local r = ruleByID(ruleID)
+                    local a = r and r.action or {}
+                    return a.posPoint or "CENTER", a.posX or 0, a.posY or 150
+                end,
+                Set = function(p, x, y)
+                    local r = ruleByID(ruleID)
+                    if not (r and r.action) then return end
+                    r.action.posPoint, r.action.posX, r.action.posY = p, x, y
+                end,
+                frame = function() return visuals[ruleID] end,
+                -- An alert only shows when it fires, so placing it dry would mean dragging an
+                -- invisible box. The preview puts the alert's own visual up for the session.
+                Preview = function(on)
+                    local r = ruleByID(ruleID)
+                    if not r then return end
+                    local f = visuals[ruleID]
+                    if on then
+                        TCC.moverActive = true
+                        f = getVisual(r)
+                        applyVisual(f, r.action)
+                        -- Something has to be grabbable even for an icon-only / textless rule.
+                        if not r.action.visual then
+                            f.text:Show()
+                            f.text:SetText((r.action.visualText ~= "" and r.action.visualText) or r.name or "ALERT")
+                        end
+                        f.pulse:Stop(); f.text:SetAlpha(1)
+                        PositionVisual(f, r.action)
+                        if f.moverLabel then f.moverLabel:SetText(r.name or "Alert"); f.moverLabel:Show() end
+                        f:EnableMouse(false)     -- the platform ghost takes the mouse, not the alert
+                        f:Show()
+                    elseif f then
+                        if f.moverLabel then f.moverLabel:Hide() end
+                        if f.moverIcon then f.moverIcon:Hide() end
+                        if f.moverBg then f.moverBg:Hide() end
+                        if f.moverHint then f.moverHint:Hide() end
+                        f:Hide()
+                        TCC.moverActive = false
+                        TCC.Evaluate()
+                    end
+                end,
+                OnChange = function()
+                    local r = ruleByID(ruleID)
+                    local f = r and visuals[ruleID]
+                    if f then PositionVisual(f, r.action) end
+                end,
+                defaults = { point = "CENTER", x = 0, y = 150 },
+            })
+        end
+    end
+end
+
+-- Move just one rule (the editor's "Move on screen" button).
+function TCC.StartRuleMover(rule, win)
+    if not rule then return end
+    TCC.SyncMovers()
+    local S = _G.TAP
+    if not (S and S.StartPlacement) then return end
+    if not ruleShowsOnScreen(rule) then
+        print(PREFIX .. "That alert doesn't show text or an icon yet - enable |cffffff00Text|r or |cffffff00Icon|r on it first.")
+        return
+    end
+    S:StartPlacement({ id = moverIDFor(rule), win = win })
+end
+
+-- Move every alert that draws on screen (/tap alerts move, sidebar button).
+function TCC.StartPositionMode(win)
+    if not db then return end
+    TCC.SyncMovers()
+    local S = _G.TAP
+    if not (S and S.StartPlacement) then return end
+    local any = false
+    for _, rule in ipairs(db.rules) do if ruleShowsOnScreen(rule) then any = true; break end end
+    if not any then
         print(PREFIX .. "No alerts show on-screen text or an icon yet - enable |cffffff00Text|r or |cffffff00Icon|r on an alert first.")
         if TCC.OpenManager then TCC.OpenManager() end
         return
     end
-    if TCC.HideManager then TCC.HideManager() end
-    TCC.moverActive = true
-    TCC._moverRules = rules
-    TCC._moverBackup = {}
-    local anchor
-    for _, rule in ipairs(rules) do
-        local a = rule.action
-        TCC._moverBackup[rule.id] = { a.posPoint or "CENTER", a.posX or 0, a.posY or 150 }
-        local f = getVisual(rule)
-        applyVisual(f, a)
-        -- Ensure something is draggable even for an icon-only / textless rule.
-        if not a.visual then f.text:Show(); f.text:SetText((a.visualText and a.visualText ~= "" and a.visualText) or rule.name or "DRAG") end
-        f.pulse:Stop(); f.text:SetAlpha(1)
-        PositionVisual(f, a)
-        -- Identify each ghost by the alert's name + icon.
-        if f.moverLabel then f.moverLabel:SetText(rule.name or "Alert"); f.moverLabel:Show() end
-        if f.moverIcon then f.moverIcon:Hide() end   -- drag ghost is name-labelled, no per-rule icon
-        f.moving = true; f:EnableMouse(true); f.moverBg:Show(); f.moverHint:Show(); f:Show()
-        anchor = anchor or f
-    end
-    -- Anchor the Save/Cancel bar under the single frame, or at a fixed spot for many.
-    local barAnchor = (#rules == 1) and anchor or nil
-    if TCC.ShowMoverControls then
-        TCC.ShowMoverControls(barAnchor, function() TCC.StopMover(true) end, function() TCC.StopMover(false) end)
-    end
-    print(PREFIX .. (msg or "Drag each alert into place, then Save Positions."))
+    S:StartPlacement({ ownerId = "combatAlerts", win = win })
 end
 
--- Move just one rule (the editor's "Move on screen" button).
-function TCC.StartRuleMover(rule)
-    if not rule then return end
-    startMover({ rule }, "Drag the |cffffff00" .. (rule.name or "cue") .. "|r into place, then Save.")
-end
-
--- Move every alert that uses on-screen text or an icon (/tap alerts move, sidebar button).
-function TCC.StartPositionMode()
-    if not db then return end
-    local rules = {}
-    for _, rule in ipairs(db.rules) do
-        if rule.action and (rule.action.visual or rule.action.showIcon) then rules[#rules + 1] = rule end
-    end
-    startMover(rules, "Drag each alert's text/icon into place, then Save Positions.")
-end
-
+-- Kept for the slash router; the platform session owns save/cancel now.
 function TCC.StopMover(save)
-    if not TCC.moverActive then return end
-    if not save and TCC._moverBackup then
-        for _, rule in ipairs(db.rules) do
-            local b = TCC._moverBackup[rule.id]
-            if b then rule.action.posPoint, rule.action.posX, rule.action.posY = b[1], b[2], b[3] end
-        end
-    end
-    local rules = TCC._moverRules
-    TCC.moverActive = false; TCC._moverRules = nil; TCC._moverBackup = nil
-    if rules then
-        for _, rule in ipairs(rules) do
-            local f = visuals[rule.id]
-            if f then
-                f.moving = false; f:EnableMouse(false); f.moverBg:Hide(); f.moverHint:Hide()
-                if f.moverLabel then f.moverLabel:Hide() end
-                if f.moverIcon then f.moverIcon:Hide() end
-            end
-        end
-    end
-    if TCC.HideMoverControls then TCC.HideMoverControls() end
-    TCC.Evaluate()
-    if TCC.OpenManager then TCC.OpenManager() end
-    print(PREFIX .. (save and "Positions saved." or "Move canceled."))
+    local S = _G.TAP
+    if S and S.StopPlacement then S:StopPlacement(save ~= false) end
 end
 
 ----------------------------------------------------------------------
@@ -889,6 +1060,9 @@ end
 function TCC.ApplySettings()
     TCC.RebuildEngine()
     TCC.Evaluate()
+    -- Rules can be added, deleted, renamed, or have their Text/Icon toggled here, and every one
+    -- of those changes which alerts belong on the platform's Movers page.
+    if TCC.SyncMovers then TCC.SyncMovers() end
     if TCC.RefreshManager then TCC.RefreshManager() end
 end
 
@@ -1149,6 +1323,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
                 root.profiles[charKey()] = deepcopy(TAP_CombatAlertsCharDB)
                 if TAP_CombatAlertsCharDB.useCharacter then root.charChoice[charKey()] = charKey() end
             end
+            adoptPlatformProfiles(root)
             SelectActive()
         end
     elseif event == "PLAYER_LOGIN" then

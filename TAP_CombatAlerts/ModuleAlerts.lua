@@ -39,7 +39,8 @@ local theme = Suite.uiTheme
 local SOUND_CHOICES = {}
 if theme then for _, s in ipairs(theme:SoundList()) do SOUND_CHOICES[#SOUND_CHOICES + 1] = { s.key, s.label } end end
 local FONT_CHOICES = {}
-if theme then for _, f in ipairs(theme:FontList()) do FONT_CHOICES[#FONT_CHOICES + 1] = { f.key, f.label } end end
+-- true: include the "TAP Global Font" row, so an alert can follow Platform > Settings.
+if theme then for _, f in ipairs(theme:FontList(true)) do FONT_CHOICES[#FONT_CHOICES + 1] = { f.key, f.label } end end
 local ICON_PICK = {}
 if theme then
     for _, slug in ipairs({ "bell", "bell-ringing", "target", "flame", "bolt", "skull", "shield", "sword",
@@ -549,10 +550,11 @@ local function sectionVisual(P, a, rule, y, win)
         y = y - 32
     end
     -- Position controls (drive the runtime frame).
+    -- The placement session hides and restores the manager itself, and `win` tells it which page
+    -- to come back to, so this must NOT hide the window first.
     b:Button(P.x, y, 150, "Move on screen", "default", function()
-        if win then win:Hide() end
-        if TCC.StartRuleMover then TCC.StartRuleMover(rule) end
-    end, { icon = "arrows-sort", iconSize = 13 })
+        if TCC.StartRuleMover then TCC.StartRuleMover(rule, win) end
+    end, { icon = "anchor", iconSize = 13 })
     return y - 34
 end
 
@@ -798,15 +800,33 @@ local function renderProfiles(mod, b, x, y, w, win)
         canEdit and "Delete the active profile." or "The account-wide profile can't be deleted.")
     y = y - 46
 
-    -- Copy alerts between any two profiles (account or any character that has its own set).
+    -- Copy alerts between any two profiles.
+    --
+    -- The destination defaults to the profile you are ACTUALLY ON. It used to default to the
+    -- character key, which is a leftover from when profiles were per-character: on an account
+    -- where a profile happens to share a character's name the copy then succeeded silently into
+    -- the wrong profile, reported success, and left the profile you were looking at empty.
+    -- The character key is no longer injected into the list either - profiles are named and
+    -- platform-wide now, and offering a name with no platform profile behind it would create a
+    -- rules row nothing else knows about.
     local names = TCC.ListProfiles()
-    local hasMe = false
-    for _, n in ipairs(names) do if n == TCC.CurrentCharKey() then hasMe = true end end
-    if not hasMe then names[#names + 1] = TCC.CurrentCharKey() end
     local profChoices = {}
     for _, n in ipairs(names) do profChoices[#profChoices + 1] = { n, TCC.ProfileLabel(n) } end
-    TCC._copyFrom = TCC._copyFrom or TCC.AccountKey()
-    TCC._copyTo   = TCC._copyTo   or TCC.CurrentCharKey()
+
+    local activeProfile = TCC.activeProfile or TCC.AccountKey()
+    local function isKnown(n)
+        for _, x in ipairs(names) do if x == n then return true end end
+        return false
+    end
+    if not (TCC._copyTo and isKnown(TCC._copyTo)) then TCC._copyTo = activeProfile end
+    if not (TCC._copyFrom and isKnown(TCC._copyFrom)) then
+        -- Something other than the destination, so the default pairing is never a no-op.
+        TCC._copyFrom = (activeProfile ~= TCC.AccountKey()) and TCC.AccountKey() or nil
+        if not TCC._copyFrom then
+            for _, n in ipairs(names) do if n ~= activeProfile then TCC._copyFrom = n; break end end
+        end
+        TCC._copyFrom = TCC._copyFrom or activeProfile
+    end
     TCC._copyRule = TCC._copyRule or "__all__"
     b:Label("Copy from", x, y - 2, C.subtext)
     P:tip(b:Dropdown(x + 110, y), "Source profile", "Copy alerts FROM this profile."):SetChoices(300, profChoices,
@@ -827,6 +847,11 @@ local function renderProfiles(mod, b, x, y, w, win)
         TCC.CopyProfileRules(TCC._copyFrom, TCC._copyTo, TCC._copyRule)
     end, { icon = "copy", iconSize = 14 }), "Copy alerts",
         "Copy the selected alert(s) from the source profile into the destination.")
+    -- Spell out the destination next to the button: the whole failure mode here was copying into
+    -- a profile you were not looking at and being told it worked.
+    b:Label(("into  |cffa06cf0%s|r%s"):format(TCC.ProfileLabel(TCC._copyTo),
+        (TCC._copyTo == activeProfile) and "  (the profile you are on)" or "  (NOT the profile you are on)"),
+        x + 160, y + 6, C.subtext, 11)
     y = y - 50
     return y
 end
@@ -1067,8 +1092,26 @@ mod = Suite:RegisterModule({
     groupColor = "e0655a",       -- signature tint for this add-on's sidebar category
     rendersWhenDisabled = true,   -- keep our pages (and the Settings page) reachable while disabled
     changelog = TCC.CHANGELOG,
-    OnEnable  = function() pushToEngine(true) end,
-    OnDisable = function() pushToEngine(false) end,
+    OnEnable  = function()
+        pushToEngine(true)
+        if TCC.SyncMovers then TCC.SyncMovers() end
+    end,
+    OnDisable = function()
+        pushToEngine(false)
+        if Suite.UnregisterMoversFor then Suite:UnregisterMoversFor("combatAlerts") end
+    end,
+    -- Rules live in this module's OWN saved variables, keyed by the platform's profile name, so a
+    -- switch means re-pointing at a different rule set and rebuilding the engine around it.
+    OnProfileChanged = function()
+        if TCC.ReloadProfile then TCC.ReloadProfile() end
+        if TCC.SyncMovers then TCC.SyncMovers() end
+    end,
+    -- Rules are in this add-on's own saved variables, keyed by profile name, so every profile
+    -- lifecycle op has to be mirrored across.
+    OnProfileCopy   = function(_, from, to) if TCC.ProfileCopied  then TCC.ProfileCopied(from, to) end end,
+    OnProfileRename = function(_, old, new) if TCC.ProfileRenamed then TCC.ProfileRenamed(old, new) end end,
+    OnProfileDelete = function(_, name)     if TCC.ProfileDeleted then TCC.ProfileDeleted(name) end end,
+    OnProfileReset  = function(_, name)     if TCC.ProfileReset   then TCC.ProfileReset(name) end end,
     OnSelect  = function() editorId = nil end,   -- entering the module drops back to the Alerts list
     pages     = caPages(),
 })

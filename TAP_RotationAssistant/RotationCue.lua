@@ -120,7 +120,6 @@ local slotToButton = {}      -- reverse map: action slot -> the action button fr
 local keyCache = {}          -- spellID -> resolved key string (false = looked-up-but-unbound)
 local glowing = {}           -- spellID -> true while its proc (spell activation overlay) is up
 local testMode = false       -- preview mode (settings page / placement) - shows the cue on-demand
-local placing = false        -- true only while in placement mode (the ONLY time the cue is draggable)
 local inCombat = false       -- tracked from REGEN events (reliable, unlike InCombatLockdown timing)
 local scanInterval = 0.1     -- seconds between poll ticks (cached from settings)
 local diagRefreshes = 0      -- /rcue diagnostics: how many times refresh() has run
@@ -509,15 +508,8 @@ local function buildCue()
     if cue then return cue end
     cue = buildCueFrame(UIParent, "TAP_RotationAssistantFrame")
     cue:SetFrameStrata("MEDIUM"); cue:SetClampedToScreen(true); cue:Hide()
-    cue:RegisterForDrag("LeftButton")
-    cue:SetScript("OnDragStart", function(self) if placing then self:StartMoving() end end)
-    cue:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        -- Store the CENTER offset from UIParent (scale-independent), so re-scaling never moves it.
-        local cx, cy = self:GetCenter()
-        local ux, uy = UIParent:GetCenter()
-        if cx and ux then S().pos = { x = cx - ux, y = cy - uy } end
-    end)
+    -- No drag scripts: placement goes through the platform's mover ghost, which writes the new
+    -- offset back through the registered Set. The cue stays inert and click-through at all times.
     return cue
 end
 
@@ -639,8 +631,8 @@ local function applyLayout()
     local pos = s.pos or DEFAULT_POS
     cue:ClearAllPoints()
     cue:SetPoint("CENTER", UIParent, "CENTER", pos.x or 0, pos.y or 0)
-    -- The cue is draggable ONLY during placement mode; otherwise it's locked in place.
-    cue:SetMovable(placing); cue:EnableMouse(placing)
+    -- Never interactive: placement happens on the platform's ghost, not on the cue itself.
+    cue:SetMovable(false); cue:EnableMouse(false)
 
     updatePreview()
     -- Live-restyle any visible indicator previews (Indicators page) so dropdowns / swatches / sliders
@@ -661,13 +653,19 @@ local function hideCue()
 end
 
 ----------------------------------------------------------------------
--- Placement mode: hide the manager, unlock + show a demo cue for dragging, show a small Done bar,
--- then restore lock / test state and reopen the manager.
+-- Placement.
+--
+-- This module used to own a whole placement mode: its own Done bar, its own hide/restore of the
+-- manager, its own drag handling on the cue. All of that now lives in the platform
+-- (TAP/Movers.lua), so the cue is laid out alongside every other add-on's frames in one session
+-- from one page. What is left here is the registration and the preview hook.
+--
+-- The cue itself is no longer draggable: the placement ghost is what you grab, and it writes
+-- back through the mover's Set. That removes the "forgot to re-lock" state entirely.
 ----------------------------------------------------------------------
-local placementBar
+local MOVER_ID = "rotationCue:cue"
 
 -- The suite's selected theme (from the manager's appearance page), so our chrome matches it.
--- Falls back to our own theme if the suite hasn't exposed one.
 local function uiTheme()
     local s = _G.TAP
     return (s and s.uiTheme) or theme
@@ -677,57 +675,43 @@ end
 -- re-lay the on-screen cue so its text picks up the corrected font instead of a first-launch fallback.
 theme._onFont = function() pcall(applyLayout) end
 
--- End placement: lock the cue again, drop test mode, hide the cue, reopen the manager. Runs from
--- the bar's OnHide, so Done, Escape, or any other hide all cleanly return you to the UI.
-local function finalizePlacement()
-    if not placing then return end
-    placing = false
-    testMode = false
-    applyLayout()   -- placing=false -> cue re-locked
-    hideCue()
-    local w = placementBar and placementBar._win
-    if w then w:Open(placementBar._view or "overview") end
-end
-
-local function buildPlacementBar()
-    local t = uiTheme()
-    local f = CreateFrame("Frame", "TAP_RotationAssistantPlacementBar", UIParent)
-    f:SetSize(400, 62)
-    f:SetFrameStrata("FULLSCREEN_DIALOG"); f:SetToplevel(true); f:EnableMouse(true); f:SetMovable(true)
-    f:RegisterForDrag("LeftButton"); f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
-    f.title = t:Heading(f, { text = "Placement mode", role = "h5" }); f.title:SetPoint("TOPLEFT", 16, -11)
-    f.sub = t:Heading(f, { text = "Drag the cue where you want it.", role = "caption" }); f.sub:SetPoint("TOPLEFT", 16, -31)
-    f.done = t:Button(f); f.done:Configure("Done", 96, 28, "primary", function() f:Hide() end); f.done:SetPoint("RIGHT", -14, 0)
-    f:SetScript("OnHide", finalizePlacement)   -- Done / Escape / any hide -> restore + reopen
-    tinsert(UISpecialFrames, f:GetName())      -- Escape closes it
-    f:Hide()
-    placementBar = f
-    return f
+local function registerMover()
+    if not (Suite and Suite.RegisterMover) then return end
+    Suite:RegisterMover({
+        id      = MOVER_ID,
+        owner   = "Rotation Assistant",
+        ownerId = "rotationCue",
+        label   = "Next-ability cue",
+        icon    = "keyboard",
+        Get = function()
+            local pos = S().pos or DEFAULT_POS
+            return "CENTER", pos.x or 0, pos.y or 0
+        end,
+        Set = function(_, x, y) S().pos = { x = x, y = y } end,
+        frame = function() return cue end,
+        size  = function()
+            local s = S()
+            local n = (s.iconSize or 48) * (s.scale or 1)
+            return n, n
+        end,
+        -- The cue only shows when the assistant actually suggests something, so placing it dry
+        -- would mean dragging an invisible box. Test mode puts a demo cue up for the duration.
+        Preview = function(on)
+            testMode = on and true or false
+            applyLayout()
+            if on then if refresh then refresh() end else hideCue() end
+        end,
+        OnChange = function() pcall(applyLayout) end,
+        defaults = { point = "CENTER", x = DEFAULT_POS.x, y = DEFAULT_POS.y },
+    })
 end
 
 local function startPlacement(win)
     buildCue()
-    if not placementBar then buildPlacementBar() end
-    -- Re-apply the suite theme in case the appearance changed since the bar was built (guarded so
-    -- a theming hiccup can never leave the UI hidden with no way back).
-    pcall(function()
-        local t = uiTheme()
-        t:StylePanel(placementBar, t.C.panel, t.C.accent)
-        if placementBar.title then placementBar.title:SetTextColor(unpack(t.C.text)) end
-        if placementBar.sub then placementBar.sub:SetTextColor(unpack(t.C.subtext)) end
-        if placementBar.done then placementBar.done:Retheme() end
-    end)
-
-    placementBar._win = win
-    placementBar._view = (win and win.view) or "overview"
-    placementBar:ClearAllPoints(); placementBar:SetPoint("TOP", 0, -140)   -- always back on-screen
-
-    placing = true
-    testMode = true
-    if win then win:Hide() end
-    applyLayout()           -- placing=true -> cue draggable
-    refresh()               -- show the cue (real next-cast, or demo) for dragging
-    placementBar:Show()
+    registerMover()
+    if Suite and Suite.StartPlacement then
+        Suite:StartPlacement({ id = MOVER_ID, win = win })
+    end
 end
 
 -- Is this spell currently proc-glowing on the bars? Prefer the event-tracked set (authoritative
@@ -857,14 +841,16 @@ local function OnEnable(m)
     for _, e in ipairs(GLOW_EVENTS) do driver:RegisterEvent(e) end
     for _, e in ipairs(COMBAT_EVENTS) do driver:RegisterEvent(e) end
     syncTicker()   -- start the poll only if we're already in combat (else it stays off)
+    registerMover()
     refresh()
 end
 
 local function OnDisable(m)
-    testMode = false; placing = false
+    testMode = false
     if driver then driver:UnregisterAllEvents() end
     stopTicker()
     hideCue()
+    if Suite and Suite.UnregisterMover then Suite:UnregisterMover(MOVER_ID) end
 end
 
 -- Inline settings, rendered into the Suite Manager's builder. Returns the new y.
@@ -927,8 +913,10 @@ local function RenderPage(pageId, m, b, x, y, w, win)
         end
         function P:fontsel(label, key)
             local ctlX, ctlW = self:_ctl(label)
-            b:FontSelect(ctlX, self.y, { width = ctlW, value = s[key] or "UBUNTU",
-                onChange = function(v) s[key] = v; applyLayout() end })
+            -- No "or UBUNTU": an unset font now means "follow the platform's font", which the
+            -- picker shows as its first row rather than silently pinning Ubuntu.
+            b:FontSelect(ctlX, self.y, { width = ctlW, value = s[key],
+                onChange = function(v) s[key] = TAP.IsGlobalFont(v) and "" or v; applyLayout() end })
             self.y = self.y - 30
         end
         return P
@@ -1214,6 +1202,13 @@ end
 local CHANGELOG = [==[
 # Rotation Assistant - What's New
 
+## 1.1.0
+
+The cue is placed through the platform, and settings are per profile.
+
+- **[CHANGE]** The cue is positioned through the platform's Movers page; the add-on's own placement mode is gone and the cue is no longer draggable in place.
+- **[CHANGE]** Its settings are per profile.
+
 ## 1.0.1
 
 - **[CHANGE]** Spell cooldown, cast, and icon lookups now use the current **C_Spell** API directly; the legacy global fallbacks were removed. No functional change.
@@ -1278,6 +1273,16 @@ Suite:RegisterModule({
     changelog = CHANGELOG,
     OnEnable  = OnEnable,
     OnDisable = OnDisable,
+    -- A profile switch hands us a DIFFERENT settings table, so everything derived from the old
+    -- one has to be re-read. Cheaper and far less disruptive than an off/on cycle, which would
+    -- tear the cue down and rebuild it.
+    OnProfileChanged = function(m)
+        mod = m
+        seedDefaults()
+        registerMover()
+        applyLayout()
+        if refresh then refresh() end
+    end,
     pages     = rotationPages(),
 })
 

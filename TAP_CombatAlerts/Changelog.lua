@@ -4,6 +4,15 @@ local _, TCC = ...
 TCC.CHANGELOG = [==[
 # Twisteds Combat Alerts - What's New
 
+## 1.2.0
+
+Profiles are the platform's now, and alert positions move through the shared placement mode.
+
+- **[CHANGE]** It had its own profiles; they are now the platform's, so one switch moves every add-on together instead of leaving one on a different setup. Your existing alert profiles and per-character choices are carried over.
+- **[BUG FIX]** Its own **Rename** and **Delete** profile buttons only touched its own saved variables and never told the platform. A rename left the platform pointing at the old name, a fresh empty rule set was created under it, and your alerts looked like they had been wiped; a delete left the profile listed everywhere else. Both now go through the platform, which moves every add-on together.
+- **[BUG FIX]** The **Copy alerts** tool defaulted its destination to your character key rather than the profile you are actually on - a leftover from when profiles were per-character. On an account where a profile happens to share a character's name, the copy then went silently into the wrong profile, reported success, and left the profile you were looking at empty. The destination now defaults to the active profile, it is spelled out next to the Copy button, and switching profile no longer leaves a stale source and destination behind.
+- **[CHANGE]** Each alert's on-screen position is placed through the platform's Movers page; the add-on's own drag ghosts and Save/Cancel bar are gone.
+
 ## 1.1.0
 
 - **[BUG FIX]** Deleting an alert no longer leaves its on-screen warning behind.

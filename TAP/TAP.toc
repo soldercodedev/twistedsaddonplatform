@@ -3,7 +3,7 @@
 ## Notes: Parent hub for the Twisteds Addon Platform - the shared UI library plus the module registry and Suite Manager (/tap) that loads optional sidecar plugins. Exposed as _G.TAP.
 ## IconTexture: Interface\AddOns\TAP\assets\images\TAP_LOGO_SMALL.tga
 ## Author: Twistedfury-Zul'jin
-## Version: 1.8.0
+## Version: 1.9.0
 ## Category: Twisted's Addon Platform
 ## X-Website: shared UI foundation + plugin hub for the tool suite
 ## X-Curse-Project-ID: 1609931
@@ -57,6 +57,10 @@ Modal.lua
 # Layout builder + application window shell.
 Builder.lua
 Window.lua
+
+# Platform-wide frame placement: the mover registry, placement mode, and the Movers page.
+# Loads BEFORE SuiteManager, which renders the page it defines.
+Movers.lua
 
 # Suite Manager window (/tap): browse, enable/disable, and configure sidecar plugins.
 Changelog.lua
