@@ -665,12 +665,6 @@ end
 ----------------------------------------------------------------------
 local MOVER_ID = "rotationCue:cue"
 
--- The suite's selected theme (from the manager's appearance page), so our chrome matches it.
-local function uiTheme()
-    local s = _G.TAP
-    return (s and s.uiTheme) or theme
-end
-
 -- When the global UI font is (re)applied - on login once TTFs index, or when the user changes it -
 -- re-lay the on-screen cue so its text picks up the corrected font instead of a first-launch fallback.
 theme._onFont = function() pcall(applyLayout) end

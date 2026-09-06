@@ -727,7 +727,8 @@ local function renderOverview(b, C, x, y, w, win)
                 for i = #trend, 1, -1 do
                     local v = trend[i][key]
                     if type(v) == "number" then
-                        if cur == nil then cur = v elseif prev == nil then prev = v; break end
+                        -- newest match first; the second one is the comparison point.
+                        if cur == nil then cur = v else prev = v; break end
                     end
                 end
                 return cur, prev

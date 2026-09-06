@@ -56,19 +56,6 @@ local function resolveFrame(spec)
     return f
 end
 
-local function moverSize(spec)
-    local f = resolveFrame(spec)
-    if f and f.GetWidth then
-        local w, h = f:GetWidth(), f:GetHeight()
-        if w and h and w > 1 and h > 1 then return w, h end
-    end
-    if type(spec.size) == "function" then
-        local ok, w, h = pcall(spec.size)
-        if ok and w and h then return w, h end
-    end
-    return 140, 36
-end
-
 local function moverScale(spec)
     if type(spec.scale) == "function" then
         local ok, s = pcall(spec.scale)
